@@ -10,6 +10,7 @@ import { executeMcpStdio } from "./mcp-stdio-target.ts";
 import { executeMcp } from "./mcp-target.ts";
 import { forceLogin, getAuthStatus, removeTokens } from "./oauth.ts";
 import { formatOutput } from "./output.ts";
+import { runCompletionCmd } from "./completion.ts";
 import { runSkillsCmd } from "./skills.ts";
 
 const VERSION = "0.1.0";
@@ -76,6 +77,10 @@ Tree ACL (~/.clip/target/cli/gh/config.yml 직접 편집):
 
 Agent integration:
   clip skills add claude-code
+
+Zsh completion:
+  eval "$(clip completion zsh)"   # Add to ~/.zshrc
+  ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 `.trim();
 
 // --- argv 수동 파싱 ---
@@ -431,6 +436,7 @@ async function main(): Promise<void> {
   if (targetName === "bind") { await runBind(rest.slice(1)); return; }
   if (targetName === "unbind") { await runUnbind(rest.slice(1)); return; }
   if (targetName === "binds") { await runBinds(); return; }
+  if (targetName === "completion") { await runCompletionCmd(rest.slice(1)); return; }
 
   if (targetName === "refresh") {
     const name = rest[1];
