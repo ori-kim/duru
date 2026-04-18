@@ -200,10 +200,9 @@ function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unknown>):
         result[key] = rawVal;
       }
     } else {
-      // 기본: 숫자 JSON이면 자동 파싱, 아니면 문자열
+      // 타입 정보 없음(any) 등: JSON 파싱 성공 시 그 값, 실패 시 원본 문자열
       try {
-        const parsed = JSON.parse(rawVal);
-        result[key] = typeof parsed === "object" ? rawVal : parsed;
+        result[key] = JSON.parse(rawVal);
       } catch {
         result[key] = rawVal;
       }
