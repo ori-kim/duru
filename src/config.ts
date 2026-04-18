@@ -1,3 +1,4 @@
+import { readdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import YAML from "yaml";
@@ -24,7 +25,7 @@ const mcpHttpTargetSchema = z.object({
   transport: z.literal("http").optional().default("http"),
   url: z.string().url(),
   headers: z.record(z.string()).optional(),
-  oauth: z.boolean().optional(), // undefined=자동감지, true=강제, false=비활성
+  oauth: z.boolean().optional(),
   ...aclFields,
 });
 
@@ -57,12 +58,11 @@ const apiTargetSchema = z.object({
   ...aclFields,
 });
 
-const configSchema = z.object({
-  headers: z.record(z.string()).optional(),
-  cli: z.record(cliTargetSchema).default({}),
-  mcp: z.record(mcpTargetSchema).default({}),
-  api: z.record(apiTargetSchema).default({}),
-});
+const TARGET_SCHEMAS = {
+  cli: cliTargetSchema,
+  mcp: mcpTargetSchema,
+  api: apiTargetSchema,
+} as const;
 
 // --- Types ---
 
@@ -73,7 +73,12 @@ export type McpStdioTarget = z.infer<typeof mcpStdioTargetSchema>;
 export type McpTarget = McpHttpTarget | McpStdioTarget;
 export type CliTarget = z.infer<typeof cliTargetSchema>;
 export type ApiTarget = z.infer<typeof apiTargetSchema>;
-export type Config = z.infer<typeof configSchema>;
+export type Config = {
+  headers?: Record<string, string>;
+  cli: Record<string, CliTarget>;
+  mcp: Record<string, McpTarget>;
+  api: Record<string, ApiTarget>;
+};
 
 export type ResolvedTarget =
   | { type: "cli"; target: CliTarget }
@@ -82,69 +87,13 @@ export type ResolvedTarget =
 
 // --- Paths ---
 
-const CONFIG_DIR = join(homedir(), ".clip");
-const CONFIG_YML = join(CONFIG_DIR, "settings.yml");
-const CONFIG_JSON = join(CONFIG_DIR, "settings.json");
+export const CONFIG_DIR = join(homedir(), ".clip");
+export const TARGET_DIR = join(CONFIG_DIR, "target");
 
-export { CONFIG_DIR };
+const TARGET_TYPES = ["cli", "mcp", "api"] as const;
+type TargetType = typeof TARGET_TYPES[number];
 
-/** 실제 사용 중인 설정 파일 경로를 반환. yml 우선, json fallback. */
-async function resolveConfigPath(): Promise<{ path: string; format: "yml" | "json" } | null> {
-  if (await Bun.file(CONFIG_YML).exists()) return { path: CONFIG_YML, format: "yml" };
-  if (await Bun.file(CONFIG_JSON).exists()) return { path: CONFIG_JSON, format: "json" };
-  return null;
-}
-
-/** 외부에서 현재 설정 파일 경로를 표시할 때 사용 */
-export async function getConfigPath(): Promise<string> {
-  const resolved = await resolveConfigPath();
-  return resolved?.path ?? CONFIG_YML;
-}
-
-// --- Load / Save ---
-
-export async function loadConfig(): Promise<Config> {
-  const resolved = await resolveConfigPath();
-  if (!resolved) return configSchema.parse({ cli: {}, mcp: {} });
-
-  const raw = await Bun.file(resolved.path).text();
-  let parsed: unknown;
-  try {
-    parsed = resolved.format === "json" ? JSON.parse(raw) : YAML.parse(raw);
-  } catch (e) {
-    die(`Failed to parse config at ${resolved.path}: ${e}`);
-  }
-
-  const result = configSchema.safeParse(parsed ?? { cli: {}, mcp: {} });
-  if (!result.success) {
-    die(`Invalid config at ${resolved.path}:\n${result.error.message}`);
-  }
-  const globalEnv = await loadDotEnv(join(CONFIG_DIR, ".env"));
-  const config = result.data;
-  return {
-    ...config,
-    headers: subRecord(config.headers, globalEnv),
-    mcp: Object.fromEntries(
-      await Promise.all(
-        Object.entries(config.mcp).map(async ([name, t]) => {
-          if (t.transport === "stdio") return [name, t];
-          const targetEnv = await loadDotEnv(join(CONFIG_DIR, name, ".env"));
-          const env = { ...globalEnv, ...targetEnv };
-          return [name, { ...t, headers: subRecord(t.headers, env) }];
-        }),
-      ),
-    ),
-    api: Object.fromEntries(
-      await Promise.all(
-        Object.entries(config.api).map(async ([name, t]) => {
-          const targetEnv = await loadDotEnv(join(CONFIG_DIR, name, ".env"));
-          const env = { ...globalEnv, ...targetEnv };
-          return [name, { ...t, headers: subRecord(t.headers, env) }];
-        }),
-      ),
-    ),
-  };
-}
+// --- Helpers ---
 
 async function loadDotEnv(path: string): Promise<Record<string, string>> {
   const file = Bun.file(path);
@@ -157,24 +106,69 @@ async function loadDotEnv(path: string): Promise<Record<string, string>> {
   return env;
 }
 
-
-function subRecord(r: Record<string, string> | undefined, env: Record<string, string>): Record<string, string> | undefined {
+function subRecord(
+  r: Record<string, string> | undefined,
+  env: Record<string, string>,
+): Record<string, string> | undefined {
   if (!r) return r;
   const merged = { ...process.env, ...env } as Record<string, string>;
   return Object.fromEntries(
-    Object.entries(r).map(([k, v]) => [k, v.replace(/\$\{([^}]+)\}/g, (_, key) => merged[key] ?? "")])
+    Object.entries(r).map(([k, v]) => [k, v.replace(/\$\{([^}]+)\}/g, (_, key) => merged[key] ?? "")]),
   );
 }
 
-/** 기존 파일 포맷 유지. 파일이 없으면 yml로 생성. */
-async function saveConfig(config: Config): Promise<void> {
-  await Bun.spawn(["mkdir", "-p", CONFIG_DIR]).exited;
-  const resolved = await resolveConfigPath();
-  const format = resolved?.format ?? "yml";
-  const path = resolved?.path ?? CONFIG_YML;
+// --- Load ---
 
-  const content = format === "json" ? JSON.stringify(config, null, 2) : YAML.stringify(config);
-  await Bun.write(path, content);
+export async function loadConfig(): Promise<Config> {
+  const globalEnv = await loadDotEnv(join(CONFIG_DIR, ".env"));
+  const cli: Record<string, CliTarget> = {};
+  const mcp: Record<string, McpTarget> = {};
+  const api: Record<string, ApiTarget> = {};
+
+  for (const type of TARGET_TYPES) {
+    const typeDir = join(TARGET_DIR, type);
+    let names: string[];
+    try {
+      names = readdirSync(typeDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+    } catch {
+      continue;
+    }
+
+    for (const name of names) {
+      const configPath = join(typeDir, name, "config.yml");
+      const file = Bun.file(configPath);
+      if (!(await file.exists())) continue;
+
+      let parsed: unknown;
+      try {
+        parsed = YAML.parse(await file.text());
+      } catch (e) {
+        die(`Failed to parse config at ${configPath}: ${e}`);
+      }
+
+      const result = TARGET_SCHEMAS[type].safeParse(parsed);
+      if (!result.success) {
+        die(`Invalid config at ${configPath}:\n${result.error.message}`);
+      }
+
+      const targetEnv = await loadDotEnv(join(typeDir, name, ".env"));
+      const env = { ...globalEnv, ...targetEnv };
+
+      if (type === "cli") {
+        cli[name] = result.data as CliTarget;
+      } else if (type === "mcp") {
+        const t = result.data as McpTarget;
+        mcp[name] = t.transport === "stdio" ? t : { ...t, headers: subRecord(t.headers, env) };
+      } else {
+        const t = result.data as ApiTarget;
+        api[name] = { ...t, headers: subRecord(t.headers, env) };
+      }
+    }
+  }
+
+  return { cli, mcp, api };
 }
 
 // --- Management helpers ---
@@ -182,34 +176,31 @@ async function saveConfig(config: Config): Promise<void> {
 export async function addTarget(name: string, type: "cli", target: CliTarget): Promise<void>;
 export async function addTarget(name: string, type: "mcp", target: McpTarget): Promise<void>;
 export async function addTarget(name: string, type: "api", target: ApiTarget): Promise<void>;
-export async function addTarget(name: string, type: "cli" | "mcp" | "api", target: CliTarget | McpTarget | ApiTarget): Promise<void> {
+export async function addTarget(
+  name: string,
+  type: TargetType,
+  target: CliTarget | McpTarget | ApiTarget,
+): Promise<void> {
   const config = await loadConfig();
   const allNames = new Set([...Object.keys(config.cli), ...Object.keys(config.mcp), ...Object.keys(config.api)]);
-  if (allNames.has(name) && !config[type as "cli" | "mcp" | "api"]?.[name]) {
+  if (allNames.has(name) && !config[type]?.[name]) {
     die(`Target name "${name}" is already used by another type. Choose a different name.`);
   }
-  if (type === "cli") {
-    config.cli[name] = target as CliTarget;
-  } else if (type === "mcp") {
-    config.mcp[name] = target as McpTarget;
-  } else {
-    config.api[name] = target as ApiTarget;
-  }
-  await saveConfig(config);
+
+  const dir = join(TARGET_DIR, type, name);
+  await Bun.spawn(["mkdir", "-p", dir]).exited;
+  await Bun.write(join(dir, "config.yml"), YAML.stringify(target));
 }
 
 export async function removeTarget(name: string): Promise<void> {
-  const config = await loadConfig();
-  if (config.cli[name]) {
-    delete config.cli[name];
-  } else if (config.mcp[name]) {
-    delete config.mcp[name];
-  } else if (config.api[name]) {
-    delete config.api[name];
-  } else {
-    die(`Target "${name}" not found.`);
+  for (const type of TARGET_TYPES) {
+    const dir = join(TARGET_DIR, type, name);
+    if (await Bun.file(join(dir, "config.yml")).exists()) {
+      await Bun.spawn(["rm", "-rf", dir]).exited;
+      return;
+    }
   }
-  await saveConfig(config);
+  die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }
 
 export function getTarget(config: Config, name: string): ResolvedTarget {

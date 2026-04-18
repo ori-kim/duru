@@ -9,7 +9,7 @@ const CLIP_DIR = join(homedir(), ".clip");
 type AuthKind = "mcp" | "api";
 
 function authDirOf(targetName: string, kind: AuthKind = "mcp"): string {
-  return join(CLIP_DIR, kind, targetName);
+  return join(CLIP_DIR, "target", kind, targetName);
 }
 
 function authPath(targetName: string, kind: AuthKind = "mcp"): string {
@@ -321,7 +321,7 @@ async function runFullOAuthFlow(targetName: string, serverUrl: string, resp401?:
     clientId = reg.client_id;
     clientSecret = reg.client_secret;
   } else {
-    die(`OAuth: Server requires pre-registered client. Use 'headers' in settings.yml instead.`);
+    die(`OAuth: Server requires pre-registered client. Use 'headers' in config.yml instead.`);
   }
 
   // 5. PKCE 생성

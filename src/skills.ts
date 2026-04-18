@@ -73,7 +73,7 @@ function buildInstructionSection(targetNames: string[]): string {
 - 외부 서비스 CLI·MCP(${targetNames.map((n) => `\`${n}\``).join(", ")} 등)는 반드시 \`clip\`을 통해 실행:
 ${examples}
 - **실행 우선**: 사전 조회 없이 \`clip <target> <tool>\` 바로 실행. block 시 \`clip list\`·\`clip <target> tools\`로 탐색
-- \`clip list\`로 등록된 target 확인, ACL 설정은 \`~/.clip/settings.yml\`
+- \`clip list\`로 등록된 target 확인, ACL 설정은 \`~/.clip/target/<type>/<name>/config.yml\`
 - 시스템 CLI(\`grep\`, \`jq\`)와 개발 도구(\`bun\`, \`npm\`)는 직접 실행
 
 ${MARKER_END}`;

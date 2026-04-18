@@ -4,7 +4,7 @@ import { executeApi } from "./api-target.ts";
 import { BIND_DIR, bindTarget, listBound, unbindTarget } from "./bind.ts";
 import { executeCli } from "./cli-target.ts";
 import type { ApiTarget, CliTarget, McpHttpTarget, McpStdioTarget, McpTarget } from "./config.ts";
-import { CONFIG_DIR, addTarget, getTarget, loadConfig, removeTarget } from "./config.ts";
+import { addTarget, getTarget, loadConfig, removeTarget } from "./config.ts";
 import { die } from "./errors.ts";
 import { executeMcpStdio } from "./mcp-stdio-target.ts";
 import { executeMcp } from "./mcp-target.ts";
@@ -41,14 +41,14 @@ Global flags:
   --version, -v Show version
 
 Config:
-  ${CONFIG_DIR}/settings.{yml,json}
+  ~/.clip/target/{mcp,cli,api}/<name>/config.yml
 
 Native bind PATH setup (add to shell profile):
   export PATH="${BIND_DIR}:$PATH"
 
 OAuth tokens:
-  ~/.clip/mcp/<target>/auth.json
-  ~/.clip/api/<target>/auth.json
+  ~/.clip/target/mcp/<name>/auth.json
+  ~/.clip/target/api/<name>/auth.json
 
 Examples:
   clip add gh gh --deny delete,apply
@@ -66,15 +66,13 @@ Examples:
   clip bind gh            # 이후 "gh pr list" 가 clip을 통해 실행됨
   clip unbind gh
 
-Tree ACL (settings.yml 직접 편집):
-  cli:
-    gh:
-      command: gh
-      acl:
-        topic:
-          allow: [describe, list]
-        group:
-          deny: [delete]
+Tree ACL (~/.clip/target/cli/gh/config.yml 직접 편집):
+  command: gh
+  acl:
+    topic:
+      allow: [describe, list]
+    group:
+      deny: [delete]
 
 Agent integration:
   clip skills add claude-code
@@ -257,7 +255,7 @@ async function runAdd(args: string[]): Promise<void> {
         );
         if (schemes.length > 0) {
           const kinds = schemes.map((s) => (s as Record<string, string>)["type"] ?? (s as Record<string, string>)["scheme"]).join(", ");
-          process.stderr.write(`clip: This API declares auth (${kinds}). Add 'oauth: true' or 'headers:' in settings.yml.\n`);
+          process.stderr.write(`clip: This API declares auth (${kinds}). Add 'oauth: true' or 'headers:' in config.yml.\n`);
         }
       }
     } catch { /* silent */ }

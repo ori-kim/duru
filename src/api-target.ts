@@ -8,7 +8,7 @@ import { getStoredAuthHeaders, handleOAuth401, refreshIfExpiring } from "./oauth
 import { parseOpenApi } from "./openapi.ts";
 import type { TargetResult } from "./output.ts";
 
-const API_DIR = join(homedir(), ".clip", "api");
+const API_DIR = join(homedir(), ".clip", "target", "api");
 
 function specCachePath(targetName: string): string {
   return join(API_DIR, targetName, "spec.json");
@@ -137,7 +137,7 @@ export async function executeApi(
   }
   const baseUrl = rawBaseUrl.replace(/\/+$/, "");
   if (!baseUrl) {
-    die(`No baseUrl: OpenAPI spec has no servers[], add "baseUrl" to settings.yml for "${targetName}"`);
+    die(`No baseUrl: OpenAPI spec has no servers[], add "baseUrl" to config.yml for "${targetName}"`);
   }
 
   const args = parseToolArgs(rawArgs, tool.inputSchema);
