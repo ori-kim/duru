@@ -1,3 +1,4 @@
+import { mkdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 import type { GraphqlTarget } from "./config.ts";
@@ -15,7 +16,7 @@ import {
   parseDotPath,
   parseIntrospection,
 } from "./graphql-schema.ts";
-import type { GqlSpec, IntrospectionField, IntrospectionInputValue } from "./graphql-schema.ts";
+import type { GqlSpec, GqlTool, IntrospectionField, IntrospectionInputValue } from "./graphql-schema.ts";
 
 const GRAPHQL_DIR = join(homedir(), ".clip", "target", "graphql");
 const BUILTIN_SCALARS = new Set(["Boolean", "String", "Int", "Float", "ID"]);
@@ -112,20 +113,17 @@ async function loadSchema(
 
   const schemaObj = { __schema: data["__schema"] };
   const dir = join(GRAPHQL_DIR, targetName);
-  await Bun.spawn(["mkdir", "-p", dir]).exited;
+  mkdirSync(dir, { recursive: true });
   await Bun.write(cachePath, JSON.stringify(schemaObj, null, 2));
 
   return parseIntrospection(schemaObj as Record<string, unknown>);
 }
 
-function formatToolsLine(
-  tool: { rootField: string; args: { name: string; type: { kind: string; name: string | null; ofType: { kind: string; name: string | null; ofType: unknown } | null } }[]; returnType: { kind: string; name: string | null; ofType: unknown } },
-  prefix: string,
-): string {
+function formatToolsLine(tool: GqlTool, prefix: string): string {
   const argStr = tool.args.length > 0
     ? `(${tool.args.map((a) => a.name).join(", ")})`
     : "";
-  return `  ${(prefix + tool.rootField + argStr).padEnd(40)} ${gqlTypeToString(tool.returnType as Parameters<typeof gqlTypeToString>[0])}`;
+  return `  ${(prefix + tool.rootField + argStr).padEnd(40)} ${gqlTypeToString(tool.returnType)}`;
 }
 
 function buildToolsOutput(spec: GqlSpec): string {
@@ -218,9 +216,7 @@ export async function executeGraphql(
   }
 
   if (subcommand === "types") {
-    const visible = [...spec.types.values()].filter(
-      (t) => !BUILTIN_SCALARS.has(t.name) && t.kind !== "SCALAR" || (t.kind === "SCALAR" && !BUILTIN_SCALARS.has(t.name)),
-    );
+    const visible = [...spec.types.values()].filter((t) => !BUILTIN_SCALARS.has(t.name));
     if (visible.length === 0) return { exitCode: 0, stdout: "No types.\n", stderr: "" };
     const lines = ["Types:"];
     for (const t of visible.sort((a, b) => a.name.localeCompare(b.name))) {

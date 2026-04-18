@@ -631,9 +631,10 @@ async function main(): Promise<void> {
   const effectivePassthrough = !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode;
   const targetArgs = rawTargetArgs.filter((a) => !LATE_FLAGS.has(a));
 
-  // ACL 체크 제외: 내장 명령(tools/describe) + --help in args
+  // ACL 체크 제외: 내장 메타 명령(tools/describe/types) + --help in args
+  // query/refresh 등 실제 데이터 접근 명령은 ACL 체크 적용
   const hasHelpFlag = targetArgs.includes("--help") || targetArgs.includes("-h");
-  const isBuiltinSubcommand = subcommand === "tools" || subcommand === "describe" || subcommand === "types" || subcommand === "query";
+  const isBuiltinSubcommand = subcommand === "tools" || subcommand === "describe" || subcommand === "types";
   if (!isBuiltinSubcommand && !hasHelpFlag) {
     checkAcl(target, subcommand, targetArgs[0], targetName);
   }
