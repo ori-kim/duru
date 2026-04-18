@@ -1,5 +1,7 @@
 # clip
 
+[한국어](README.KO.md)
+
 A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules, handle OAuth auth, and integrate with AI agents from one command.
 
 ## Features
@@ -19,6 +21,43 @@ curl -fsSL https://raw.githubusercontent.com/ori-kim/cli-proxy/main/install.sh |
 Installs to `~/.local/bin/clip`. Set `CLIP_INSTALL_DIR` to override.
 
 **Manual:** [Latest release](https://github.com/ori-kim/cli-proxy/releases/latest) · macOS only (darwin-arm64, darwin-x64)
+
+### PATH setup
+
+If `~/.local/bin` is not in your PATH, add this to your shell profile:
+
+```sh
+export PATH="$PATH:$HOME/.local/bin"
+```
+
+### Native bind (optional)
+
+Bind lets you route a command through clip without the `clip` prefix:
+
+```sh
+clip bind gh   # 'gh' now routes through clip
+gh pr list     # same as: clip gh pr list
+```
+
+Add `~/.clip/bin` **before** other entries so clip intercepts the command:
+
+```sh
+export PATH="$HOME/.clip/bin:$PATH"
+```
+
+## Claude Code Integration
+
+Install clip as a Claude Code skill to let AI agents use your registered targets:
+
+```sh
+# via skills.sh (GitHub repo, no registration required)
+npx skills add https://github.com/ori-kim/cli-proxy
+
+# or via clip itself
+clip skills add claude-code
+```
+
+Once installed, Claude Code can call any clip target as a tool — ACL rules are enforced on every invocation.
 
 ## Quick Start
 

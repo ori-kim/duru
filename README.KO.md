@@ -20,6 +20,43 @@ curl -fsSL https://raw.githubusercontent.com/ori-kim/cli-proxy/main/install.sh |
 
 **수동 설치:** [최신 릴리즈](https://github.com/ori-kim/cli-proxy/releases/latest) · macOS 전용 (darwin-arm64, darwin-x64)
 
+### PATH 설정
+
+`~/.local/bin`이 PATH에 없다면 셸 프로필에 추가하세요:
+
+```sh
+export PATH="$PATH:$HOME/.local/bin"
+```
+
+### 네이티브 바인드 (선택)
+
+바인드를 사용하면 `clip` 접두사 없이 대상 명령어를 직접 실행할 수 있습니다:
+
+```sh
+clip bind gh   # 이제 'gh'가 clip을 통해 라우팅됨
+gh pr list     # clip gh pr list 와 동일
+```
+
+clip이 명령어를 가로채려면 `~/.clip/bin`을 PATH **앞에** 추가하세요:
+
+```sh
+export PATH="$HOME/.clip/bin:$PATH"
+```
+
+## Claude Code 통합
+
+clip을 Claude Code 스킬로 설치하면 AI 에이전트가 등록된 대상을 직접 도구로 사용할 수 있습니다:
+
+```sh
+# skills.sh로 설치 (GitHub 레포 직접 지정, 별도 등록 불필요)
+npx skills add https://github.com/ori-kim/cli-proxy
+
+# 또는 clip 자체 커맨드로 설치
+clip skills add claude-code
+```
+
+설치 후 Claude Code는 모든 clip 대상을 도구로 호출할 수 있으며, 호출마다 ACL 규칙이 적용됩니다.
+
 ## 빠른 시작
 
 ```sh
