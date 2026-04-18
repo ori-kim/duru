@@ -3,10 +3,11 @@ import { checkAcl } from "./acl.ts";
 import { executeApi } from "./api-target.ts";
 import { BIND_DIR, bindTarget, listBound, unbindTarget } from "./bind.ts";
 import { executeCli } from "./cli-target.ts";
-import type { ApiTarget, CliTarget, McpHttpTarget, McpStdioTarget, McpTarget } from "./config.ts";
+import type { ApiTarget, CliTarget, McpHttpTarget, McpSseTarget, McpStdioTarget, McpTarget } from "./config.ts";
 import { addTarget, getTarget, loadConfig, removeTarget } from "./config.ts";
 import { die } from "./errors.ts";
 import { executeMcpStdio } from "./mcp-stdio-target.ts";
+import { executeMcpSse } from "./mcp-sse-target.ts";
 import { executeMcp } from "./mcp-target.ts";
 import { forceLogin, getAuthStatus, removeTokens } from "./oauth.ts";
 import { formatOutput } from "./output.ts";
@@ -22,6 +23,7 @@ Usage:
   clip [--json] [--pipe] <target> <subcommand> [...args]
   clip add <name> <command-or-url> [--allow x,y] [--deny z]
   clip add <name> <https://...openapi.json> [--api]
+  clip add <name> <https://...> --sse
   clip remove <name>
   clip list
   clip refresh <target>
@@ -176,7 +178,8 @@ async function runList(): Promise<void> {
           : b.auth === "apikey"
             ? "  [api key]"
             : "  [no auth]";
-      console.log(`  ${name.padEnd(16)} [mcp]${bindTag} ${b.url}${formatAcl(b)}${statusTag}`);
+      const transportLabel = b.transport === "sse" ? "SSE: " : "";
+      console.log(`  ${name.padEnd(16)} [mcp]${bindTag} ${transportLabel}${b.url}${formatAcl(b)}${statusTag}`);
     }
   }
   for (const [name, b] of [...apiEntries].sort(([a], [b]) => a.localeCompare(b))) {
@@ -203,7 +206,7 @@ async function runAdd(args: string[]): Promise<void> {
   const positionals: string[] = [];
   const flags: Record<string, string> = {};
   // boolean 플래그: 다음 인자를 value로 소비하지 않음
-  const BOOL_FLAGS = new Set(["stdio", "api"]);
+  const BOOL_FLAGS = new Set(["stdio", "sse", "api"]);
   for (let i = 1; i < args.length; i++) {
     const a = args[i] ?? "";
     if (a.startsWith("--")) {
@@ -232,6 +235,7 @@ async function runAdd(args: string[]): Promise<void> {
   if (!type && flags["api"]) type = "api";
   if (!type && flags["url"]) type = "mcp";
   if (!type && flags["stdio"]) type = "mcp";
+  if (!type && flags["sse"]) type = "mcp";
   if (!type && flags["command"]) type = "cli";
   if (!type && positionals[0]) {
     const url = positionals[0];
@@ -276,7 +280,6 @@ async function runAdd(args: string[]): Promise<void> {
   if (type === "mcp") {
     if (flags["stdio"]) {
       // STDIO MCP: clip add <name> --stdio <cmd> [args...]
-      // positionals[0] = command, positionals[1..] = args
       const command = flags["command"] ?? positionals[0];
       if (!command) die("STDIO MCP target requires a command (e.g. clip add fs --stdio npx -y @modelcontextprotocol/server-filesystem /)");
       const prependArgs = flags["args"]
@@ -284,8 +287,14 @@ async function runAdd(args: string[]): Promise<void> {
         : positionals.slice(1).length > 0 ? positionals.slice(1) : undefined;
       await addTarget(name, "mcp", { transport: "stdio", command, args: prependArgs, allow, deny });
       console.log(`Added STDIO MCP target "${name}" → ${command}${prependArgs ? " " + prependArgs.join(" ") : ""}`);
+    } else if (flags["sse"]) {
+      // SSE MCP: clip add <name> --sse <url>
+      const url = flags["url"] ?? positionals[0];
+      if (!url) die("SSE MCP target requires a URL (e.g. clip add myserver --sse https://example.com/sse)");
+      await addTarget(name, "mcp", { transport: "sse", url, auth: false, allow, deny });
+      console.log(`Added SSE MCP target "${name}" → ${url}`);
     } else {
-      // HTTP MCP
+      // HTTP MCP (Streamable HTTP)
       const url = flags["url"] ?? positionals[0];
       if (!url) die("MCP target requires a URL (e.g. clip add myserver https://...mcp)");
       await addTarget(name, "mcp", { transport: "http", url, auth: false, allow, deny });
@@ -364,7 +373,11 @@ async function printTargetHelp(name: string, type: "cli" | "mcp" | "api", target
   let detail: string;
   if (type === "mcp") {
     const mcp = target as McpTarget;
-    detail = mcp.transport === "stdio" ? `STDIO MCP: ${mcp.command}` : `MCP server: ${mcp.url}`;
+    detail = mcp.transport === "stdio"
+      ? `STDIO MCP: ${mcp.command}`
+      : mcp.transport === "sse"
+        ? `SSE MCP: ${mcp.url}`
+        : `MCP server: ${mcp.url}`;
   } else if (type === "api") {
     detail = `API: ${(target as ApiTarget).baseUrl ?? (target as ApiTarget).openapiUrl ?? ""}`;
   } else {
@@ -467,8 +480,8 @@ async function main(): Promise<void> {
     }
     if (type !== "mcp") die(`"${name}" is not an MCP or API target. OAuth only applies to MCP/API targets.`);
     const mcpForLogin = target as McpTarget;
-    if (mcpForLogin.transport === "stdio") die(`"${name}" is a STDIO MCP target. OAuth only applies to HTTP MCP targets.`);
-    await forceLogin(name, (mcpForLogin as McpHttpTarget).url);
+    if (mcpForLogin.transport === "stdio") die(`"${name}" is a STDIO MCP target. OAuth only applies to HTTP/SSE MCP targets.`);
+    await forceLogin(name, (mcpForLogin as McpHttpTarget | McpSseTarget).url);
     return;
   }
 
@@ -517,7 +530,9 @@ async function main(): Promise<void> {
     const mcpTarget = target as McpTarget;
     const result = mcpTarget.transport === "stdio"
       ? await executeMcpStdio(mcpTarget as McpStdioTarget, subcommand, targetArgs, targetName, effectiveDryRun)
-      : await executeMcp(mcpTarget as McpHttpTarget, config.headers, subcommand, targetArgs, targetName, effectiveDryRun);
+      : mcpTarget.transport === "sse"
+        ? await executeMcpSse(mcpTarget as McpSseTarget, config.headers, subcommand, targetArgs, targetName, effectiveDryRun)
+        : await executeMcp(mcpTarget as McpHttpTarget, config.headers, subcommand, targetArgs, targetName, effectiveDryRun);
     formatOutput(result, effectiveJsonMode ? "json" : "plain", "mcp");
   } else {
     const result = await executeCli(target as CliTarget, subcommand, targetArgs, effectivePassthrough && !effectiveDryRun, effectiveDryRun);

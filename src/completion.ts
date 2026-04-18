@@ -60,7 +60,7 @@ _clip() {
     done
     for t in "$tdir"/mcp/*(N/); do
       name="\${t:t}"
-      detail=$(awk '/^url:/{print $2; exit} /^command:/{print "stdio: "$2; exit}' "$t/config.yml" 2>/dev/null)
+      detail=$(awk '/^transport:/{t=$2} /^url:/{print (t=="sse"?"sse: ":"")$2; exit} /^command:/{print "stdio: "$2; exit}' "$t/config.yml" 2>/dev/null)
       mcp_targets+=("$name:$detail")
     done
     for t in "$tdir"/api/*(N/); do

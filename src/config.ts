@@ -38,8 +38,17 @@ const mcpStdioTargetSchema = z.object({
   ...aclFields,
 });
 
-// stdio를 먼저 체크하여 기존 설정(transport 없음)은 http로 폴백
-const mcpTargetSchema = z.union([mcpStdioTargetSchema, mcpHttpTargetSchema]);
+// SSE MCP (transport: "sse" — legacy MCP SSE transport)
+const mcpSseTargetSchema = z.object({
+  transport: z.literal("sse"),
+  url: z.string().url(),
+  headers: z.record(z.string()).optional(),
+  auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
+  ...aclFields,
+});
+
+// stdio/sse를 먼저 체크하여 기존 설정(transport 없음)은 http로 폴백
+const mcpTargetSchema = z.union([mcpStdioTargetSchema, mcpSseTargetSchema, mcpHttpTargetSchema]);
 
 const cliTargetSchema = z.object({
   command: z.string().min(1),
@@ -70,7 +79,8 @@ export type AclNode = z.infer<typeof aclNodeSchema>;
 export type AclTree = z.infer<typeof aclTreeSchema>;
 export type McpHttpTarget = z.infer<typeof mcpHttpTargetSchema>;
 export type McpStdioTarget = z.infer<typeof mcpStdioTargetSchema>;
-export type McpTarget = McpHttpTarget | McpStdioTarget;
+export type McpSseTarget = z.infer<typeof mcpSseTargetSchema>;
+export type McpTarget = McpHttpTarget | McpStdioTarget | McpSseTarget;
 export type CliTarget = z.infer<typeof cliTargetSchema>;
 export type ApiTarget = z.infer<typeof apiTargetSchema>;
 export type Config = {
