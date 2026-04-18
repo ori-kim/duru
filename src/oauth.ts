@@ -4,10 +4,16 @@ import { die } from "./errors.ts";
 
 // --- 경로 ---
 
-const MCP_DIR = join(homedir(), ".clip", "mcp");
+const CLIP_DIR = join(homedir(), ".clip");
 
-function authPath(targetName: string): string {
-  return join(MCP_DIR, targetName, "auth.json");
+type AuthKind = "mcp" | "api";
+
+function authDirOf(targetName: string, kind: AuthKind = "mcp"): string {
+  return join(CLIP_DIR, kind, targetName);
+}
+
+function authPath(targetName: string, kind: AuthKind = "mcp"): string {
+  return join(authDirOf(targetName, kind), "auth.json");
 }
 
 // --- 타입 ---
@@ -56,8 +62,8 @@ type TokenResponse = {
 
 // --- 토큰 저장/로드 ---
 
-async function loadAuth(targetName: string): Promise<StoredAuth | null> {
-  const path = authPath(targetName);
+async function loadAuth(targetName: string, kind: AuthKind = "mcp"): Promise<StoredAuth | null> {
+  const path = authPath(targetName, kind);
   const file = Bun.file(path);
   if (!(await file.exists())) return null;
   try {
@@ -68,16 +74,16 @@ async function loadAuth(targetName: string): Promise<StoredAuth | null> {
   }
 }
 
-async function saveAuth(targetName: string, auth: StoredAuth): Promise<void> {
-  const dir = join(MCP_DIR, targetName);
+async function saveAuth(targetName: string, auth: StoredAuth, kind: AuthKind = "mcp"): Promise<void> {
+  const dir = authDirOf(targetName, kind);
   await Bun.spawn(["mkdir", "-p", dir]).exited;
-  const path = authPath(targetName);
+  const path = authPath(targetName, kind);
   await Bun.write(path, JSON.stringify(auth, null, 2));
   await Bun.spawn(["chmod", "600", path]).exited;
 }
 
-async function deleteAuth(targetName: string): Promise<void> {
-  const path = authPath(targetName);
+async function deleteAuth(targetName: string, kind: AuthKind = "mcp"): Promise<void> {
+  const path = authPath(targetName, kind);
   await Bun.spawn(["rm", "-f", path]).exited;
 }
 
@@ -281,7 +287,7 @@ async function doRefresh(stored: StoredAuth): Promise<TokenResponse | null> {
 
 // --- Full OAuth Flow ---
 
-async function runFullOAuthFlow(targetName: string, serverUrl: string, resp401?: Response): Promise<StoredAuth> {
+async function runFullOAuthFlow(targetName: string, serverUrl: string, resp401?: Response, kind: AuthKind = "mcp"): Promise<StoredAuth> {
   // 1. Protected Resource Metadata 조회
   const hintUrl = resp401 ? parseResourceMetadataUrl(resp401) : undefined;
   const resourceMeta = await fetchResourceMetadata(serverUrl, hintUrl);
@@ -306,7 +312,7 @@ async function runFullOAuthFlow(targetName: string, serverUrl: string, resp401?:
   let clientId: string;
   let clientSecret: string | undefined;
 
-  const existing = await loadAuth(targetName);
+  const existing = await loadAuth(targetName, kind);
   if (existing?.client_id && existing.authorization_server === authServerUrl) {
     clientId = existing.client_id;
     clientSecret = existing.client_secret;
@@ -369,7 +375,7 @@ async function runFullOAuthFlow(targetName: string, serverUrl: string, resp401?:
   };
 
   // 9. 저장
-  await saveAuth(targetName, auth);
+  await saveAuth(targetName, auth, kind);
   process.stderr.write(`\x1b[0mclip: 로그인 완료.\n\x1b[0m`);
 
   return auth;
@@ -378,17 +384,17 @@ async function runFullOAuthFlow(targetName: string, serverUrl: string, resp401?:
 // --- Export 함수 ---
 
 /** 저장된 토큰으로 Authorization 헤더 반환. 없거나 만료되면 null. */
-export async function getStoredAuthHeaders(targetName: string): Promise<Record<string, string> | null> {
-  const auth = await loadAuth(targetName);
+export async function getStoredAuthHeaders(targetName: string, kind: AuthKind = "mcp"): Promise<Record<string, string> | null> {
+  const auth = await loadAuth(targetName, kind);
   if (!auth) return null;
-  // 만료된 토큰은 null 반환 (mcpPost에서 401로 처리)
+  // 만료된 토큰은 null 반환 (호출부에서 401로 처리)
   if (Date.now() >= auth.expires_at) return null;
   return { Authorization: `Bearer ${auth.access_token}` };
 }
 
 /** 만료 5분 전이면 refresh 시도. 새 헤더 반환 또는 null. */
-export async function refreshIfExpiring(targetName: string): Promise<Record<string, string> | null> {
-  const auth = await loadAuth(targetName);
+export async function refreshIfExpiring(targetName: string, kind: AuthKind = "mcp"): Promise<Record<string, string> | null> {
+  const auth = await loadAuth(targetName, kind);
   if (!auth) return null;
 
   const FIVE_MINUTES = 5 * 60 * 1000;
@@ -404,7 +410,7 @@ export async function refreshIfExpiring(targetName: string): Promise<Record<stri
     expires_at: tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : Date.now() + 3600_000,
     scope: tokens.scope ?? auth.scope,
   };
-  await saveAuth(targetName, updated);
+  await saveAuth(targetName, updated, kind);
   return { Authorization: `Bearer ${updated.access_token}` };
 }
 
@@ -416,9 +422,10 @@ export async function handleOAuth401(
   targetName: string,
   serverUrl: string,
   resp: Response,
+  kind: AuthKind = "mcp",
 ): Promise<Record<string, string>> {
   // refresh_token으로 갱신 먼저 시도
-  const stored = await loadAuth(targetName);
+  const stored = await loadAuth(targetName, kind);
   if (stored?.refresh_token) {
     const tokens = await doRefresh(stored);
     if (tokens) {
@@ -429,32 +436,32 @@ export async function handleOAuth401(
         expires_at: tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : Date.now() + 3600_000,
         scope: tokens.scope ?? stored.scope,
       };
-      await saveAuth(targetName, updated);
+      await saveAuth(targetName, updated, kind);
       return { Authorization: `Bearer ${updated.access_token}` };
     }
     // refresh 실패 → 저장 토큰 삭제 후 재인증
-    await deleteAuth(targetName);
+    await deleteAuth(targetName, kind);
   }
 
   // 전체 OAuth 플로우
-  const auth = await runFullOAuthFlow(targetName, serverUrl, resp);
+  const auth = await runFullOAuthFlow(targetName, serverUrl, resp, kind);
   return { Authorization: `Bearer ${auth.access_token}` };
 }
 
 /** login 명령용: 전체 OAuth 플로우 강제 실행 */
-export async function forceLogin(targetName: string, serverUrl: string): Promise<void> {
-  await deleteAuth(targetName); // 기존 토큰 삭제 후 새로 인증
-  await runFullOAuthFlow(targetName, serverUrl);
+export async function forceLogin(targetName: string, serverUrl: string, kind: AuthKind = "mcp"): Promise<void> {
+  await deleteAuth(targetName, kind); // 기존 토큰 삭제 후 새로 인증
+  await runFullOAuthFlow(targetName, serverUrl, undefined, kind);
 }
 
 /** logout 명령용: 토큰 파일 삭제 */
-export async function removeTokens(targetName: string): Promise<void> {
-  await deleteAuth(targetName);
+export async function removeTokens(targetName: string, kind: AuthKind = "mcp"): Promise<void> {
+  await deleteAuth(targetName, kind);
 }
 
 /** list 출력용: 토큰 존재 여부와 만료 상태 반환 */
-export async function getAuthStatus(targetName: string): Promise<string | null> {
-  const auth = await loadAuth(targetName);
+export async function getAuthStatus(targetName: string, kind: AuthKind = "mcp"): Promise<string | null> {
+  const auth = await loadAuth(targetName, kind);
   if (!auth) return null;
 
   const now = Date.now();
@@ -466,3 +473,5 @@ export async function getAuthStatus(targetName: string): Promise<string | null> 
   const hours = Math.floor(mins / 60);
   return `authenticated, expires in ${hours}h`;
 }
+
+export type { AuthKind };

@@ -49,10 +49,19 @@ const cliTargetSchema = z.object({
   acl: aclTreeSchema.optional(),
 });
 
+const apiTargetSchema = z.object({
+  url: z.string().url().optional(),
+  baseUrl: z.string().url().optional(),
+  headers: z.record(z.string()).optional(),
+  oauth: z.boolean().optional(),
+  ...aclFields,
+});
+
 const configSchema = z.object({
   headers: z.record(z.string()).optional(),
   cli: z.record(cliTargetSchema).default({}),
   mcp: z.record(mcpTargetSchema).default({}),
+  api: z.record(apiTargetSchema).default({}),
 });
 
 // --- Types ---
@@ -63,11 +72,13 @@ export type McpHttpTarget = z.infer<typeof mcpHttpTargetSchema>;
 export type McpStdioTarget = z.infer<typeof mcpStdioTargetSchema>;
 export type McpTarget = McpHttpTarget | McpStdioTarget;
 export type CliTarget = z.infer<typeof cliTargetSchema>;
+export type ApiTarget = z.infer<typeof apiTargetSchema>;
 export type Config = z.infer<typeof configSchema>;
 
 export type ResolvedTarget =
   | { type: "cli"; target: CliTarget }
-  | { type: "mcp"; target: McpTarget };
+  | { type: "mcp"; target: McpTarget }
+  | { type: "api"; target: ApiTarget };
 
 // --- Paths ---
 
@@ -123,6 +134,15 @@ export async function loadConfig(): Promise<Config> {
         }),
       ),
     ),
+    api: Object.fromEntries(
+      await Promise.all(
+        Object.entries(config.api).map(async ([name, t]) => {
+          const targetEnv = await loadDotEnv(join(CONFIG_DIR, name, ".env"));
+          const env = { ...globalEnv, ...targetEnv };
+          return [name, { ...t, headers: subRecord(t.headers, env) }];
+        }),
+      ),
+    ),
   };
 }
 
@@ -161,12 +181,19 @@ async function saveConfig(config: Config): Promise<void> {
 
 export async function addTarget(name: string, type: "cli", target: CliTarget): Promise<void>;
 export async function addTarget(name: string, type: "mcp", target: McpTarget): Promise<void>;
-export async function addTarget(name: string, type: "cli" | "mcp", target: CliTarget | McpTarget): Promise<void> {
+export async function addTarget(name: string, type: "api", target: ApiTarget): Promise<void>;
+export async function addTarget(name: string, type: "cli" | "mcp" | "api", target: CliTarget | McpTarget | ApiTarget): Promise<void> {
   const config = await loadConfig();
+  const allNames = new Set([...Object.keys(config.cli), ...Object.keys(config.mcp), ...Object.keys(config.api)]);
+  if (allNames.has(name) && !config[type as "cli" | "mcp" | "api"]?.[name]) {
+    die(`Target name "${name}" is already used by another type. Choose a different name.`);
+  }
   if (type === "cli") {
     config.cli[name] = target as CliTarget;
-  } else {
+  } else if (type === "mcp") {
     config.mcp[name] = target as McpTarget;
+  } else {
+    config.api[name] = target as ApiTarget;
   }
   await saveConfig(config);
 }
@@ -177,6 +204,8 @@ export async function removeTarget(name: string): Promise<void> {
     delete config.cli[name];
   } else if (config.mcp[name]) {
     delete config.mcp[name];
+  } else if (config.api[name]) {
+    delete config.api[name];
   } else {
     die(`Target "${name}" not found.`);
   }
@@ -186,6 +215,7 @@ export async function removeTarget(name: string): Promise<void> {
 export function getTarget(config: Config, name: string): ResolvedTarget {
   if (config.cli[name]) return { type: "cli", target: config.cli[name]! };
   if (config.mcp[name]) return { type: "mcp", target: config.mcp[name]! };
+  if (config.api[name]) return { type: "api", target: config.api[name]! };
   die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }
 

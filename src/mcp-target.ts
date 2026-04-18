@@ -153,7 +153,7 @@ async function mcpNotify(session: McpSession, method: string, params?: unknown):
 
 // --- Tool 인자 파싱 ---
 
-function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unknown>): Record<string, unknown> {
+export function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   const props = (inputSchema["properties"] as Record<string, { type?: string | string[] }> | undefined) ?? {};
 
@@ -301,7 +301,7 @@ export async function executeMcp(
   return { exitCode, stdout: callResult?.isError ? "" : stdout, stderr };
 }
 
-function formatToolHelp(tool: McpTool): TargetResult {
+export function formatToolHelp(tool: { name: string; description: string; inputSchema: Record<string, unknown> }): TargetResult {
   const schema = tool.inputSchema;
   const props = (schema["properties"] as Record<string, { type?: unknown; default?: unknown }> | undefined) ?? {};
   const required = new Set((schema["required"] as string[] | undefined) ?? []);
