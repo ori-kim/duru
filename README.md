@@ -5,12 +5,12 @@ CLI proxy for MCP servers and CLI tools — apply ACL rules, OAuth auth, and age
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/erik/clip/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ori-kim/cli-proxy/main/install.sh | sh
 ```
 
 Installs to `~/.local/bin/clip` by default. Set `CLIP_INSTALL_DIR` to override.
 
-**Manual download:** [Latest release](https://github.com/erik/clip/releases/latest)
+**Manual download:** [Latest release](https://github.com/ori-kim/cli-proxy/releases/latest)
 
 ## Quick start
 

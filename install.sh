@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-REPO="erik/clip"
+REPO="ori-kim/cli-proxy"
 INSTALL_DIR="${CLIP_INSTALL_DIR:-$HOME/.local/bin}"
 
 # Detect platform
