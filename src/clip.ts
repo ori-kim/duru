@@ -7,6 +7,7 @@ import { die } from "./errors.ts";
 import { executeMcp } from "./mcp-target.ts";
 import { forceLogin, getAuthStatus, removeTokens } from "./oauth.ts";
 import { formatOutput } from "./output.ts";
+import { runSkillsCmd } from "./skills.ts";
 
 const VERSION = "0.1.0";
 
@@ -55,6 +56,9 @@ Tree ACL (settings.yml 직접 편집):
           allow: [describe, list]
         group:
           deny: [delete]
+
+Agent integration:
+  clip skills add claude-code
 `.trim();
 
 // --- argv 수동 파싱 ---
@@ -272,6 +276,7 @@ async function main(): Promise<void> {
   if (targetName === "list") { await runList(); return; }
   if (targetName === "add") { await runAdd(rest.slice(1)); return; }
   if (targetName === "remove") { await runRemove(rest.slice(1)); return; }
+  if (targetName === "skills") { await runSkillsCmd(rest.slice(1)); return; }
 
   if (targetName === "login") {
     const name = rest[1];
