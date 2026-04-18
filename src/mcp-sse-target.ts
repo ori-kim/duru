@@ -20,7 +20,7 @@ type McpTool = {
 };
 
 type McpCallResult = {
-  content: { type: string; text?: string }[];
+  content: { type: string; text?: string; data?: string; mimeType?: string }[];
   isError?: boolean;
 };
 
@@ -36,7 +36,7 @@ async function* parseSseStream(body: ReadableStream<Uint8Array>): AsyncGenerator
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n|\r/g, "\n");
 
       const blocks = buffer.split("\n\n");
       buffer = blocks.pop() ?? "";
@@ -271,8 +271,18 @@ export async function executeMcpSse(
       arguments: toolArgs,
     })) as McpCallResult;
 
-    const texts = (callResult?.content ?? []).filter((c) => c.type === "text" && c.text).map((c) => c.text ?? "");
-    const stdout = texts.join("\n");
+    const parts: string[] = [];
+    for (const c of callResult?.content ?? []) {
+      if (c.type === "text" && c.text) {
+        parts.push(c.text);
+      } else if (c.type === "image" && c.data) {
+        const ext = (c.mimeType ?? "image/png").split("/")[1] ?? "png";
+        const path = `/tmp/clip-image-${Date.now()}.${ext}`;
+        await Bun.write(path, Buffer.from(c.data, "base64"));
+        parts.push(path);
+      }
+    }
+    const stdout = parts.join("\n");
     const exitCode = callResult?.isError ? 1 : 0;
     return { exitCode, stdout: callResult?.isError ? "" : stdout, stderr: callResult?.isError ? stdout : "" };
   } finally {

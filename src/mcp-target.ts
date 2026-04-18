@@ -30,6 +30,8 @@ type McpTool = {
 type McpContent = {
   type: string;
   text?: string;
+  data?: string;
+  mimeType?: string;
 };
 
 type McpCallResult = {
@@ -324,9 +326,19 @@ export async function executeMcp(
     arguments: toolArgs,
   })) as McpCallResult;
 
-  const texts = (callResult?.content ?? []).filter((c) => c.type === "text" && c.text).map((c) => c.text ?? "");
+  const parts: string[] = [];
+  for (const c of callResult?.content ?? []) {
+    if (c.type === "text" && c.text) {
+      parts.push(c.text);
+    } else if (c.type === "image" && c.data) {
+      const ext = (c.mimeType ?? "image/png").split("/")[1] ?? "png";
+      const path = `/tmp/clip-image-${Date.now()}.${ext}`;
+      await Bun.write(path, Buffer.from(c.data, "base64"));
+      parts.push(path);
+    }
+  }
 
-  const stdout = texts.join("\n");
+  const stdout = parts.join("\n");
   const exitCode = callResult?.isError ? 1 : 0;
   const stderr = callResult?.isError ? stdout : "";
 
