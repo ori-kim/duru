@@ -11,6 +11,7 @@ A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules,
 - **OAuth 2.1 PKCE** — secure token management for MCP server authentication
 - **Agent integration** — install as a Claude Code skill for AI agent workflows
 - **JSON/pipe output** — machine-friendly mode for scripting and agent pipelines
+- **Dry run** — preview the exact curl/command that would execute, without running it
 
 ## Install
 
@@ -97,6 +98,10 @@ clip add notion https://mcp.notion.com/mcp
 clip login notion
 clip notion search --query "..."
 
+# Register an OpenAPI REST API
+clip add petstore https://petstore3.swagger.io/api/v3/openapi.json
+clip petstore getPetById --petId 1
+
 # Manage targets
 clip list
 clip remove notion
@@ -132,6 +137,33 @@ acl:
 | `~/.clip/target/api/<name>/spec.json` | Cached OpenAPI spec |
 | `~/.clip/.env` | Global env vars (substituted into `config.yml`) |
 
+### Auth config
+
+The `auth` field controls authentication per target:
+
+```yaml
+# No auth (default)
+auth: false
+
+# OAuth 2.1 PKCE — use `clip login <target>` to authenticate
+auth: oauth
+
+# API key — provide token via headers
+auth: apikey
+headers:
+  Authorization: "Bearer ${API_KEY}"
+```
+
+### API target fields
+
+```yaml
+# baseUrl: where requests are sent (required)
+baseUrl: https://api.example.com
+
+# openapiUrl: where to fetch the OpenAPI spec (optional if spec.json is present locally)
+openapiUrl: https://api.example.com/openapi.json
+```
+
 ## Commands
 
 | Command | Description |
@@ -152,7 +184,41 @@ acl:
 | `clip skills add claude-code` | Install as Claude Code skill |
 | `clip completion zsh` | Print zsh completion script |
 
-**Global flags:** `--json`, `--pipe`, `--help`, `--version`
+**Global flags:** `--json`, `--pipe`, `--dry-run`, `--help`, `--version`
+
+Flags can be placed anywhere in the command:
+
+```sh
+clip gh pr list --json
+clip petstore getPetById --petId 1 --dry-run
+clip notion search --query "hello" --json --dry-run
+```
+
+## Dry Run
+
+Preview what would execute without actually running anything:
+
+```sh
+# API target → equivalent curl command (with auth headers)
+clip --dry-run petstore getPetById --petId 1
+# curl -X GET 'https://petstore3.swagger.io/api/v3/pet/1' \
+#   -H 'Accept: application/json'
+
+# HTTP MCP target → JSON-RPC curl
+clip notion search_pages --query "hello" --dry-run
+# curl -X POST 'https://mcp.notion.com/mcp' \
+#   -H 'Authorization: Bearer eyJ...' \
+#   -H 'Content-Type: application/json' \
+#   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}'
+
+# STDIO MCP target → echo pipe
+clip fs read_file --path /etc/hosts --dry-run
+# echo '{"jsonrpc":"2.0","id":1,...}' | npx @modelcontextprotocol/server-filesystem /
+
+# CLI target → final command string (after ACL/prepend processing)
+clip --dry-run gh get pods -n default
+# gh get pods -n default
+```
 
 ## Development
 

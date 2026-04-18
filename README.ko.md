@@ -9,6 +9,7 @@ MCP 서버와 CLI 도구를 위한 통합 CLI 프록시 게이트웨이 — ACL 
 - **OAuth 2.1 PKCE** — MCP 서버 인증을 위한 안전한 토큰 관리
 - **에이전트 통합** — Claude Code 스킬로 설치하여 AI 에이전트 워크플로우에서 활용
 - **JSON/pipe 출력** — 스크립트와 에이전트 파이프라인을 위한 머신 친화적 모드
+- **Dry run** — 실제 실행 없이 나가는 curl/명령어를 미리 확인
 
 ## 설치
 
@@ -95,6 +96,10 @@ clip add notion https://mcp.notion.com/mcp
 clip login notion
 clip notion search --query "..."
 
+# OpenAPI REST API 등록
+clip add petstore https://petstore3.swagger.io/api/v3/openapi.json
+clip petstore getPetById --petId 1
+
 # 대상 관리
 clip list
 clip remove notion
@@ -130,6 +135,33 @@ acl:
 | `~/.clip/target/api/<name>/spec.json` | 캐시된 OpenAPI 스펙 |
 | `~/.clip/.env` | 전역 환경변수 (`config.yml`에 치환) |
 
+### 인증 설정
+
+`auth` 필드로 대상별 인증 방식을 지정합니다:
+
+```yaml
+# 인증 없음 (기본값)
+auth: false
+
+# OAuth 2.1 PKCE — `clip login <target>`으로 인증
+auth: oauth
+
+# API 키 — headers로 토큰 전달
+auth: apikey
+headers:
+  Authorization: "Bearer ${API_KEY}"
+```
+
+### API target 필드
+
+```yaml
+# baseUrl: 실제 요청이 전송되는 주소 (필수)
+baseUrl: https://api.example.com
+
+# openapiUrl: OpenAPI 스펙을 가져올 URL (spec.json이 로컬에 있으면 생략 가능)
+openapiUrl: https://api.example.com/openapi.json
+```
+
 ## 커맨드
 
 | 커맨드 | 설명 |
@@ -150,7 +182,41 @@ acl:
 | `clip skills add claude-code` | Claude Code 스킬로 설치 |
 | `clip completion zsh` | zsh 자동완성 스크립트 출력 |
 
-**글로벌 플래그:** `--json`, `--pipe`, `--help`, `--version`
+**글로벌 플래그:** `--json`, `--pipe`, `--dry-run`, `--help`, `--version`
+
+플래그는 명령어 어디에든 붙일 수 있습니다:
+
+```sh
+clip gh pr list --json
+clip petstore getPetById --petId 1 --dry-run
+clip notion search --query "hello" --json --dry-run
+```
+
+## Dry Run
+
+실제 실행 없이 어떤 요청/명령이 나가는지 미리 확인합니다:
+
+```sh
+# API target → curl 명령어 출력 (인증 헤더 포함)
+clip --dry-run petstore getPetById --petId 1
+# curl -X GET 'https://petstore3.swagger.io/api/v3/pet/1' \
+#   -H 'Accept: application/json'
+
+# HTTP MCP target → JSON-RPC curl 출력
+clip notion search_pages --query "hello" --dry-run
+# curl -X POST 'https://mcp.notion.com/mcp' \
+#   -H 'Authorization: Bearer eyJ...' \
+#   -H 'Content-Type: application/json' \
+#   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}'
+
+# STDIO MCP target → echo 파이프 형태 출력
+clip fs read_file --path /etc/hosts --dry-run
+# echo '{"jsonrpc":"2.0","id":1,...}' | npx @modelcontextprotocol/server-filesystem /
+
+# CLI target → ACL/prepend 처리 후 실행될 최종 명령어
+clip --dry-run gh get pods -n default
+# gh get pods -n default
+```
 
 ## 개발
 
