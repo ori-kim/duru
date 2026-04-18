@@ -11,6 +11,13 @@ MCP 서버와 CLI 도구를 위한 통합 CLI 프록시 게이트웨이 — ACL 
 - **JSON/pipe 출력** — 스크립트와 에이전트 파이프라인을 위한 머신 친화적 모드
 - **Dry run** — 실제 실행 없이 나가는 curl/명령어를 미리 확인
 
+## 문서
+
+- [Target 개요](docs/ko/targets.md) — target이란, 종류, 공통 config 필드, 글로벌 플래그
+- [CLI target](docs/ko/cli.md) — ACL로 감싼 로컬 CLI 도구, bind, dry run
+- [MCP target](docs/ko/mcp.md) — HTTP/STDIO MCP 서버, OAuth, JSON-RPC 동작 방식
+- [API target](docs/ko/api.md) — OpenAPI 기반 REST target, 파라미터 매핑, 인증
+
 ## 설치
 
 ```sh

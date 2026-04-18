@@ -13,6 +13,13 @@ A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules,
 - **JSON/pipe output** — machine-friendly mode for scripting and agent pipelines
 - **Dry run** — preview the exact curl/command that would execute, without running it
 
+## Documentation
+
+- [Targets overview](docs/en/targets.md) — what targets are, types, common config fields, global flags
+- [CLI target](docs/en/cli.md) — wrapping local CLI tools with ACL, bind, dry run
+- [MCP target](docs/en/mcp.md) — HTTP and STDIO MCP servers, OAuth, how JSON-RPC works
+- [API target](docs/en/api.md) — OpenAPI-based REST targets, parameter mapping, auth
+
 ## Install
 
 ```sh
