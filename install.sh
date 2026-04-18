@@ -56,3 +56,12 @@ case ":$PATH:" in
     echo "  export PATH=\"\$PATH:$INSTALL_DIR\""
     ;;
 esac
+
+BIND_DIR="$HOME/.clip/bin"
+echo ""
+echo "Native bind directory: $BIND_DIR"
+echo "To use bound targets without the 'clip' prefix, add to your shell profile"
+echo "(before other PATH entries so clip intercepts the commands):"
+echo "  export PATH=\"$BIND_DIR:\$PATH\""
+echo ""
+echo "Then: clip bind gh   # 'gh' will now route through clip"

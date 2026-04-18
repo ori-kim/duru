@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { checkAcl } from "./acl.ts";
+import { BIND_DIR, bindTarget, listBound, unbindTarget } from "./bind.ts";
 import { executeCli } from "./cli-target.ts";
 import type { CliTarget, McpTarget } from "./config.ts";
 import { CONFIG_DIR, addTarget, getTarget, loadConfig, removeTarget } from "./config.ts";
@@ -21,6 +22,11 @@ Usage:
   clip list
   clip login <target>
   clip logout <target>
+  clip bind <target>       Bind target as a native command (no "clip" prefix needed)
+  clip unbind <target>     Remove native binding
+  clip bind --all          Bind all registered targets
+  clip unbind --all        Remove all native bindings
+  clip binds               List currently bound targets
   clip <target> tools
   clip <target> --help
 
@@ -32,6 +38,9 @@ Global flags:
 
 Config:
   ${CONFIG_DIR}/settings.{yml,json}
+
+Native bind PATH setup (add to shell profile):
+  export PATH="${BIND_DIR}:$PATH"
 
 OAuth tokens:
   ~/.clip/mcp/<target>/auth.json
@@ -46,6 +55,8 @@ Examples:
   clip notion tools
   clip --json gh pr list
   clip gh get pods -n default
+  clip bind gh            # 이후 "gh pr list" 가 clip을 통해 실행됨
+  clip unbind gh
 
 Tree ACL (settings.yml 직접 편집):
   cli:
@@ -126,14 +137,18 @@ async function runList(): Promise<void> {
     return;
   }
 
+  const bound = new Set(await listBound());
+
   console.log("Targets:");
   for (const [name, b] of [...cliEntries].sort(([a], [b]) => a.localeCompare(b))) {
-    console.log(`  ${name.padEnd(16)} [cli] ${b.command}${formatAcl(b)}`);
+    const bindTag = bound.has(name) ? ", bound" : "";
+    console.log(`  ${name.padEnd(16)} [cli${bindTag}] ${b.command}${formatAcl(b)}`);
   }
   for (const [name, b] of [...mcpEntries].sort(([a], [b]) => a.localeCompare(b))) {
     const authStatus = await getAuthStatus(name);
+    const bindTag = bound.has(name) ? ", bound" : "";
     const statusTag = authStatus ? `  [${authStatus}]` : "  [not authenticated]";
-    console.log(`  ${name.padEnd(16)} [mcp] ${b.url}${formatAcl(b)}${statusTag}`);
+    console.log(`  ${name.padEnd(16)} [mcp${bindTag}] ${b.url}${formatAcl(b)}${statusTag}`);
   }
 }
 
@@ -193,6 +208,47 @@ async function runRemove(args: string[]): Promise<void> {
   if (!name) die("Usage: clip remove <name>");
   await removeTarget(name);
   console.log(`Removed target "${name}".`);
+}
+
+async function runBind(args: string[]): Promise<void> {
+  const flag = args[0];
+  if (flag === "--all") {
+    const config = await loadConfig();
+    const names = [...Object.keys(config.cli), ...Object.keys(config.mcp)];
+    if (names.length === 0) { console.log("No targets configured."); return; }
+    for (const name of names) await bindTarget(name);
+    return;
+  }
+  const name = flag;
+  if (!name) die("Usage: clip bind <target> | clip bind --all");
+  // target이 등록되어 있는지 확인
+  const config = await loadConfig();
+  getTarget(config, name); // 없으면 die
+  await bindTarget(name);
+}
+
+async function runUnbind(args: string[]): Promise<void> {
+  const flag = args[0];
+  if (flag === "--all") {
+    const names = await listBound();
+    if (names.length === 0) { console.log("No bindings found."); return; }
+    for (const name of names) await unbindTarget(name);
+    return;
+  }
+  const name = flag;
+  if (!name) die("Usage: clip unbind <target> | clip unbind --all");
+  await unbindTarget(name);
+}
+
+async function runBinds(): Promise<void> {
+  const names = await listBound();
+  if (names.length === 0) {
+    console.log("No native bindings.");
+    console.log(`\nBind a target with: clip bind <target>`);
+    return;
+  }
+  console.log("Bound targets:");
+  for (const name of names) console.log(`  ${name}  (${BIND_DIR}/${name} → clip)`);
 }
 
 // --- config 서브커맨드 (하위 호환) ---
@@ -277,6 +333,9 @@ async function main(): Promise<void> {
   if (targetName === "add") { await runAdd(rest.slice(1)); return; }
   if (targetName === "remove") { await runRemove(rest.slice(1)); return; }
   if (targetName === "skills") { await runSkillsCmd(rest.slice(1)); return; }
+  if (targetName === "bind") { await runBind(rest.slice(1)); return; }
+  if (targetName === "unbind") { await runUnbind(rest.slice(1)); return; }
+  if (targetName === "binds") { await runBinds(); return; }
 
   if (targetName === "login") {
     const name = rest[1];
