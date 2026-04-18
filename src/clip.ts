@@ -142,16 +142,22 @@ async function runList(): Promise<void> {
 
   console.log("Targets:");
   for (const [name, b] of [...cliEntries].sort(([a], [b]) => a.localeCompare(b))) {
-    const bindTag = bound.has(name) ? " [bound]" : "";
+    const bindTag = bound.has(name) ? " [bind]" : "";
     console.log(`  ${name.padEnd(16)} [cli]${bindTag} ${b.command}${formatAcl(b)}`);
   }
   for (const [name, b] of [...mcpEntries].sort(([a], [b]) => a.localeCompare(b))) {
-    const bindTag = bound.has(name) ? " [bound]" : "";
+    const bindTag = bound.has(name) ? " [bind]" : "";
     if (b.transport === "stdio") {
-      console.log(`  ${name.padEnd(16)} [mcp/stdio]${bindTag} ${b.command}${formatAcl(b)}`);
+      console.log(`  ${name.padEnd(16)} [mcp]${bindTag} ${b.command}${formatAcl(b)}`);
     } else {
       const authStatus = await getAuthStatus(name);
-      const statusTag = authStatus ? `  [${authStatus}]` : "  [not authenticated]";
+      const statusTag = authStatus
+        ? `  [${authStatus}]`
+        : b.oauth === false
+          ? b.headers
+            ? "  [api key]"
+            : "  [no auth]"
+          : "  [not authenticated]";
       console.log(`  ${name.padEnd(16)} [mcp]${bindTag} ${b.url}${formatAcl(b)}${statusTag}`);
     }
   }

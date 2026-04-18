@@ -108,7 +108,42 @@ export async function loadConfig(): Promise<Config> {
   if (!result.success) {
     die(`Invalid config at ${resolved.path}:\n${result.error.message}`);
   }
-  return result.data;
+  const globalEnv = await loadDotEnv(join(CONFIG_DIR, ".env"));
+  const config = result.data;
+  return {
+    ...config,
+    headers: subRecord(config.headers, globalEnv),
+    mcp: Object.fromEntries(
+      await Promise.all(
+        Object.entries(config.mcp).map(async ([name, t]) => {
+          if (t.transport === "stdio") return [name, t];
+          const targetEnv = await loadDotEnv(join(CONFIG_DIR, name, ".env"));
+          const env = { ...globalEnv, ...targetEnv };
+          return [name, { ...t, headers: subRecord(t.headers, env) }];
+        }),
+      ),
+    ),
+  };
+}
+
+async function loadDotEnv(path: string): Promise<Record<string, string>> {
+  const file = Bun.file(path);
+  if (!(await file.exists())) return {};
+  const env: Record<string, string> = {};
+  for (const line of (await file.text()).split("\n")) {
+    const match = line.match(/^\s*([A-Z_][A-Z0-9_]*)=["']?(.+?)["']?\s*$/);
+    if (match) env[match[1]!] = match[2]!;
+  }
+  return env;
+}
+
+
+function subRecord(r: Record<string, string> | undefined, env: Record<string, string>): Record<string, string> | undefined {
+  if (!r) return r;
+  const merged = { ...process.env, ...env } as Record<string, string>;
+  return Object.fromEntries(
+    Object.entries(r).map(([k, v]) => [k, v.replace(/\$\{([^}]+)\}/g, (_, key) => merged[key] ?? "")])
+  );
 }
 
 /** 기존 파일 포맷 유지. 파일이 없으면 yml로 생성. */

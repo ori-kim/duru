@@ -30,24 +30,35 @@ function buildSkillMd(targetNames: string[]): string {
   const targetList = targetNames.map((n) => `\`${n}\``).join(", ");
   return `---
 name: clip
-description: CLI proxy gateway for third-party tools (${targetList}). Use when managing clip targets or when you need to run infrastructure CLIs. Always run registered targets through clip instead of directly.
+description: CLI proxy gateway for third-party tools (${targetList}). Always route registered targets through clip instead of calling them directly.
 ---
 
 # clip — CLI Proxy Gateway
 
+## 최우선 원칙
+- 외부 서비스는 \`clip list\` 사전 조회 없이 **\`clip <target> <tool>\` 바로 실행**.
+- block(인증 오류·target 없음 등) 발생 시에만 \`clip list\` → \`clip <target> tools\` 순서로 탐색.
+- "Claude Code에 직접 연결된 MCP 목록"만 보고 "없음"이라 답하지 말 것.
+
 ## 규칙
-- 외부 서비스 CLI는 반드시 \`clip\`을 통해 실행
+- 외부 서비스 CLI·MCP는 반드시 \`clip\`을 통해 실행
   - \`gh topic describe\` ✗ → \`clip gh topic describe\` ✓
-- 시스템 CLI(\`grep\`, \`jq\`)와 개발 도구(\`bun\`, \`npm\`, \`git\`)는 직접 실행
+- 시스템 CLI(\`grep\`, \`jq\`)와 개발 도구(\`bun\`, \`npm\`)는 직접 실행
+- \`bind\`는 opt-in: \`clip bind <target>\` 이전에는 항상 \`clip\` 접두어를 붙여 실행
 
 ## 등록된 target
 ${targetNames.map((n) => `- \`${n}\``).join("\n")}
 
 ## 사용법
-- \`clip <target> <subcommand> [...args]\` — 명령 실행
-- \`clip list\` — 등록된 target 목록
-- \`clip <target> --help\` — target 도움말 + ACL 규칙
-- \`clip add <name> <command-or-url>\` — 새 target 등록
+- 실행 — \`clip <target> <sub> [...args]\`
+- 목록 — \`clip list\`
+  - \`[cli] / [mcp]\` 타입 태그, \`[bind]\` = shim 활성, \`[authenticated] / [expiring] / [not authenticated]\` = HTTP MCP OAuth 상태
+- 도움말·ACL — \`clip <target> --help\`
+- MCP 도구 목록 — \`clip <target> tools\`
+- 등록 — \`clip add <name> <cmd-or-url>\` (HTTP MCP는 URL, STDIO MCP는 \`--stdio <cmd> [args...]\`)
+- 해제 — \`clip remove <name>\`
+- 인증 — \`clip login <target>\` / \`clip logout <target>\` (HTTP MCP만)
+- Bind — \`clip bind <target>\` / \`clip unbind <target>\` / \`clip binds\` (shim: \`~/.clip/bin/\`)
 `;
 }
 
@@ -59,11 +70,11 @@ function buildInstructionSection(targetNames: string[]): string {
   return `${MARKER_START}
 
 ## clip 게이트웨이
-- 외부 서비스 CLI(${targetNames.map((n) => `\`${n}\``).join(", ")} 등)는 반드시 \`clip\`을 통해 실행:
+- 외부 서비스 CLI·MCP(${targetNames.map((n) => `\`${n}\``).join(", ")} 등)는 반드시 \`clip\`을 통해 실행:
 ${examples}
-- \`clip list\`로 등록된 target 확인
-- ACL 설정: \`~/.clip/settings.yml\`
-- 시스템 CLI(\`grep\`, \`jq\`)와 개발 도구(\`bun\`, \`npm\`, \`git\`)는 직접 실행
+- **실행 우선**: 사전 조회 없이 \`clip <target> <tool>\` 바로 실행. block 시 \`clip list\`·\`clip <target> tools\`로 탐색
+- \`clip list\`로 등록된 target 확인, ACL 설정은 \`~/.clip/settings.yml\`
+- 시스템 CLI(\`grep\`, \`jq\`)와 개발 도구(\`bun\`, \`npm\`)는 직접 실행
 
 ${MARKER_END}`;
 }

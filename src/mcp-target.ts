@@ -160,29 +160,35 @@ function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unknown>):
   let i = 0;
   while (i < rawArgs.length) {
     const arg = rawArgs[i] ?? "";
-    if (!arg.startsWith("--")) {
-      i++;
-      continue;
-    }
 
     const eqIdx = arg.indexOf("=");
     let key: string;
     let rawVal: string | undefined;
 
-    if (eqIdx >= 0) {
-      key = arg.slice(2, eqIdx);
+    if (arg.startsWith("--")) {
+      if (eqIdx >= 0) {
+        key = arg.slice(2, eqIdx);
+        rawVal = arg.slice(eqIdx + 1);
+        i++;
+      } else {
+        key = arg.slice(2);
+        const next = rawArgs[i + 1];
+        if (!next || next.startsWith("--")) {
+          result[key] = true;
+          i++;
+          continue;
+        }
+        rawVal = next;
+        i += 2;
+      }
+    } else if (eqIdx > 0) {
+      // key=value 형식
+      key = arg.slice(0, eqIdx);
       rawVal = arg.slice(eqIdx + 1);
       i++;
     } else {
-      key = arg.slice(2);
-      const next = rawArgs[i + 1];
-      if (!next || next.startsWith("--")) {
-        result[key] = true;
-        i++;
-        continue;
-      }
-      rawVal = next;
-      i += 2;
+      i++;
+      continue;
     }
 
     // inputSchema를 기반으로 타입 변환
@@ -193,6 +199,8 @@ function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unknown>):
       result[key] = Number(rawVal);
     } else if (propType === "boolean") {
       result[key] = rawVal === "true" || rawVal === "1";
+    } else if (propType === "string") {
+      result[key] = rawVal;
     } else if (propType === "object" || propType === "array") {
       try {
         result[key] = JSON.parse(rawVal);
