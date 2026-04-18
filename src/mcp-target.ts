@@ -1,5 +1,6 @@
 import type { McpTarget } from "./config.ts";
 import { die } from "./errors.ts";
+import { getStoredAuthHeaders, handleOAuth401, refreshIfExpiring } from "./oauth.ts";
 import type { TargetResult } from "./output.ts";
 
 // --- JSON-RPC 타입 ---
@@ -72,9 +73,17 @@ type McpSession = {
   headers: Record<string, string>;
   sessionId: string | null;
   nextId: number;
+  targetName: string;
+  oauthEnabled: boolean;
 };
 
-async function mcpPost(session: McpSession, body: JsonRpcRequest): Promise<unknown> {
+async function mcpPost(session: McpSession, body: JsonRpcRequest, isRetry = false): Promise<unknown> {
+  // 만료 임박 토큰 사전 갱신 (retry에서는 skip — 이미 처리됨)
+  if (session.oauthEnabled && !isRetry) {
+    const refreshed = await refreshIfExpiring(session.targetName);
+    if (refreshed) Object.assign(session.headers, refreshed);
+  }
+
   const reqHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
@@ -95,6 +104,13 @@ async function mcpPost(session: McpSession, body: JsonRpcRequest): Promise<unkno
   // 세션 ID 캡처
   const sid = resp.headers.get("Mcp-Session-Id");
   if (sid) session.sessionId = sid;
+
+  // 401: OAuth 플로우 트리거 (1회만)
+  if (resp.status === 401 && session.oauthEnabled && !isRetry) {
+    const authHeaders = await handleOAuth401(session.targetName, session.url, resp);
+    Object.assign(session.headers, authHeaders);
+    return mcpPost(session, body, true);
+  }
 
   const text = await resp.text();
 
@@ -204,13 +220,23 @@ export async function executeMcp(
   globalHeaders: Record<string, string> | undefined,
   toolName: string,
   rawArgs: string[],
+  targetName: string,
 ): Promise<TargetResult> {
+  const oauthEnabled = target.oauth !== false;
   const session: McpSession = {
     url: target.url,
     headers: { ...(globalHeaders ?? {}), ...(target.headers ?? {}) },
     sessionId: null,
     nextId: 1,
+    targetName,
+    oauthEnabled,
   };
+
+  // 저장된 OAuth 토큰 미리 로드
+  if (oauthEnabled) {
+    const storedHeaders = await getStoredAuthHeaders(targetName);
+    if (storedHeaders) Object.assign(session.headers, storedHeaders);
+  }
 
   // 1. Initialize
   await mcpCall(session, "initialize", {

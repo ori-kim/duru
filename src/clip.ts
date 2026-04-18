@@ -5,6 +5,7 @@ import type { CliTarget, McpTarget } from "./config.ts";
 import { CONFIG_DIR, addTarget, getTarget, loadConfig, removeTarget } from "./config.ts";
 import { die } from "./errors.ts";
 import { executeMcp } from "./mcp-target.ts";
+import { forceLogin, getAuthStatus, removeTokens } from "./oauth.ts";
 import { formatOutput } from "./output.ts";
 
 const VERSION = "0.1.0";
@@ -13,25 +14,33 @@ const HELP = `
 clip — CLI proxy for MCP servers and CLI tools
 
 Usage:
-  clip [--json] <target> <subcommand> [...args]
+  clip [--json] [--pipe] <target> <subcommand> [...args]
   clip add <name> <command-or-url> [--allow x,y] [--deny z]
   clip remove <name>
   clip list
+  clip login <target>
+  clip logout <target>
   clip <target> tools
   clip <target> --help
 
 Global flags:
   --json        Output as JSON (unwraps MCP content, wraps CLI stdout)
+  --pipe        Force buffered mode even in a TTY (disables passthrough)
   --help, -h    Show this help
   --version, -v Show version
 
 Config:
   ${CONFIG_DIR}/settings.{yml,json}
 
+OAuth tokens:
+  ~/.clip/mcp/<target>/auth.json
+
 Examples:
   clip add gh gh --deny delete,apply
   clip add notion https://mcp.notion.com/mcp
   clip add linear https://mcp.linear.app/mcp
+  clip login notion      # OAuth 인증
+  clip logout notion     # 토큰 삭제
   clip list
   clip notion tools
   clip --json gh pr list
@@ -54,10 +63,12 @@ Tree ACL (settings.yml 직접 편집):
 
 function parseGlobalFlags(argv: string[]): {
   jsonMode: boolean;
+  pipeMode: boolean;
   configPath: string | undefined;
   rest: string[];
 } {
   let jsonMode = false;
+  let pipeMode = false;
   let configPath: string | undefined;
   let i = 0;
 
@@ -65,6 +76,9 @@ function parseGlobalFlags(argv: string[]): {
     const a = argv[i] ?? "";
     if (a === "--json") {
       jsonMode = true;
+      i++;
+    } else if (a === "--pipe") {
+      pipeMode = true;
       i++;
     } else if (a === "--help" || a === "-h") {
       console.log(HELP);
@@ -80,7 +94,7 @@ function parseGlobalFlags(argv: string[]): {
     }
   }
 
-  return { jsonMode, configPath, rest: argv.slice(i) };
+  return { jsonMode, pipeMode, configPath, rest: argv.slice(i) };
 }
 
 // --- list / add / remove ---
@@ -113,7 +127,9 @@ async function runList(): Promise<void> {
     console.log(`  ${name.padEnd(16)} [cli] ${b.command}${formatAcl(b)}`);
   }
   for (const [name, b] of [...mcpEntries].sort(([a], [b]) => a.localeCompare(b))) {
-    console.log(`  ${name.padEnd(16)} [mcp] ${b.url}${formatAcl(b)}`);
+    const authStatus = await getAuthStatus(name);
+    const statusTag = authStatus ? `  [${authStatus}]` : "  [not authenticated]";
+    console.log(`  ${name.padEnd(16)} [mcp] ${b.url}${formatAcl(b)}${statusTag}`);
   }
 }
 
@@ -241,8 +257,8 @@ async function printTargetHelp(name: string, type: "cli" | "mcp", target: CliTar
 
 async function main(): Promise<void> {
   const argv = Bun.argv.slice(2);
-  const { jsonMode, rest } = parseGlobalFlags(argv);
-  const passthrough = !!process.stdout.isTTY && !jsonMode;
+  const { jsonMode, pipeMode, rest } = parseGlobalFlags(argv);
+  const passthrough = !!process.stdout.isTTY && !jsonMode && !pipeMode;
 
   if (rest.length === 0) {
     console.log(HELP);
@@ -256,6 +272,25 @@ async function main(): Promise<void> {
   if (targetName === "list") { await runList(); return; }
   if (targetName === "add") { await runAdd(rest.slice(1)); return; }
   if (targetName === "remove") { await runRemove(rest.slice(1)); return; }
+
+  if (targetName === "login") {
+    const name = rest[1];
+    if (!name) die("Usage: clip login <target>");
+    const cfg = await loadConfig();
+    const { type, target } = getTarget(cfg, name);
+    if (type !== "mcp") die(`"${name}" is not an MCP target. OAuth only applies to MCP targets.`);
+    await forceLogin(name, (target as McpTarget).url);
+    return;
+  }
+
+  if (targetName === "logout") {
+    const name = rest[1];
+    if (!name) die("Usage: clip logout <target>");
+    await removeTokens(name);
+    console.log(`Logged out of "${name}".`);
+    return;
+  }
+
   const config = await loadConfig();
   const resolved = getTarget(config, targetName);
   const { type, target } = resolved;
@@ -275,7 +310,7 @@ async function main(): Promise<void> {
   }
 
   if (type === "mcp") {
-    const result = await executeMcp(target as McpTarget, config.headers, subcommand, targetArgs);
+    const result = await executeMcp(target as McpTarget, config.headers, subcommand, targetArgs, targetName);
     formatOutput(result, jsonMode ? "json" : "plain", "mcp");
   } else {
     const result = await executeCli(target as CliTarget, subcommand, targetArgs, passthrough);
