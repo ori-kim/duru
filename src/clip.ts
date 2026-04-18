@@ -625,10 +625,13 @@ async function main(): Promise<void> {
   const effectivePassthrough = !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode;
   const targetArgs = rawTargetArgs.filter((a) => !LATE_FLAGS.has(a));
 
-  // ACL 체크 제외: 내장 메타 명령(tools/describe/types) + --help in args
-  // query/refresh 등 실제 데이터 접근 명령은 ACL 체크 적용
+  // ACL 체크 제외: --help 플래그, 또는 내장 메타 명령
+  // tools: 모든 타입에서 ACL 우회 (discovery 명령)
+  // describe/types: graphql·grpc 전용 메타 명령에서만 ACL 스킵
   const hasHelpFlag = targetArgs.includes("--help") || targetArgs.includes("-h");
-  const isBuiltinSubcommand = subcommand === "tools" || subcommand === "describe" || subcommand === "types";
+  const isBuiltinSubcommand =
+    (subcommand === "tools" && type !== "cli") ||
+    ((type === "graphql" || type === "grpc") && (subcommand === "describe" || subcommand === "types"));
   if (!isBuiltinSubcommand && !hasHelpFlag) {
     checkAcl(target, subcommand, targetArgs[0], targetName);
   }

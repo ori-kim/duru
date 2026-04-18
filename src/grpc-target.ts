@@ -210,6 +210,7 @@ function resolveMethod(
   const methodName = parts[parts.length - 1]!;
   const serviceHint = parts.length > 1 ? parts.slice(0, -1).join(".") : undefined;
 
+  const matches: { service: GrpcService; method: GrpcMethod; fqn: string }[] = [];
   for (const svc of schema.services) {
     const svcShort = svc.name.split(".").pop()!;
     const matchesSvc = !serviceHint ||
@@ -219,10 +220,15 @@ function resolveMethod(
 
     if (matchesSvc) {
       const method = svc.methods.find((m) => m.name === methodName);
-      if (method) return { service: svc, method, fqn: `${svc.name}/${methodName}` };
+      if (method) matches.push({ service: svc, method, fqn: `${svc.name}.${methodName}` });
     }
   }
-  return null;
+  if (matches.length === 0) return null;
+  if (matches.length > 1) {
+    const fqns = matches.map((m) => m.fqn).join(", ");
+    process.stderr.write(`[clip] warning: ambiguous method "${subcommand}", using first match. Use full name to disambiguate: ${fqns}\n`);
+  }
+  return matches[0]!;
 }
 
 function toolDisplayName(svc: GrpcService, method: GrpcMethod, multiService: boolean): string {

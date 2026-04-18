@@ -114,6 +114,12 @@ clip add my-api localhost:50051 --grpc ./api.proto
 clip my-api tools
 clip my-api UserService.GetUser --id 123
 
+# Register a GraphQL API
+clip add gql https://api.example.com/graphql --graphql
+clip gql tools
+clip gql query --query '{ users { id name } }'
+
+
 # Manage targets
 clip list
 clip remove notion
@@ -144,10 +150,11 @@ acl:
 
 | Path | Purpose |
 |------|---------|
-| `~/.clip/target/{cli,mcp,api,grpc}/<name>/config.yml` | Target config and ACL rules |
+| `~/.clip/target/{cli,mcp,api,grpc,graphql}/<name>/config.yml` | Target config and ACL rules |
 | `~/.clip/target/{mcp,api}/<name>/auth.json` | OAuth tokens |
 | `~/.clip/target/api/<name>/spec.json` | Cached OpenAPI spec |
 | `~/.clip/target/grpc/<name>/schema.json` | Cached gRPC proto schema |
+| `~/.clip/target/graphql/<name>/schema.json` | Cached GraphQL schema |
 | `~/.clip/.env` | Global env vars (substituted into `config.yml`) |
 
 ### Auth config
@@ -187,6 +194,7 @@ openapiUrl: https://api.example.com/openapi.json
 | `clip add <name> --stdio <cmd> [args]` | Register a STDIO MCP target |
 | `clip add <name> <https://.../openapi.json>` | Register an OpenAPI REST target |
 | `clip add <name> <host:port> --grpc [proto]` | Register a gRPC target |
+| `clip add <name> <https://.../graphql> --graphql` | Register a GraphQL target |
 | `clip remove <name>` | Unregister a target |
 | `clip list` | List all targets with auth status |
 | `clip login <target>` | Authenticate via OAuth |
@@ -194,7 +202,8 @@ openapiUrl: https://api.example.com/openapi.json
 | `clip refresh <target>` | Re-fetch OpenAPI spec |
 | `clip <target> tools` | List available tools / operations |
 | `clip <target> describe <Service.Method>` | Show gRPC method signature |
-| `clip <target> types` | List all gRPC message types |
+| `clip <target> describe <type>` | Show GraphQL type definition |
+| `clip <target> types` | List all gRPC message types or GraphQL types |
 | `clip bind <target>` | Create a native command shim |
 | `clip unbind <target>` | Remove native command shim |
 | `clip binds` | List currently bound targets |

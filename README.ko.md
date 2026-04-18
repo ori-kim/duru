@@ -112,6 +112,12 @@ clip add my-api localhost:50051 --grpc ./api.proto
 clip my-api tools
 clip my-api UserService.GetUser --id 123
 
+# GraphQL API 등록
+clip add gql https://api.example.com/graphql --graphql
+clip gql tools
+clip gql query --query '{ users { id name } }'
+
+
 # 대상 관리
 clip list
 clip remove notion
@@ -142,10 +148,11 @@ acl:
 
 | 경로 | 용도 |
 |------|------|
-| `~/.clip/target/{cli,mcp,api,grpc}/<name>/config.yml` | 대상 설정 및 ACL 규칙 |
+| `~/.clip/target/{cli,mcp,api,grpc,graphql}/<name>/config.yml` | 대상 설정 및 ACL 규칙 |
 | `~/.clip/target/{mcp,api}/<name>/auth.json` | OAuth 토큰 |
 | `~/.clip/target/api/<name>/spec.json` | 캐시된 OpenAPI 스펙 |
 | `~/.clip/target/grpc/<name>/schema.json` | 캐시된 gRPC proto 스키마 |
+| `~/.clip/target/graphql/<name>/schema.json` | 캐시된 GraphQL 스키마 |
 | `~/.clip/.env` | 전역 환경변수 (`config.yml`에 치환) |
 
 ### 인증 설정
@@ -185,6 +192,7 @@ openapiUrl: https://api.example.com/openapi.json
 | `clip add <name> --stdio <cmd> [args]` | STDIO MCP 대상 등록 |
 | `clip add <name> <https://.../openapi.json>` | OpenAPI REST 대상 등록 |
 | `clip add <name> <host:port> --grpc [proto]` | gRPC 대상 등록 |
+| `clip add <name> <https://.../graphql> --graphql` | GraphQL 대상 등록 |
 | `clip remove <name>` | 대상 삭제 |
 | `clip list` | 전체 대상 목록 및 인증 상태 |
 | `clip login <target>` | OAuth 인증 |
@@ -192,7 +200,8 @@ openapiUrl: https://api.example.com/openapi.json
 | `clip refresh <target>` | OpenAPI 스펙 재fetch |
 | `clip <target> tools` | 사용 가능한 도구·오퍼레이션 목록 |
 | `clip <target> describe <Service.Method>` | gRPC 메서드 시그니처 확인 |
-| `clip <target> types` | gRPC 메시지 타입 목록 |
+| `clip <target> describe <type>` | GraphQL 타입 정의 확인 |
+| `clip <target> types` | gRPC 메시지 타입 또는 GraphQL 타입 목록 |
 | `clip bind <target>` | 네이티브 명령어 심 생성 |
 | `clip unbind <target>` | 네이티브 명령어 심 삭제 |
 | `clip binds` | 현재 바인드된 대상 목록 |
