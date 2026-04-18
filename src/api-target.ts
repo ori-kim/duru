@@ -70,6 +70,24 @@ async function loadSpec(targetName: string, specUrl: string | undefined, forceRe
   return parsed;
 }
 
+function buildCurlCommand(
+  method: string,
+  url: string,
+  headers: Record<string, string>,
+  body: string | URLSearchParams | undefined,
+): string {
+  const parts = [`curl -X ${method.toUpperCase()} '${url}'`];
+  for (const [k, v] of Object.entries(headers)) {
+    parts.push(`  -H '${k}: ${v}'`);
+  }
+  if (body instanceof URLSearchParams) {
+    parts.push(`  --data-urlencode '${body.toString()}'`);
+  } else if (body) {
+    parts.push(`  -d '${body.replace(/'/g, "'\\''")}'`);
+  }
+  return `${parts.join(" \\\n")}\n`;
+}
+
 export async function executeApi(
   target: ApiTarget,
   globalHeaders: Record<string, string> | undefined,
@@ -77,8 +95,9 @@ export async function executeApi(
   rawArgs: string[],
   targetName: string,
   forceRefresh = false,
+  dryRun = false,
 ): Promise<TargetResult> {
-  const raw = await loadSpec(targetName, target.url, forceRefresh);
+  const raw = await loadSpec(targetName, target.openapiUrl, forceRefresh);
   const spec = parseOpenApi(raw);
 
   if (subcommand === "refresh") {
@@ -114,7 +133,7 @@ export async function executeApi(
     return formatToolHelp(tool);
   }
 
-  const oauthEnabled = target.oauth !== false;
+  const oauthEnabled = target.auth === "oauth";
   const mergedHeaders: Record<string, string> = {
     ...(globalHeaders ?? {}),
     ...(target.headers ?? {}),
@@ -132,7 +151,7 @@ export async function executeApi(
   // 상대 경로 baseUrl을 spec URL 기준으로 절대 경로로 변환
   if (rawBaseUrl && !rawBaseUrl.startsWith("http://") && !rawBaseUrl.startsWith("https://")) {
     try {
-      rawBaseUrl = new URL(rawBaseUrl, target.url).toString();
+      rawBaseUrl = new URL(rawBaseUrl, target.openapiUrl).toString();
     } catch { /* rawBaseUrl 그대로 사용 */ }
   }
   const baseUrl = rawBaseUrl.replace(/\/+$/, "");
@@ -195,6 +214,10 @@ export async function executeApi(
     }
   }
 
+  if (dryRun) {
+    return { exitCode: 0, stdout: buildCurlCommand(tool.method, fullUrl, mergedHeaders, body), stderr: "" };
+  }
+
   const doFetch = (headers: Record<string, string>) =>
     fetch(fullUrl, {
       method: tool.method,
@@ -206,8 +229,8 @@ export async function executeApi(
 
   let resp = await doFetch(mergedHeaders);
 
-  if (resp.status === 401 && oauthEnabled && target.url) {
-    const authHeaders = await handleOAuth401(targetName, target.url, resp, "api");
+  if (resp.status === 401 && oauthEnabled && target.baseUrl) {
+    const authHeaders = await handleOAuth401(targetName, target.baseUrl, resp, "api");
     Object.assign(mergedHeaders, authHeaders);
     resp = await doFetch(mergedHeaders);
   }

@@ -54,6 +54,13 @@ async function* readLines(stream: ReadableStream<Uint8Array>): AsyncGenerator<st
   }
 }
 
+// --- shell 인용 ---
+
+function shellQuote(arg: string): string {
+  if (/^[a-zA-Z0-9._\-/:=@,+]+$/.test(arg)) return arg;
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 // --- tool args 파싱 (--key value 형식) ---
 
 function parseToolArgs(args: string[]): Record<string, unknown> {
@@ -161,7 +168,20 @@ export async function executeMcpStdio(
   subcommand: string,
   args: string[],
   _targetName: string,
+  dryRun = false,
 ): Promise<TargetResult> {
+  if (dryRun && subcommand !== "tools") {
+    const toolArgs = parseToolArgs(args);
+    const payload = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: subcommand, arguments: toolArgs },
+    });
+    const cmd = [target.command, ...(target.args ?? [])].map(shellQuote).join(" ");
+    return { exitCode: 0, stdout: `echo '${payload.replace(/'/g, "'\\''")}' | ${cmd}\n`, stderr: "" };
+  }
+
   if (subcommand === "tools") {
     const result = await runStdioSession(target, async (send) => {
       const resp = await send({ jsonrpc: "2.0", method: "tools/list" });

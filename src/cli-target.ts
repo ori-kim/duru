@@ -2,13 +2,23 @@ import type { CliTarget } from "./config.ts";
 import { die } from "./errors.ts";
 import type { TargetResult } from "./output.ts";
 
+function shellQuote(arg: string): string {
+  if (/^[a-zA-Z0-9._\-/:=@,+]+$/.test(arg)) return arg;
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 export async function executeCli(
   target: CliTarget,
   subcommand: string,
   args: string[],
   passthrough = false,
+  dryRun = false,
 ): Promise<TargetResult> {
   const cmd = [target.command, ...(target.args ?? []), subcommand, ...args];
+
+  if (dryRun) {
+    return { exitCode: 0, stdout: `${cmd.map(shellQuote).join(" ")}\n`, stderr: "" };
+  }
   const env = { ...process.env, ...(target.env ?? {}) } as Record<string, string>;
 
   let proc: ReturnType<typeof Bun.spawn>;

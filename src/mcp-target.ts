@@ -222,14 +222,46 @@ export function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unk
 
 // --- MCP target 실행 ---
 
+function buildMcpCurlCommand(url: string, headers: Record<string, string>, body: string): string {
+  const parts = [`curl -X POST '${url}'`];
+  for (const [k, v] of Object.entries(headers)) {
+    parts.push(`  -H '${k}: ${v}'`);
+  }
+  parts.push(`  -d '${body.replace(/'/g, "'\\''")}'`);
+  return `${parts.join(" \\\n")}\n`;
+}
+
 export async function executeMcp(
   target: McpHttpTarget,
   globalHeaders: Record<string, string> | undefined,
   toolName: string,
   rawArgs: string[],
   targetName: string,
+  dryRun = false,
 ): Promise<TargetResult> {
-  const oauthEnabled = target.oauth !== false;
+  const oauthEnabled = target.auth === "oauth";
+
+  if (dryRun && toolName !== "tools") {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      ...(globalHeaders ?? {}),
+      ...(target.headers ?? {}),
+    };
+    if (oauthEnabled) {
+      const stored = await getStoredAuthHeaders(targetName);
+      if (stored) Object.assign(headers, stored);
+    }
+    const toolArgs = parseToolArgs(rawArgs, {});
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: toolName, arguments: toolArgs },
+    });
+    return { exitCode: 0, stdout: buildMcpCurlCommand(target.url, headers, body), stderr: "" };
+  }
+
   const session: McpSession = {
     url: target.url,
     headers: { ...(globalHeaders ?? {}), ...(target.headers ?? {}) },

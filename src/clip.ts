@@ -38,6 +38,7 @@ Usage:
 Global flags:
   --json        Output as JSON (unwraps MCP content, wraps CLI stdout)
   --pipe        Force buffered mode even in a TTY (disables passthrough)
+  --dry-run     Print equivalent curl command instead of executing (API targets only)
   --help, -h    Show this help
   --version, -v Show version
 
@@ -90,11 +91,13 @@ Zsh completion:
 function parseGlobalFlags(argv: string[]): {
   jsonMode: boolean;
   pipeMode: boolean;
+  dryRun: boolean;
   configPath: string | undefined;
   rest: string[];
 } {
   let jsonMode = false;
   let pipeMode = false;
+  let dryRun = false;
   let configPath: string | undefined;
   let i = 0;
 
@@ -105,6 +108,9 @@ function parseGlobalFlags(argv: string[]): {
       i++;
     } else if (a === "--pipe") {
       pipeMode = true;
+      i++;
+    } else if (a === "--dry-run") {
+      dryRun = true;
       i++;
     } else if (a === "--help" || a === "-h") {
       console.log(HELP);
@@ -120,7 +126,7 @@ function parseGlobalFlags(argv: string[]): {
     }
   }
 
-  return { jsonMode, pipeMode, configPath, rest: argv.slice(i) };
+  return { jsonMode, pipeMode, dryRun, configPath, rest: argv.slice(i) };
 }
 
 // --- list / add / remove ---
@@ -165,11 +171,11 @@ async function runList(): Promise<void> {
       const authStatus = await getAuthStatus(name);
       const statusTag = authStatus
         ? `  [${authStatus}]`
-        : b.oauth === false
-          ? b.headers
+        : b.auth === "oauth"
+          ? "  [not authenticated]"
+          : b.auth === "apikey"
             ? "  [api key]"
-            : "  [no auth]"
-          : "  [not authenticated]";
+            : "  [no auth]";
       console.log(`  ${name.padEnd(16)} [mcp]${bindTag} ${b.url}${formatAcl(b)}${statusTag}`);
     }
   }
@@ -178,12 +184,12 @@ async function runList(): Promise<void> {
     const authStatus = await getAuthStatus(name, "api");
     const statusTag = authStatus
       ? `  [${authStatus}]`
-      : b.oauth === false
-        ? b.headers
+      : b.auth === "oauth"
+        ? "  [not authenticated]"
+        : b.auth === "apikey"
           ? "  [api key]"
-          : "  [no auth]"
-        : "  [not authenticated]";
-    console.log(`  ${name.padEnd(16)} [api]${bindTag} ${b.url}${formatAcl(b)}${statusTag}`);
+          : "  [no auth]";
+    console.log(`  ${name.padEnd(16)} [api]${bindTag} ${b.baseUrl ?? b.openapiUrl ?? ""}${formatAcl(b)}${statusTag}`);
   }
 }
 
@@ -241,14 +247,14 @@ async function runAdd(args: string[]): Promise<void> {
   if (!type) die("Cannot detect type. Provide <command-or-url> or --type mcp|cli|api");
 
   if (type === "api") {
-    const url = flags["url"] ?? positionals[0];
-    if (!url) die("API target requires a spec URL (e.g. clip add petstore https://.../openapi.json)");
-    const baseUrl = flags["base-url"] ?? flags["baseUrl"];
-    await addTarget(name, "api", { url, ...(baseUrl ? { baseUrl } : {}), allow, deny });
-    console.log(`Added API target "${name}" → ${url}`);
+    const baseUrl = flags["base-url"] ?? flags["baseUrl"] ?? positionals[0];
+    if (!baseUrl) die("API target requires a base URL (e.g. clip add petstore https://api.example.com)");
+    const openapiUrl = flags["openapi-url"] ?? flags["openapiUrl"];
+    await addTarget(name, "api", { auth: false, baseUrl, ...(openapiUrl ? { openapiUrl } : {}), allow, deny });
+    console.log(`Added API target "${name}" → ${baseUrl}`);
     // securitySchemes 힌트: best-effort fetch
     try {
-      const resp = await fetch(url);
+      const resp = await fetch(openapiUrl ?? baseUrl);
       if (resp.ok) {
         const text = await resp.text();
         const spec = JSON.parse(text) as Record<string, unknown>;
@@ -260,7 +266,7 @@ async function runAdd(args: string[]): Promise<void> {
         );
         if (schemes.length > 0) {
           const kinds = schemes.map((s) => (s as Record<string, string>)["type"] ?? (s as Record<string, string>)["scheme"]).join(", ");
-          process.stderr.write(`clip: This API declares auth (${kinds}). Add 'oauth: true' or 'headers:' in config.yml.\n`);
+          process.stderr.write(`clip: This API declares auth (${kinds}). Add 'auth: oauth' or 'auth: apikey' with 'headers:' in config.yml.\n`);
         }
       }
     } catch { /* silent */ }
@@ -282,7 +288,7 @@ async function runAdd(args: string[]): Promise<void> {
       // HTTP MCP
       const url = flags["url"] ?? positionals[0];
       if (!url) die("MCP target requires a URL (e.g. clip add myserver https://...mcp)");
-      await addTarget(name, "mcp", { transport: "http", url, allow, deny });
+      await addTarget(name, "mcp", { transport: "http", url, auth: false, allow, deny });
       console.log(`Added MCP target "${name}" → ${url}`);
     }
   } else {
@@ -360,7 +366,7 @@ async function printTargetHelp(name: string, type: "cli" | "mcp" | "api", target
     const mcp = target as McpTarget;
     detail = mcp.transport === "stdio" ? `STDIO MCP: ${mcp.command}` : `MCP server: ${mcp.url}`;
   } else if (type === "api") {
-    detail = `API: ${(target as ApiTarget).url}`;
+    detail = `API: ${(target as ApiTarget).baseUrl ?? (target as ApiTarget).openapiUrl ?? ""}`;
   } else {
     detail = `CLI command: ${(target as CliTarget).command}`;
   }
@@ -417,8 +423,7 @@ async function printTargetHelp(name: string, type: "cli" | "mcp" | "api", target
 
 async function main(): Promise<void> {
   const argv = Bun.argv.slice(2);
-  const { jsonMode, pipeMode, rest } = parseGlobalFlags(argv);
-  const passthrough = !!process.stdout.isTTY && !jsonMode && !pipeMode;
+  const { jsonMode, pipeMode, dryRun, rest } = parseGlobalFlags(argv);
 
   if (rest.length === 0) {
     console.log(HELP);
@@ -455,8 +460,8 @@ async function main(): Promise<void> {
     const cfg = await loadConfig();
     const { type, target } = getTarget(cfg, name);
     if (type === "api") {
-      const apiUrl = (target as ApiTarget).url;
-      if (!apiUrl) die(`"${name}" has no URL configured. OAuth requires a URL.`);
+      const apiUrl = (target as ApiTarget).baseUrl;
+      if (!apiUrl) die(`"${name}" has no baseUrl configured. OAuth requires a baseUrl.`);
       await forceLogin(name, apiUrl, "api");
       return;
     }
@@ -491,7 +496,13 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const targetArgs = rest.slice(2);
+  const rawTargetArgs = rest.slice(2);
+  const LATE_FLAGS = new Set(["--dry-run", "--json", "--pipe"]);
+  const effectiveDryRun = dryRun || rawTargetArgs.includes("--dry-run");
+  const effectiveJsonMode = jsonMode || rawTargetArgs.includes("--json");
+  const effectivePipeMode = pipeMode || rawTargetArgs.includes("--pipe");
+  const effectivePassthrough = !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode;
+  const targetArgs = rawTargetArgs.filter((a) => !LATE_FLAGS.has(a));
 
   // ACL 체크 제외: 내장 명령(tools) + --help in args
   const hasHelpFlag = targetArgs.includes("--help") || targetArgs.includes("-h");
@@ -500,17 +511,17 @@ async function main(): Promise<void> {
   }
 
   if (type === "api") {
-    const result = await executeApi(target as ApiTarget, config.headers, subcommand, targetArgs, targetName);
-    formatOutput(result, jsonMode ? "json" : "plain", "api");
+    const result = await executeApi(target as ApiTarget, config.headers, subcommand, targetArgs, targetName, false, effectiveDryRun);
+    formatOutput(result, effectiveJsonMode ? "json" : "plain", "api");
   } else if (type === "mcp") {
     const mcpTarget = target as McpTarget;
     const result = mcpTarget.transport === "stdio"
-      ? await executeMcpStdio(mcpTarget as McpStdioTarget, subcommand, targetArgs, targetName)
-      : await executeMcp(mcpTarget as McpHttpTarget, config.headers, subcommand, targetArgs, targetName);
-    formatOutput(result, jsonMode ? "json" : "plain", "mcp");
+      ? await executeMcpStdio(mcpTarget as McpStdioTarget, subcommand, targetArgs, targetName, effectiveDryRun)
+      : await executeMcp(mcpTarget as McpHttpTarget, config.headers, subcommand, targetArgs, targetName, effectiveDryRun);
+    formatOutput(result, effectiveJsonMode ? "json" : "plain", "mcp");
   } else {
-    const result = await executeCli(target as CliTarget, subcommand, targetArgs, passthrough);
-    if (!passthrough) formatOutput(result, jsonMode ? "json" : "plain", "cli");
+    const result = await executeCli(target as CliTarget, subcommand, targetArgs, effectivePassthrough && !effectiveDryRun, effectiveDryRun);
+    if (!effectivePassthrough || effectiveDryRun) formatOutput(result, effectiveJsonMode ? "json" : "plain", "cli");
     else process.exit(result.exitCode);
   }
 }

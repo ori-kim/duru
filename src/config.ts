@@ -25,7 +25,7 @@ const mcpHttpTargetSchema = z.object({
   transport: z.literal("http").optional().default("http"),
   url: z.string().url(),
   headers: z.record(z.string()).optional(),
-  oauth: z.boolean().optional(),
+  auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
   ...aclFields,
 });
 
@@ -51,10 +51,10 @@ const cliTargetSchema = z.object({
 });
 
 const apiTargetSchema = z.object({
-  url: z.string().url().optional(),
+  openapiUrl: z.string().url().optional(),
   baseUrl: z.string().url().optional(),
   headers: z.record(z.string()).optional(),
-  oauth: z.boolean().optional(),
+  auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
   ...aclFields,
 });
 
