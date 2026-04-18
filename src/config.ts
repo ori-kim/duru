@@ -6,36 +6,48 @@ import { die } from "./errors.ts";
 
 // --- Schemas ---
 
-const mcpBackendSchema = z.object({
-  type: z.literal("mcp"),
-  url: z.string().url(),
-  headers: z.record(z.string()).optional(),
+const aclNodeSchema = z.object({
   allow: z.array(z.string()).optional(),
   deny: z.array(z.string()).optional(),
 });
 
-const cliBackendSchema = z.object({
-  type: z.literal("cli"),
+const aclTreeSchema = z.record(aclNodeSchema);
+
+const mcpTargetSchema = z.object({
+  url: z.string().url(),
+  headers: z.record(z.string()).optional(),
+  oauth: z.boolean().optional(), // undefined=자동감지, true=강제, false=비활성
+  allow: z.array(z.string()).optional(),
+  deny: z.array(z.string()).optional(),
+  acl: aclTreeSchema.optional(),
+});
+
+const cliTargetSchema = z.object({
   command: z.string().min(1),
   args: z.array(z.string()).optional(),
   env: z.record(z.string()).optional(),
   allow: z.array(z.string()).optional(),
   deny: z.array(z.string()).optional(),
+  acl: aclTreeSchema.optional(),
 });
-
-const backendSchema = z.discriminatedUnion("type", [mcpBackendSchema, cliBackendSchema]);
 
 const configSchema = z.object({
   headers: z.record(z.string()).optional(),
-  backends: z.record(backendSchema).default({}),
+  cli: z.record(cliTargetSchema).default({}),
+  mcp: z.record(mcpTargetSchema).default({}),
 });
 
 // --- Types ---
 
-export type McpBackend = z.infer<typeof mcpBackendSchema>;
-export type CliBackend = z.infer<typeof cliBackendSchema>;
-export type Backend = z.infer<typeof backendSchema>;
+export type AclNode = z.infer<typeof aclNodeSchema>;
+export type AclTree = z.infer<typeof aclTreeSchema>;
+export type McpTarget = z.infer<typeof mcpTargetSchema>;
+export type CliTarget = z.infer<typeof cliTargetSchema>;
 export type Config = z.infer<typeof configSchema>;
+
+export type ResolvedTarget =
+  | { type: "cli"; target: CliTarget }
+  | { type: "mcp"; target: McpTarget };
 
 // --- Paths ---
 
@@ -62,7 +74,7 @@ export async function getConfigPath(): Promise<string> {
 
 export async function loadConfig(): Promise<Config> {
   const resolved = await resolveConfigPath();
-  if (!resolved) return configSchema.parse({ backends: {} });
+  if (!resolved) return configSchema.parse({ cli: {}, mcp: {} });
 
   const raw = await Bun.file(resolved.path).text();
   let parsed: unknown;
@@ -72,7 +84,7 @@ export async function loadConfig(): Promise<Config> {
     die(`Failed to parse config at ${resolved.path}: ${e}`);
   }
 
-  const result = configSchema.safeParse(parsed ?? { backends: {} });
+  const result = configSchema.safeParse(parsed ?? { cli: {}, mcp: {} });
   if (!result.success) {
     die(`Invalid config at ${resolved.path}:\n${result.error.message}`);
   }
@@ -92,29 +104,34 @@ async function saveConfig(config: Config): Promise<void> {
 
 // --- Management helpers ---
 
-export async function addBackend(name: string, backend: Backend): Promise<void> {
+export async function addTarget(name: string, type: "cli", target: CliTarget): Promise<void>;
+export async function addTarget(name: string, type: "mcp", target: McpTarget): Promise<void>;
+export async function addTarget(name: string, type: "cli" | "mcp", target: CliTarget | McpTarget): Promise<void> {
   const config = await loadConfig();
-  config.backends[name] = backend;
+  if (type === "cli") {
+    config.cli[name] = target as CliTarget;
+  } else {
+    config.mcp[name] = target as McpTarget;
+  }
   await saveConfig(config);
 }
 
-export async function removeBackend(name: string): Promise<void> {
+export async function removeTarget(name: string): Promise<void> {
   const config = await loadConfig();
-  if (!config.backends[name]) {
-    die(`Backend "${name}" not found.`);
+  if (config.cli[name]) {
+    delete config.cli[name];
+  } else if (config.mcp[name]) {
+    delete config.mcp[name];
+  } else {
+    die(`Target "${name}" not found.`);
   }
-  delete config.backends[name];
   await saveConfig(config);
 }
 
-export function getBackend(config: Config, name: string): Backend {
-  const backend = config.backends[name];
-  if (!backend) {
-    die(
-      `Backend "${name}" not found.\nRun: clip config list  — to see registered backends.`,
-    );
-  }
-  return backend;
+export function getTarget(config: Config, name: string): ResolvedTarget {
+  if (config.cli[name]) return { type: "cli", target: config.cli[name]! };
+  if (config.mcp[name]) return { type: "mcp", target: config.mcp[name]! };
+  die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }
 
 export function mergeHeaders(

@@ -1,13 +1,13 @@
-export type BackendResult = {
+export type TargetResult = {
   exitCode: number;
   stdout: string;
   stderr: string;
 };
 
 export type OutputMode = "plain" | "json";
-export type BackendType = "mcp" | "cli";
+export type TargetType = "mcp" | "cli";
 
-export function formatOutput(result: BackendResult, mode: OutputMode, _backendType: BackendType): void {
+export function formatOutput(result: TargetResult, mode: OutputMode, _targetType: TargetType): void {
   if (result.stderr) {
     process.stderr.write(result.stderr);
   }

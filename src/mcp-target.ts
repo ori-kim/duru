@@ -1,6 +1,6 @@
-import type { McpBackend } from "./config.ts";
+import type { McpTarget } from "./config.ts";
 import { die } from "./errors.ts";
-import type { BackendResult } from "./output.ts";
+import type { TargetResult } from "./output.ts";
 
 // --- JSON-RPC 타입 ---
 
@@ -197,17 +197,17 @@ function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unknown>):
   return result;
 }
 
-// --- MCP 백엔드 실행 ---
+// --- MCP target 실행 ---
 
 export async function executeMcp(
-  backend: McpBackend,
+  target: McpTarget,
   globalHeaders: Record<string, string> | undefined,
   toolName: string,
   rawArgs: string[],
-): Promise<BackendResult> {
+): Promise<TargetResult> {
   const session: McpSession = {
-    url: backend.url,
-    headers: { ...(globalHeaders ?? {}), ...(backend.headers ?? {}) },
+    url: target.url,
+    headers: { ...(globalHeaders ?? {}), ...(target.headers ?? {}) },
     sessionId: null,
     nextId: 1,
   };
@@ -243,7 +243,7 @@ export async function executeMcp(
     return {
       exitCode: 1,
       stdout: "",
-      stderr: `Tool "${toolName}" not found. Run: clip <backend> tools\n`,
+      stderr: `Tool "${toolName}" not found. Run: clip <target> tools\n`,
     };
   }
 
@@ -268,12 +268,12 @@ export async function executeMcp(
   return { exitCode, stdout: callResult?.isError ? "" : stdout, stderr };
 }
 
-function formatToolHelp(tool: McpTool): BackendResult {
+function formatToolHelp(tool: McpTool): TargetResult {
   const schema = tool.inputSchema;
   const props = (schema["properties"] as Record<string, { type?: unknown; default?: unknown }> | undefined) ?? {};
   const required = new Set((schema["required"] as string[] | undefined) ?? []);
 
-  const lines = [`Usage: clip <backend> ${tool.name} [--param value ...]`, "", tool.description];
+  const lines = [`Usage: clip <target> ${tool.name} [--param value ...]`, "", tool.description];
 
   if (Object.keys(props).length > 0) {
     lines.push("", "Parameters:");
