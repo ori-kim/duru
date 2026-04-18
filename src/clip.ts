@@ -3,9 +3,10 @@ import { checkAcl } from "./acl.ts";
 import { executeApi } from "./api-target.ts";
 import { BIND_DIR, bindTarget, listBound, unbindTarget } from "./bind.ts";
 import { executeCli } from "./cli-target.ts";
-import type { ApiTarget, CliTarget, McpHttpTarget, McpSseTarget, McpStdioTarget, McpTarget } from "./config.ts";
+import type { ApiTarget, CliTarget, GrpcTarget, McpHttpTarget, McpSseTarget, McpStdioTarget, McpTarget } from "./config.ts";
 import { addTarget, getTarget, loadConfig, removeTarget } from "./config.ts";
 import { die } from "./errors.ts";
+import { executeGrpc } from "./grpc-target.ts";
 import { executeMcpStdio } from "./mcp-stdio-target.ts";
 import { executeMcpSse } from "./mcp-sse-target.ts";
 import { executeMcp } from "./mcp-target.ts";
@@ -45,7 +46,7 @@ Global flags:
   --version, -v Show version
 
 Config:
-  ~/.clip/target/{mcp,cli,api}/<name>/config.yml
+  ~/.clip/target/{mcp,cli,api,grpc}/<name>/config.yml
 
 Native bind PATH setup (add to shell profile):
   export PATH="${BIND_DIR}:$PATH"
@@ -53,18 +54,25 @@ Native bind PATH setup (add to shell profile):
 OAuth tokens:
   ~/.clip/target/mcp/<name>/auth.json
   ~/.clip/target/api/<name>/auth.json
+  ~/.clip/target/grpc/<name>/auth.json
 
 Examples:
   clip add gh gh --deny delete,apply
   clip add notion https://mcp.notion.com/mcp
   clip add linear https://mcp.linear.app/mcp
   clip add petstore https://petstore3.swagger.io/api/v3/openapi.json --api
+  clip add grpcserver grpc.example.com:443 --grpc
+  clip add localgrpc localhost:50051 --grpc --plaintext
   clip login notion      # OAuth 인증
   clip logout notion     # 토큰 삭제
   clip refresh petstore  # OpenAPI spec 재fetch
+  clip refresh grpcserver  # gRPC schema 캐시 갱신
   clip list
   clip notion tools
   clip petstore tools
+  clip grpcserver tools
+  clip grpcserver describe PetService.GetPet
+  clip grpcserver PetService.GetPet --id 123
   clip --json gh pr list
   clip gh get pods -n default
   clip bind gh            # 이후 "gh pr list" 가 clip을 통해 실행됨
@@ -133,7 +141,7 @@ function parseGlobalFlags(argv: string[]): {
 
 // --- list / add / remove ---
 
-function formatAcl(target: CliTarget | McpTarget | ApiTarget): string {
+function formatAcl(target: CliTarget | McpTarget | ApiTarget | GrpcTarget): string {
   const parts: string[] = [];
   if (target.allow && target.allow.length > 0) parts.push(`allow: ${target.allow.join(",")}`);
   if (target.deny && target.deny.length > 0) parts.push(`deny: ${target.deny.join(",")}`);
@@ -149,12 +157,14 @@ async function runList(): Promise<void> {
   const cliEntries = Object.entries(config.cli);
   const mcpEntries = Object.entries(config.mcp);
   const apiEntries = Object.entries(config.api);
+  const grpcEntries = Object.entries(config.grpc);
 
-  if (cliEntries.length === 0 && mcpEntries.length === 0 && apiEntries.length === 0) {
+  if (cliEntries.length === 0 && mcpEntries.length === 0 && apiEntries.length === 0 && grpcEntries.length === 0) {
     console.log("No targets configured.");
     console.log(`\nAdd one:\n  clip add <name> <command>          # CLI tool`);
     console.log(`  clip add <name> <https://...>      # MCP server`);
     console.log(`  clip add <name> <https://.../openapi.json> --api  # OpenAPI REST API`);
+    console.log(`  clip add <name> <host:port> --grpc  # gRPC server`);
     return;
   }
 
@@ -194,6 +204,18 @@ async function runList(): Promise<void> {
           : "  [no auth]";
     console.log(`  ${name.padEnd(16)} [api]${bindTag} ${b.baseUrl ?? b.openapiUrl ?? ""}${formatAcl(b)}${statusTag}`);
   }
+  for (const [name, b] of [...grpcEntries].sort(([a], [b]) => a.localeCompare(b))) {
+    const bindTag = bound.has(name) ? " [bind]" : "";
+    const authStatus = b.oauth ? await getAuthStatus(name, "grpc") : null;
+    const statusTag = authStatus
+      ? `  [${authStatus}]`
+      : b.oauth
+        ? "  [not authenticated]"
+        : b.metadata?.["authorization"]
+          ? "  [api key]"
+          : "  [no auth]";
+    console.log(`  ${name.padEnd(16)} [grpc]${bindTag} ${b.address}${formatAcl(b)}${statusTag}`);
+  }
 }
 
 async function runAdd(args: string[]): Promise<void> {
@@ -206,7 +228,7 @@ async function runAdd(args: string[]): Promise<void> {
   const positionals: string[] = [];
   const flags: Record<string, string> = {};
   // boolean 플래그: 다음 인자를 value로 소비하지 않음
-  const BOOL_FLAGS = new Set(["stdio", "sse", "api"]);
+  const BOOL_FLAGS = new Set(["stdio", "sse", "api", "grpc", "plaintext"]);
   for (let i = 1; i < args.length; i++) {
     const a = args[i] ?? "";
     if (a.startsWith("--")) {
@@ -230,8 +252,9 @@ async function runAdd(args: string[]): Promise<void> {
   const allow = flags["allow"] ? flags["allow"].split(",").map((s) => s.trim()) : undefined;
   const deny = flags["deny"] ? flags["deny"].split(",").map((s) => s.trim()) : undefined;
 
-  // 타입 결정: --type 명시 > --api/--stdio 명시 > positional 자동 감지
-  let type = flags["type"] as "mcp" | "cli" | "api" | undefined;
+  // 타입 결정: --type 명시 > --grpc/--api/--stdio 명시 > positional 자동 감지
+  let type = flags["type"] as "mcp" | "cli" | "api" | "grpc" | undefined;
+  if (!type && flags["grpc"]) type = "grpc";
   if (!type && flags["api"]) type = "api";
   if (!type && flags["url"]) type = "mcp";
   if (!type && flags["stdio"]) type = "mcp";
@@ -248,7 +271,23 @@ async function runAdd(args: string[]): Promise<void> {
       type = "cli";
     }
   }
-  if (!type) die("Cannot detect type. Provide <command-or-url> or --type mcp|cli|api");
+  if (!type) die("Cannot detect type. Provide <command-or-url> or --type mcp|cli|api|grpc");
+
+  if (type === "grpc") {
+    const address = flags["address"] ?? positionals[0];
+    if (!address) die("gRPC target requires an address (e.g. clip add petstore grpc.example.com:443 --grpc)");
+    const proto = flags["proto"] ?? undefined;
+    const plaintext = flags["plaintext"] ? true : undefined;
+    await addTarget(name, "grpc", {
+      address,
+      ...(proto ? { proto } : {}),
+      ...(plaintext ? { plaintext } : {}),
+      allow,
+      deny,
+    });
+    console.log(`Added gRPC target "${name}" → ${address}`);
+    return;
+  }
 
   if (type === "api") {
     const baseUrl = flags["base-url"] ?? flags["baseUrl"] ?? positionals[0];
@@ -320,7 +359,7 @@ async function runBind(args: string[]): Promise<void> {
   const flag = args[0];
   if (flag === "--all") {
     const config = await loadConfig();
-    const names = [...Object.keys(config.cli), ...Object.keys(config.mcp), ...Object.keys(config.api)];
+    const names = [...Object.keys(config.cli), ...Object.keys(config.mcp), ...Object.keys(config.api), ...Object.keys(config.grpc)];
     if (names.length === 0) { console.log("No targets configured."); return; }
     for (const name of names) await bindTarget(name);
     return;
@@ -369,7 +408,11 @@ async function runConfigCmd(args: string[]): Promise<void> {
 
 // --- target help ---
 
-async function printTargetHelp(name: string, type: "cli" | "mcp" | "api", target: CliTarget | McpTarget | ApiTarget): Promise<void> {
+async function printTargetHelp(
+  name: string,
+  type: "cli" | "mcp" | "api" | "grpc",
+  target: CliTarget | McpTarget | ApiTarget | GrpcTarget,
+): Promise<void> {
   let detail: string;
   if (type === "mcp") {
     const mcp = target as McpTarget;
@@ -380,6 +423,8 @@ async function printTargetHelp(name: string, type: "cli" | "mcp" | "api", target
         : `MCP server: ${mcp.url}`;
   } else if (type === "api") {
     detail = `API: ${(target as ApiTarget).baseUrl ?? (target as ApiTarget).openapiUrl ?? ""}`;
+  } else if (type === "grpc") {
+    detail = `gRPC: ${(target as GrpcTarget).address}`;
   } else {
     detail = `CLI command: ${(target as CliTarget).command}`;
   }
@@ -405,14 +450,17 @@ async function printTargetHelp(name: string, type: "cli" | "mcp" | "api", target
     console.log(`\nNo ACL restrictions.`);
   }
 
-  if (type === "mcp" || type === "api") {
+  if (type === "mcp" || type === "api" || type === "grpc") {
     console.log(`\nRun: clip ${name} tools  — to list available tools`);
   }
   if (type === "api") {
     console.log(`Run: clip refresh ${name}  — to re-fetch spec`);
   }
+  if (type === "grpc") {
+    console.log(`Run: clip ${name} describe  — to list services`);
+    console.log(`Run: clip refresh ${name}  — to refresh schema cache`);
+  }
 
-  // 원래 명령의 --help 출력도 표시
   if (type === "cli") {
     const cli = target as CliTarget;
     const proc = Bun.spawn([cli.command, ...(cli.args ?? []), "--help"], {
@@ -461,7 +509,12 @@ async function main(): Promise<void> {
     if (!name) die("Usage: clip refresh <target>");
     const cfg = await loadConfig();
     const { type, target } = getTarget(cfg, name);
-    if (type !== "api") die(`"${name}" is not an API target. refresh only applies to OpenAPI API targets.`);
+    if (type === "grpc") {
+      const result = await executeGrpc(target as GrpcTarget, cfg.headers, "refresh", [], name);
+      process.stdout.write(result.stdout);
+      return;
+    }
+    if (type !== "api") die(`"${name}" is not an API or gRPC target. refresh only applies to OpenAPI API and gRPC targets.`);
     const result = await executeApi(target as ApiTarget, cfg.headers, "refresh", [], name, true);
     process.stdout.write(result.stdout);
     return;
@@ -478,6 +531,7 @@ async function main(): Promise<void> {
       await forceLogin(name, apiUrl, "api");
       return;
     }
+    if (type === "grpc") die(`"${name}" is a gRPC target. gRPC v1 doesn't support automatic OAuth.\nStore static bearer token in ~/.clip/target/grpc/${name}/auth.json\nor use 'metadata: {authorization: "Bearer <token>"}' in config.yml.`);
     if (type !== "mcp") die(`"${name}" is not an MCP or API target. OAuth only applies to MCP/API targets.`);
     const mcpForLogin = target as McpTarget;
     if (mcpForLogin.transport === "stdio") die(`"${name}" is a STDIO MCP target. OAuth only applies to HTTP/SSE MCP targets.`);
@@ -492,6 +546,8 @@ async function main(): Promise<void> {
     const { type } = getTarget(cfg, name);
     if (type === "api") {
       await removeTokens(name, "api");
+    } else if (type === "grpc") {
+      await removeTokens(name, "grpc");
     } else {
       await removeTokens(name);
     }
@@ -517,13 +573,17 @@ async function main(): Promise<void> {
   const effectivePassthrough = !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode;
   const targetArgs = rawTargetArgs.filter((a) => !LATE_FLAGS.has(a));
 
-  // ACL 체크 제외: 내장 명령(tools) + --help in args
+  // ACL 체크 제외: 내장 명령(tools/describe) + --help in args
   const hasHelpFlag = targetArgs.includes("--help") || targetArgs.includes("-h");
-  if (subcommand !== "tools" && !hasHelpFlag) {
+  const isBuiltinSubcommand = subcommand === "tools" || subcommand === "describe";
+  if (!isBuiltinSubcommand && !hasHelpFlag) {
     checkAcl(target, subcommand, targetArgs[0], targetName);
   }
 
-  if (type === "api") {
+  if (type === "grpc") {
+    const result = await executeGrpc(target as GrpcTarget, config.headers, subcommand, targetArgs, targetName);
+    formatOutput(result, effectiveJsonMode ? "json" : "plain", "grpc");
+  } else if (type === "api") {
     const result = await executeApi(target as ApiTarget, config.headers, subcommand, targetArgs, targetName, false, effectiveDryRun);
     formatOutput(result, effectiveJsonMode ? "json" : "plain", "api");
   } else if (type === "mcp") {

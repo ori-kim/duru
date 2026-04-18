@@ -67,10 +67,25 @@ const apiTargetSchema = z.object({
   ...aclFields,
 });
 
+const grpcTargetSchema = z.object({
+  address: z.string().min(1),
+  plaintext: z.boolean().optional(),
+  proto: z.string().min(1).optional(),
+  importPaths: z.array(z.string()).optional(),
+  metadata: z.record(z.string()).optional(),
+  reflectMetadata: z.record(z.string()).optional(),
+  deadline: z.number().positive().optional(),
+  emitDefaults: z.boolean().optional(),
+  allowUnknownFields: z.boolean().optional(),
+  oauth: z.boolean().optional(),
+  ...aclFields,
+});
+
 const TARGET_SCHEMAS = {
   cli: cliTargetSchema,
   mcp: mcpTargetSchema,
   api: apiTargetSchema,
+  grpc: grpcTargetSchema,
 } as const;
 
 // --- Types ---
@@ -83,24 +98,27 @@ export type McpSseTarget = z.infer<typeof mcpSseTargetSchema>;
 export type McpTarget = McpHttpTarget | McpStdioTarget | McpSseTarget;
 export type CliTarget = z.infer<typeof cliTargetSchema>;
 export type ApiTarget = z.infer<typeof apiTargetSchema>;
+export type GrpcTarget = z.infer<typeof grpcTargetSchema>;
 export type Config = {
   headers?: Record<string, string>;
   cli: Record<string, CliTarget>;
   mcp: Record<string, McpTarget>;
   api: Record<string, ApiTarget>;
+  grpc: Record<string, GrpcTarget>;
 };
 
 export type ResolvedTarget =
   | { type: "cli"; target: CliTarget }
   | { type: "mcp"; target: McpTarget }
-  | { type: "api"; target: ApiTarget };
+  | { type: "api"; target: ApiTarget }
+  | { type: "grpc"; target: GrpcTarget };
 
 // --- Paths ---
 
 export const CONFIG_DIR = join(homedir(), ".clip");
 export const TARGET_DIR = join(CONFIG_DIR, "target");
 
-const TARGET_TYPES = ["cli", "mcp", "api"] as const;
+const TARGET_TYPES = ["cli", "mcp", "api", "grpc"] as const;
 type TargetType = typeof TARGET_TYPES[number];
 
 // --- Helpers ---
@@ -134,6 +152,7 @@ export async function loadConfig(): Promise<Config> {
   const cli: Record<string, CliTarget> = {};
   const mcp: Record<string, McpTarget> = {};
   const api: Record<string, ApiTarget> = {};
+  const grpc: Record<string, GrpcTarget> = {};
 
   for (const type of TARGET_TYPES) {
     const typeDir = join(TARGET_DIR, type);
@@ -171,14 +190,21 @@ export async function loadConfig(): Promise<Config> {
       } else if (type === "mcp") {
         const t = result.data as McpTarget;
         mcp[name] = t.transport === "stdio" ? t : { ...t, headers: subRecord(t.headers, env) };
-      } else {
+      } else if (type === "api") {
         const t = result.data as ApiTarget;
         api[name] = { ...t, headers: subRecord(t.headers, env) };
+      } else if (type === "grpc") {
+        const t = result.data as GrpcTarget;
+        grpc[name] = {
+          ...t,
+          metadata: subRecord(t.metadata, env),
+          reflectMetadata: subRecord(t.reflectMetadata, env),
+        };
       }
     }
   }
 
-  return { cli, mcp, api };
+  return { cli, mcp, api, grpc };
 }
 
 // --- Management helpers ---
@@ -186,13 +212,17 @@ export async function loadConfig(): Promise<Config> {
 export async function addTarget(name: string, type: "cli", target: CliTarget): Promise<void>;
 export async function addTarget(name: string, type: "mcp", target: McpTarget): Promise<void>;
 export async function addTarget(name: string, type: "api", target: ApiTarget): Promise<void>;
+export async function addTarget(name: string, type: "grpc", target: GrpcTarget): Promise<void>;
 export async function addTarget(
   name: string,
   type: TargetType,
-  target: CliTarget | McpTarget | ApiTarget,
+  target: CliTarget | McpTarget | ApiTarget | GrpcTarget,
 ): Promise<void> {
   const config = await loadConfig();
-  const allNames = new Set([...Object.keys(config.cli), ...Object.keys(config.mcp), ...Object.keys(config.api)]);
+  const allNames = new Set([
+    ...Object.keys(config.cli), ...Object.keys(config.mcp),
+    ...Object.keys(config.api), ...Object.keys(config.grpc),
+  ]);
   if (allNames.has(name) && !config[type]?.[name]) {
     die(`Target name "${name}" is already used by another type. Choose a different name.`);
   }
@@ -217,6 +247,7 @@ export function getTarget(config: Config, name: string): ResolvedTarget {
   if (config.cli[name]) return { type: "cli", target: config.cli[name]! };
   if (config.mcp[name]) return { type: "mcp", target: config.mcp[name]! };
   if (config.api[name]) return { type: "api", target: config.api[name]! };
+  if (config.grpc[name]) return { type: "grpc", target: config.grpc[name]! };
   die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }
 

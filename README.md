@@ -109,6 +109,11 @@ clip notion search --query "..."
 clip add petstore https://petstore3.swagger.io/api/v3/openapi.json
 clip petstore getPetById --petId 1
 
+# Register a gRPC server
+clip add my-api localhost:50051 --grpc ./api.proto
+clip my-api tools
+clip my-api UserService.GetUser --id 123
+
 # Manage targets
 clip list
 clip remove notion
@@ -139,9 +144,10 @@ acl:
 
 | Path | Purpose |
 |------|---------|
-| `~/.clip/target/{cli,mcp,api}/<name>/config.yml` | Target config and ACL rules |
+| `~/.clip/target/{cli,mcp,api,grpc}/<name>/config.yml` | Target config and ACL rules |
 | `~/.clip/target/{mcp,api}/<name>/auth.json` | OAuth tokens |
 | `~/.clip/target/api/<name>/spec.json` | Cached OpenAPI spec |
+| `~/.clip/target/grpc/<name>/schema.json` | Cached gRPC proto schema |
 | `~/.clip/.env` | Global env vars (substituted into `config.yml`) |
 
 ### Auth config
@@ -180,12 +186,15 @@ openapiUrl: https://api.example.com/openapi.json
 | `clip add <name> --sse <https://...sse>` | Register a legacy SSE MCP target |
 | `clip add <name> --stdio <cmd> [args]` | Register a STDIO MCP target |
 | `clip add <name> <https://.../openapi.json>` | Register an OpenAPI REST target |
+| `clip add <name> <host:port> --grpc [proto]` | Register a gRPC target |
 | `clip remove <name>` | Unregister a target |
 | `clip list` | List all targets with auth status |
 | `clip login <target>` | Authenticate via OAuth |
 | `clip logout <target>` | Remove stored token |
 | `clip refresh <target>` | Re-fetch OpenAPI spec |
 | `clip <target> tools` | List available tools / operations |
+| `clip <target> describe <Service.Method>` | Show gRPC method signature |
+| `clip <target> types` | List all gRPC message types |
 | `clip bind <target>` | Create a native command shim |
 | `clip unbind <target>` | Remove native command shim |
 | `clip binds` | List currently bound targets |

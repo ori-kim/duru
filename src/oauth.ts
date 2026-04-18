@@ -6,7 +6,7 @@ import { die } from "./errors.ts";
 
 const CLIP_DIR = join(homedir(), ".clip");
 
-type AuthKind = "mcp" | "api";
+type AuthKind = "mcp" | "api" | "grpc";
 
 function authDirOf(targetName: string, kind: AuthKind = "mcp"): string {
   return join(CLIP_DIR, "target", kind, targetName);
