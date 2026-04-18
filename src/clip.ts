@@ -3,9 +3,10 @@ import { checkAcl } from "./acl.ts";
 import { executeApi } from "./api-target.ts";
 import { BIND_DIR, bindTarget, listBound, unbindTarget } from "./bind.ts";
 import { executeCli } from "./cli-target.ts";
-import type { ApiTarget, CliTarget, GrpcTarget, McpHttpTarget, McpSseTarget, McpStdioTarget, McpTarget } from "./config.ts";
+import type { ApiTarget, CliTarget, GraphqlTarget, GrpcTarget, McpHttpTarget, McpSseTarget, McpStdioTarget, McpTarget } from "./config.ts";
 import { addTarget, getTarget, loadConfig, removeTarget } from "./config.ts";
 import { die } from "./errors.ts";
+import { executeGraphql } from "./graphql-target.ts";
 import { executeGrpc } from "./grpc-target.ts";
 import { executeMcpStdio } from "./mcp-stdio-target.ts";
 import { executeMcpSse } from "./mcp-sse-target.ts";
@@ -46,7 +47,7 @@ Global flags:
   --version, -v Show version
 
 Config:
-  ~/.clip/target/{mcp,cli,api,grpc}/<name>/config.yml
+  ~/.clip/target/{mcp,cli,api,grpc,graphql}/<name>/config.yml
 
 Native bind PATH setup (add to shell profile):
   export PATH="${BIND_DIR}:$PATH"
@@ -55,6 +56,7 @@ OAuth tokens:
   ~/.clip/target/mcp/<name>/auth.json
   ~/.clip/target/api/<name>/auth.json
   ~/.clip/target/grpc/<name>/auth.json
+  ~/.clip/target/graphql/<name>/auth.json
 
 Examples:
   clip add gh gh --deny delete,apply
@@ -63,16 +65,23 @@ Examples:
   clip add petstore https://petstore3.swagger.io/api/v3/openapi.json --api
   clip add grpcserver grpc.example.com:443 --grpc
   clip add localgrpc localhost:50051 --grpc --plaintext
+  clip add gh https://api.github.com/graphql --graphql
   clip login notion      # OAuth 인증
   clip logout notion     # 토큰 삭제
   clip refresh petstore  # OpenAPI spec 재fetch
   clip refresh grpcserver  # gRPC schema 캐시 갱신
+  clip refresh gh          # GraphQL schema 재fetch
   clip list
   clip notion tools
   clip petstore tools
   clip grpcserver tools
   clip grpcserver describe PetService.GetPet
   clip grpcserver PetService.GetPet --id 123
+  clip gh tools
+  clip gh types
+  clip gh describe User
+  clip gh viewer '{ login bio }'
+  clip gh repository --owner foo --name bar --select name,stargazerCount
   clip --json gh pr list
   clip gh get pods -n default
   clip bind gh            # 이후 "gh pr list" 가 clip을 통해 실행됨
@@ -141,7 +150,7 @@ function parseGlobalFlags(argv: string[]): {
 
 // --- list / add / remove ---
 
-function formatAcl(target: CliTarget | McpTarget | ApiTarget | GrpcTarget): string {
+function formatAcl(target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget): string {
   const parts: string[] = [];
   if (target.allow && target.allow.length > 0) parts.push(`allow: ${target.allow.join(",")}`);
   if (target.deny && target.deny.length > 0) parts.push(`deny: ${target.deny.join(",")}`);
@@ -158,13 +167,15 @@ async function runList(): Promise<void> {
   const mcpEntries = Object.entries(config.mcp);
   const apiEntries = Object.entries(config.api);
   const grpcEntries = Object.entries(config.grpc);
+  const graphqlEntries = Object.entries(config.graphql);
 
-  if (cliEntries.length === 0 && mcpEntries.length === 0 && apiEntries.length === 0 && grpcEntries.length === 0) {
+  if (cliEntries.length === 0 && mcpEntries.length === 0 && apiEntries.length === 0 && grpcEntries.length === 0 && graphqlEntries.length === 0) {
     console.log("No targets configured.");
     console.log(`\nAdd one:\n  clip add <name> <command>          # CLI tool`);
     console.log(`  clip add <name> <https://...>      # MCP server`);
     console.log(`  clip add <name> <https://.../openapi.json> --api  # OpenAPI REST API`);
     console.log(`  clip add <name> <host:port> --grpc  # gRPC server`);
+    console.log(`  clip add <name> <https://.../graphql> --graphql  # GraphQL API`);
     return;
   }
 
@@ -216,6 +227,18 @@ async function runList(): Promise<void> {
           : "  [no auth]";
     console.log(`  ${name.padEnd(16)} [grpc]${bindTag} ${b.address}${formatAcl(b)}${statusTag}`);
   }
+  for (const [name, b] of [...graphqlEntries].sort(([a], [b]) => a.localeCompare(b))) {
+    const bindTag = bound.has(name) ? " [bind]" : "";
+    const authStatus = b.oauth ? await getAuthStatus(name, "graphql") : null;
+    const statusTag = authStatus
+      ? `  [${authStatus}]`
+      : b.oauth
+        ? "  [not authenticated]"
+        : b.headers?.["authorization"]
+          ? "  [api key]"
+          : "  [no auth]";
+    console.log(`  ${name.padEnd(16)} [gql]${bindTag} ${b.endpoint}${formatAcl(b)}${statusTag}`);
+  }
 }
 
 async function runAdd(args: string[]): Promise<void> {
@@ -228,7 +251,7 @@ async function runAdd(args: string[]): Promise<void> {
   const positionals: string[] = [];
   const flags: Record<string, string> = {};
   // boolean 플래그: 다음 인자를 value로 소비하지 않음
-  const BOOL_FLAGS = new Set(["stdio", "sse", "api", "grpc", "plaintext"]);
+  const BOOL_FLAGS = new Set(["stdio", "sse", "api", "grpc", "graphql", "plaintext"]);
   for (let i = 1; i < args.length; i++) {
     const a = args[i] ?? "";
     if (a.startsWith("--")) {
@@ -253,7 +276,8 @@ async function runAdd(args: string[]): Promise<void> {
   const deny = flags["deny"] ? flags["deny"].split(",").map((s) => s.trim()) : undefined;
 
   // 타입 결정: --type 명시 > --grpc/--api/--stdio 명시 > positional 자동 감지
-  let type = flags["type"] as "mcp" | "cli" | "api" | "grpc" | undefined;
+  let type = flags["type"] as "mcp" | "cli" | "api" | "grpc" | "graphql" | undefined;
+  if (!type && flags["graphql"]) type = "graphql";
   if (!type && flags["grpc"]) type = "grpc";
   if (!type && flags["api"]) type = "api";
   if (!type && flags["url"]) type = "mcp";
@@ -271,7 +295,23 @@ async function runAdd(args: string[]): Promise<void> {
       type = "cli";
     }
   }
-  if (!type) die("Cannot detect type. Provide <command-or-url> or --type mcp|cli|api|grpc");
+  // URL이 /graphql 로 끝나면 graphql 추정
+  if (!type && positionals[0]) {
+    const url = positionals[0];
+    const lower = url.toLowerCase().split("?")[0]!.split("#")[0]!;
+    if ((url.startsWith("http://") || url.startsWith("https://")) && lower.endsWith("/graphql")) {
+      type = "graphql";
+    }
+  }
+  if (!type) die("Cannot detect type. Provide <command-or-url> or --type mcp|cli|api|grpc|graphql");
+
+  if (type === "graphql") {
+    const endpoint = flags["endpoint"] ?? positionals[0];
+    if (!endpoint) die("GraphQL target requires an endpoint URL (e.g. clip add gh https://api.github.com/graphql --graphql)");
+    await addTarget(name, "graphql", { endpoint, allow, deny });
+    console.log(`Added GraphQL target "${name}" → ${endpoint}`);
+    return;
+  }
 
   if (type === "grpc") {
     const address = flags["address"] ?? positionals[0];
@@ -359,7 +399,7 @@ async function runBind(args: string[]): Promise<void> {
   const flag = args[0];
   if (flag === "--all") {
     const config = await loadConfig();
-    const names = [...Object.keys(config.cli), ...Object.keys(config.mcp), ...Object.keys(config.api), ...Object.keys(config.grpc)];
+    const names = [...Object.keys(config.cli), ...Object.keys(config.mcp), ...Object.keys(config.api), ...Object.keys(config.grpc), ...Object.keys(config.graphql)];
     if (names.length === 0) { console.log("No targets configured."); return; }
     for (const name of names) await bindTarget(name);
     return;
@@ -410,8 +450,8 @@ async function runConfigCmd(args: string[]): Promise<void> {
 
 async function printTargetHelp(
   name: string,
-  type: "cli" | "mcp" | "api" | "grpc",
-  target: CliTarget | McpTarget | ApiTarget | GrpcTarget,
+  type: "cli" | "mcp" | "api" | "grpc" | "graphql",
+  target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget,
 ): Promise<void> {
   let detail: string;
   if (type === "mcp") {
@@ -425,6 +465,8 @@ async function printTargetHelp(
     detail = `API: ${(target as ApiTarget).baseUrl ?? (target as ApiTarget).openapiUrl ?? ""}`;
   } else if (type === "grpc") {
     detail = `gRPC: ${(target as GrpcTarget).address}`;
+  } else if (type === "graphql") {
+    detail = `GraphQL: ${(target as GraphqlTarget).endpoint}`;
   } else {
     detail = `CLI command: ${(target as CliTarget).command}`;
   }
@@ -450,7 +492,7 @@ async function printTargetHelp(
     console.log(`\nNo ACL restrictions.`);
   }
 
-  if (type === "mcp" || type === "api" || type === "grpc") {
+  if (type === "mcp" || type === "api" || type === "grpc" || type === "graphql") {
     console.log(`\nRun: clip ${name} tools  — to list available tools`);
   }
   if (type === "api") {
@@ -459,6 +501,11 @@ async function printTargetHelp(
   if (type === "grpc") {
     console.log(`Run: clip ${name} describe  — to list services`);
     console.log(`Run: clip refresh ${name}  — to refresh schema cache`);
+  }
+  if (type === "graphql") {
+    console.log(`Run: clip ${name} types    — to list schema types`);
+    console.log(`Run: clip ${name} describe <TypeName>  — SDL-style type description`);
+    console.log(`Run: clip refresh ${name}  — to re-fetch schema`);
   }
 
   if (type === "cli") {
@@ -514,7 +561,12 @@ async function main(): Promise<void> {
       process.stdout.write(result.stdout);
       return;
     }
-    if (type !== "api") die(`"${name}" is not an API or gRPC target. refresh only applies to OpenAPI API and gRPC targets.`);
+    if (type === "graphql") {
+      const result = await executeGraphql(target as GraphqlTarget, cfg.headers, "refresh", [], name);
+      process.stdout.write(result.stdout);
+      return;
+    }
+    if (type !== "api") die(`"${name}" is not an API, gRPC, or GraphQL target. refresh only applies to those types.`);
     const result = await executeApi(target as ApiTarget, cfg.headers, "refresh", [], name, true);
     process.stdout.write(result.stdout);
     return;
@@ -532,7 +584,11 @@ async function main(): Promise<void> {
       return;
     }
     if (type === "grpc") die(`"${name}" is a gRPC target. gRPC v1 doesn't support automatic OAuth.\nStore static bearer token in ~/.clip/target/grpc/${name}/auth.json\nor use 'metadata: {authorization: "Bearer <token>"}' in config.yml.`);
-    if (type !== "mcp") die(`"${name}" is not an MCP or API target. OAuth only applies to MCP/API targets.`);
+    if (type === "graphql") {
+      await forceLogin(name, (target as GraphqlTarget).endpoint, "graphql");
+      return;
+    }
+    if (type !== "mcp") die(`"${name}" is not an MCP, API, or GraphQL target. OAuth only applies to those types.`);
     const mcpForLogin = target as McpTarget;
     if (mcpForLogin.transport === "stdio") die(`"${name}" is a STDIO MCP target. OAuth only applies to HTTP/SSE MCP targets.`);
     await forceLogin(name, (mcpForLogin as McpHttpTarget | McpSseTarget).url);
@@ -548,6 +604,8 @@ async function main(): Promise<void> {
       await removeTokens(name, "api");
     } else if (type === "grpc") {
       await removeTokens(name, "grpc");
+    } else if (type === "graphql") {
+      await removeTokens(name, "graphql");
     } else {
       await removeTokens(name);
     }
@@ -575,12 +633,15 @@ async function main(): Promise<void> {
 
   // ACL 체크 제외: 내장 명령(tools/describe) + --help in args
   const hasHelpFlag = targetArgs.includes("--help") || targetArgs.includes("-h");
-  const isBuiltinSubcommand = subcommand === "tools" || subcommand === "describe";
+  const isBuiltinSubcommand = subcommand === "tools" || subcommand === "describe" || subcommand === "types" || subcommand === "query";
   if (!isBuiltinSubcommand && !hasHelpFlag) {
     checkAcl(target, subcommand, targetArgs[0], targetName);
   }
 
-  if (type === "grpc") {
+  if (type === "graphql") {
+    const result = await executeGraphql(target as GraphqlTarget, config.headers, subcommand, targetArgs, targetName);
+    formatOutput(result, jsonMode ? "json" : "plain", "graphql");
+  } else if (type === "grpc") {
     const result = await executeGrpc(target as GrpcTarget, config.headers, subcommand, targetArgs, targetName);
     formatOutput(result, effectiveJsonMode ? "json" : "plain", "grpc");
   } else if (type === "api") {

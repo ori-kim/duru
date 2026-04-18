@@ -217,7 +217,7 @@ export async function runSkillsCmd(args: string[]): Promise<void> {
   }
 
   const config = await loadConfig();
-  const targetNames = [...Object.keys(config.cli), ...Object.keys(config.mcp), ...Object.keys(config.api), ...Object.keys(config.grpc)];
+  const targetNames = [...Object.keys(config.cli), ...Object.keys(config.mcp), ...Object.keys(config.api), ...Object.keys(config.grpc), ...Object.keys(config.graphql)];
   if (targetNames.length === 0) {
     console.log("warning: no targets registered yet. Run `clip add <name> <command>` first.\n");
   }
