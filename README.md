@@ -1,6 +1,6 @@
 # clip
 
-[한국어](README.KO.md)
+[한국어](README.ko.md)
 
 A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules, handle OAuth auth, and integrate with AI agents from one command.
 
