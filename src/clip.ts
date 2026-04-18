@@ -2,9 +2,10 @@
 import { checkAcl } from "./acl.ts";
 import { BIND_DIR, bindTarget, listBound, unbindTarget } from "./bind.ts";
 import { executeCli } from "./cli-target.ts";
-import type { CliTarget, McpTarget } from "./config.ts";
+import type { CliTarget, McpHttpTarget, McpStdioTarget, McpTarget } from "./config.ts";
 import { CONFIG_DIR, addTarget, getTarget, loadConfig, removeTarget } from "./config.ts";
 import { die } from "./errors.ts";
+import { executeMcpStdio } from "./mcp-stdio-target.ts";
 import { executeMcp } from "./mcp-target.ts";
 import { forceLogin, getAuthStatus, removeTokens } from "./oauth.ts";
 import { formatOutput } from "./output.ts";
@@ -145,10 +146,14 @@ async function runList(): Promise<void> {
     console.log(`  ${name.padEnd(16)} [cli${bindTag}] ${b.command}${formatAcl(b)}`);
   }
   for (const [name, b] of [...mcpEntries].sort(([a], [b]) => a.localeCompare(b))) {
-    const authStatus = await getAuthStatus(name);
     const bindTag = bound.has(name) ? ", bound" : "";
-    const statusTag = authStatus ? `  [${authStatus}]` : "  [not authenticated]";
-    console.log(`  ${name.padEnd(16)} [mcp${bindTag}] ${b.url}${formatAcl(b)}${statusTag}`);
+    if (b.transport === "stdio") {
+      console.log(`  ${name.padEnd(16)} [mcp/stdio${bindTag}] ${b.command}${formatAcl(b)}`);
+    } else {
+      const authStatus = await getAuthStatus(name);
+      const statusTag = authStatus ? `  [${authStatus}]` : "  [not authenticated]";
+      console.log(`  ${name.padEnd(16)} [mcp${bindTag}] ${b.url}${formatAcl(b)}${statusTag}`);
+    }
   }
 }
 
@@ -161,16 +166,22 @@ async function runAdd(args: string[]): Promise<void> {
   // 두 번째 positional (플래그가 아닌 것) 수집
   const positionals: string[] = [];
   const flags: Record<string, string> = {};
+  // boolean 플래그: 다음 인자를 value로 소비하지 않음
+  const BOOL_FLAGS = new Set(["stdio"]);
   for (let i = 1; i < args.length; i++) {
     const a = args[i] ?? "";
     if (a.startsWith("--")) {
       const key = a.slice(2);
-      const val = args[i + 1] ?? "";
-      if (val && !val.startsWith("--")) {
-        flags[key] = val;
-        i++;
-      } else {
+      if (BOOL_FLAGS.has(key)) {
         flags[key] = "true";
+      } else {
+        const val = args[i + 1] ?? "";
+        if (val && !val.startsWith("--")) {
+          flags[key] = val;
+          i++;
+        } else {
+          flags[key] = "true";
+        }
       }
     } else {
       positionals.push(a);
@@ -180,9 +191,10 @@ async function runAdd(args: string[]): Promise<void> {
   const allow = flags["allow"] ? flags["allow"].split(",").map((s) => s.trim()) : undefined;
   const deny = flags["deny"] ? flags["deny"].split(",").map((s) => s.trim()) : undefined;
 
-  // 타입 결정: --type 명시 > --url/--command 명시 > positional 자동 감지
+  // 타입 결정: --type 명시 > --url/--command/--stdio 명시 > positional 자동 감지
   let type = flags["type"] as "mcp" | "cli" | undefined;
   if (!type && flags["url"]) type = "mcp";
+  if (!type && flags["stdio"]) type = "mcp";
   if (!type && flags["command"]) type = "cli";
   if (!type && positionals[0]) {
     type = positionals[0].startsWith("http://") || positionals[0].startsWith("https://") ? "mcp" : "cli";
@@ -190,10 +202,23 @@ async function runAdd(args: string[]): Promise<void> {
   if (!type) die("Cannot detect type. Provide <command-or-url> or --type mcp|cli");
 
   if (type === "mcp") {
-    const url = flags["url"] ?? positionals[0];
-    if (!url) die("MCP target requires a URL (e.g. clip add myserver https://...mcp)");
-    await addTarget(name, "mcp", { url, allow, deny });
-    console.log(`Added MCP target "${name}" → ${url}`);
+    if (flags["stdio"]) {
+      // STDIO MCP: clip add <name> --stdio <cmd> [args...]
+      // positionals[0] = command, positionals[1..] = args
+      const command = flags["command"] ?? positionals[0];
+      if (!command) die("STDIO MCP target requires a command (e.g. clip add fs --stdio npx -y @modelcontextprotocol/server-filesystem /)");
+      const prependArgs = flags["args"]
+        ? flags["args"].split(",").map((s) => s.trim())
+        : positionals.slice(1).length > 0 ? positionals.slice(1) : undefined;
+      await addTarget(name, "mcp", { transport: "stdio", command, args: prependArgs, allow, deny });
+      console.log(`Added STDIO MCP target "${name}" → ${command}${prependArgs ? " " + prependArgs.join(" ") : ""}`);
+    } else {
+      // HTTP MCP
+      const url = flags["url"] ?? positionals[0];
+      if (!url) die("MCP target requires a URL (e.g. clip add myserver https://...mcp)");
+      await addTarget(name, "mcp", { transport: "http", url, allow, deny });
+      console.log(`Added MCP target "${name}" → ${url}`);
+    }
   } else {
     const command = flags["command"] ?? positionals[0];
     if (!command) die("CLI target requires a command (e.g. clip add gh gh)");
@@ -264,9 +289,13 @@ async function runConfigCmd(args: string[]): Promise<void> {
 // --- target help ---
 
 async function printTargetHelp(name: string, type: "cli" | "mcp", target: CliTarget | McpTarget): Promise<void> {
-  const detail = type === "mcp"
-    ? `MCP server: ${(target as McpTarget).url}`
-    : `CLI command: ${(target as CliTarget).command}`;
+  let detail: string;
+  if (type === "mcp") {
+    const mcp = target as McpTarget;
+    detail = mcp.transport === "stdio" ? `STDIO MCP: ${mcp.command}` : `MCP server: ${mcp.url}`;
+  } else {
+    detail = `CLI command: ${(target as CliTarget).command}`;
+  }
   console.log(`clip ${name} — ${detail}`);
   console.log(`\nUsage: clip ${name} <subcommand> [...args]`);
 
@@ -343,7 +372,9 @@ async function main(): Promise<void> {
     const cfg = await loadConfig();
     const { type, target } = getTarget(cfg, name);
     if (type !== "mcp") die(`"${name}" is not an MCP target. OAuth only applies to MCP targets.`);
-    await forceLogin(name, (target as McpTarget).url);
+    const mcpForLogin = target as McpTarget;
+    if (mcpForLogin.transport === "stdio") die(`"${name}" is a STDIO MCP target. OAuth only applies to HTTP MCP targets.`);
+    await forceLogin(name, (mcpForLogin as McpHttpTarget).url);
     return;
   }
 
@@ -374,7 +405,10 @@ async function main(): Promise<void> {
   }
 
   if (type === "mcp") {
-    const result = await executeMcp(target as McpTarget, config.headers, subcommand, targetArgs, targetName);
+    const mcpTarget = target as McpTarget;
+    const result = mcpTarget.transport === "stdio"
+      ? await executeMcpStdio(mcpTarget as McpStdioTarget, subcommand, targetArgs, targetName)
+      : await executeMcp(mcpTarget as McpHttpTarget, config.headers, subcommand, targetArgs, targetName);
     formatOutput(result, jsonMode ? "json" : "plain", "mcp");
   } else {
     const result = await executeCli(target as CliTarget, subcommand, targetArgs, passthrough);

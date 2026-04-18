@@ -13,14 +13,32 @@ const aclNodeSchema = z.object({
 
 const aclTreeSchema = z.record(aclNodeSchema);
 
-const mcpTargetSchema = z.object({
-  url: z.string().url(),
-  headers: z.record(z.string()).optional(),
-  oauth: z.boolean().optional(), // undefined=자동감지, true=강제, false=비활성
+const aclFields = {
   allow: z.array(z.string()).optional(),
   deny: z.array(z.string()).optional(),
   acl: aclTreeSchema.optional(),
+};
+
+// HTTP MCP (기본값, 기존 설정 호환 — transport 미지정 시 "http"로 처리)
+const mcpHttpTargetSchema = z.object({
+  transport: z.literal("http").optional().default("http"),
+  url: z.string().url(),
+  headers: z.record(z.string()).optional(),
+  oauth: z.boolean().optional(), // undefined=자동감지, true=강제, false=비활성
+  ...aclFields,
 });
+
+// STDIO MCP (transport: "stdio" 명시 필수)
+const mcpStdioTargetSchema = z.object({
+  transport: z.literal("stdio"),
+  command: z.string().min(1),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string()).optional(),
+  ...aclFields,
+});
+
+// stdio를 먼저 체크하여 기존 설정(transport 없음)은 http로 폴백
+const mcpTargetSchema = z.union([mcpStdioTargetSchema, mcpHttpTargetSchema]);
 
 const cliTargetSchema = z.object({
   command: z.string().min(1),
@@ -41,7 +59,9 @@ const configSchema = z.object({
 
 export type AclNode = z.infer<typeof aclNodeSchema>;
 export type AclTree = z.infer<typeof aclTreeSchema>;
-export type McpTarget = z.infer<typeof mcpTargetSchema>;
+export type McpHttpTarget = z.infer<typeof mcpHttpTargetSchema>;
+export type McpStdioTarget = z.infer<typeof mcpStdioTargetSchema>;
+export type McpTarget = McpHttpTarget | McpStdioTarget;
 export type CliTarget = z.infer<typeof cliTargetSchema>;
 export type Config = z.infer<typeof configSchema>;
 

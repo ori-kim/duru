@@ -1,4 +1,4 @@
-import type { McpTarget } from "./config.ts";
+import type { McpHttpTarget } from "./config.ts";
 import { die } from "./errors.ts";
 import { getStoredAuthHeaders, handleOAuth401, refreshIfExpiring } from "./oauth.ts";
 import type { TargetResult } from "./output.ts";
@@ -215,7 +215,7 @@ function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unknown>):
 // --- MCP target 실행 ---
 
 export async function executeMcp(
-  target: McpTarget,
+  target: McpHttpTarget,
   globalHeaders: Record<string, string> | undefined,
   toolName: string,
   rawArgs: string[],
