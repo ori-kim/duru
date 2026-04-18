@@ -72,12 +72,13 @@ function flattenParams(
   params: ParamDef[],
   requestBody: unknown,
   bodyContentType: string | undefined,
-): { inputSchema: Record<string, unknown>; pathParams: string[]; queryParams: string[]; headerParams: string[] } {
+): { inputSchema: Record<string, unknown>; pathParams: string[]; queryParams: string[]; headerParams: string[]; hasFormData: boolean } {
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
   const pathParams: string[] = [];
   const queryParams: string[] = [];
   const headerParams: string[] = [];
+  let hasFormData = false;
 
   for (const p of params) {
     const schema = deref(root, p.schema ?? { type: "string" }) as Record<string, unknown>;
@@ -87,6 +88,7 @@ function flattenParams(
     if (p.in === "path") pathParams.push(p.name);
     else if (p.in === "query") queryParams.push(p.name);
     else if (p.in === "header") headerParams.push(p.name);
+    else if (p.in === "formData") hasFormData = true;
     // cookie params are dropped
   }
 
@@ -116,7 +118,7 @@ function flattenParams(
 
   const inputSchema: Record<string, unknown> = { type: "object", properties };
   if (required.length) inputSchema["required"] = required;
-  return { inputSchema, pathParams, queryParams, headerParams };
+  return { inputSchema, pathParams, queryParams, headerParams, hasFormData };
 }
 
 // --- baseUrl 추출 ---
@@ -191,14 +193,21 @@ export function parseOpenApi(raw: unknown): ParsedSpec {
       const requestBody = op["requestBody"];
       const rb = requestBody ? (deref(spec, requestBody) as Record<string, unknown>) : undefined;
       const content = rb?.["content"] as Record<string, unknown> | undefined;
-      const bodyContentType = content ? Object.keys(content)[0] : undefined;
+      // OpenAPI 3.x: content에서, Swagger 2.0: operation 또는 root-level consumes에서
+      const opConsumes = op["consumes"] as string[] | undefined;
+      const globalConsumes = spec["consumes"] as string[] | undefined;
+      const swaggerConsumes = (opConsumes ?? globalConsumes)?.[0];
+      const bodyContentType = content ? Object.keys(content)[0] : swaggerConsumes;
 
-      const { inputSchema, pathParams, queryParams, headerParams } = flattenParams(
+      const { inputSchema, pathParams, queryParams, headerParams, hasFormData } = flattenParams(
         spec,
         mergedParams,
         requestBody,
         bodyContentType,
       );
+
+      // formData 파라미터가 있는데 bodyContentType이 결정되지 않은 경우 url-encoded로 기본 설정
+      const effectiveBodyCt = bodyContentType ?? (hasFormData ? "application/x-www-form-urlencoded" : undefined);
 
       const summary = (op["summary"] as string | undefined) ?? "";
       const desc = (op["description"] as string | undefined) ?? "";
@@ -212,7 +221,7 @@ export function parseOpenApi(raw: unknown): ParsedSpec {
         pathParams,
         queryParams,
         headerParams,
-        bodyContentType,
+        bodyContentType: effectiveBodyCt,
         inputSchema,
       });
     }
