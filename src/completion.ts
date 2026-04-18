@@ -65,7 +65,7 @@ _clip() {
     done
     for t in "$tdir"/api/*(N/); do
       name="\${t:t}"
-      detail=$(awk '/^baseUrl:/{print $2; exit} /^openapiUrl:/{u=$2} END{if(u)print u}' "$t/config.yml" 2>/dev/null)
+      detail=$(awk '/^baseUrl:/{b=$2} /^openapiUrl:/{u=$2} END{print (b?b:u)}' "$t/config.yml" 2>/dev/null)
       api_targets+=("$name:$detail")
     done
     # targets first, built-ins last
