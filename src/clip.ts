@@ -290,17 +290,11 @@ async function runAdd(args: string[]): Promise<void> {
     if (isUrl) {
       const lower = url.toLowerCase().split("?")[0]!.split("#")[0]!;
       const isApiSpec = /\/(openapi|swagger)\.(json|ya?ml)$/.test(lower) || /\/openapi\.json$/.test(lower);
-      type = isApiSpec ? "api" : "mcp";
+      if (lower.endsWith("/graphql")) type = "graphql";
+      else if (isApiSpec) type = "api";
+      else type = "mcp";
     } else {
       type = "cli";
-    }
-  }
-  // URL이 /graphql 로 끝나면 graphql 추정
-  if (!type && positionals[0]) {
-    const url = positionals[0];
-    const lower = url.toLowerCase().split("?")[0]!.split("#")[0]!;
-    if ((url.startsWith("http://") || url.startsWith("https://")) && lower.endsWith("/graphql")) {
-      type = "graphql";
     }
   }
   if (!type) die("Cannot detect type. Provide <command-or-url> or --type mcp|cli|api|grpc|graphql");

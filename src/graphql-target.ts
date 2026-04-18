@@ -44,6 +44,12 @@ async function buildHeaders(
   return base;
 }
 
+async function safeJson(r: Response): Promise<Record<string, unknown>> {
+  const text = await r.text();
+  try { return JSON.parse(text) as Record<string, unknown>; }
+  catch { return { error: text || `HTTP ${r.status}` }; }
+}
+
 async function postGraphql(
   target: GraphqlTarget,
   targetName: string,
@@ -64,12 +70,10 @@ async function postGraphql(
       headers: { ...headers, ...newHeaders },
       body: JSON.stringify(body),
     });
-    const json = (await retry.json()) as Record<string, unknown>;
-    return { resp: retry, json };
+    return { resp: retry, json: await safeJson(retry) };
   }
 
-  const json = (await resp.json()) as Record<string, unknown>;
-  return { resp, json };
+  return { resp, json: await safeJson(resp) };
 }
 
 async function loadSchema(

@@ -113,6 +113,9 @@ export function parseMessageDescribe(text: string): ParsedDescribe {
     const oneofM = line.match(/^oneof\s+(\w+)\s*\{/);
     if (oneofM) { currentOneof = oneofM[1]; depth++; continue; }
 
+    // nested message or enum — skip contents
+    if (/^(?:message|enum)\s+\w+\s*\{/.test(line)) { depth++; continue; }
+
     // closing brace
     if (line === "}" || line === "};") {
       depth--;
