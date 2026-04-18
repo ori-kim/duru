@@ -1,6 +1,6 @@
 # MCP Target
 
-Registers a [Model Context Protocol](https://modelcontextprotocol.io) server with the clip gateway. There are two transport types: **HTTP** and **STDIO**.
+Registers a [Model Context Protocol](https://modelcontextprotocol.io) server with the clip gateway. There are three transport types: **HTTP**, **SSE**, and **STDIO**.
 
 ## HTTP MCP
 
@@ -100,6 +100,87 @@ curl -X POST 'https://mcp.notion.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiJ9...' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_pages","arguments":{"query":"sprint retro"}}}'
+```
+
+---
+
+## SSE MCP {#sse}
+
+Connects to an MCP server using the **legacy SSE transport**: a persistent `GET /sse` stream for receiving responses and a separate `POST /messages` endpoint for sending requests. Use this for older MCP servers that pre-date the Streamable HTTP transport.
+
+### Register
+
+```sh
+clip add <name> --sse <https://...sse>
+```
+
+```sh
+clip add myserver --sse https://example.com/sse
+```
+
+### Config
+
+`~/.clip/target/mcp/myserver/config.yml`
+
+```yaml
+transport: sse
+url: https://example.com/sse
+
+# Auth method
+auth: oauth       # OAuth 2.1 PKCE (authenticate with clip login)
+# auth: apikey   # API key — pass via headers
+# auth: false    # No auth
+
+# For apikey auth
+headers:
+  Authorization: "Bearer ${API_KEY}"
+```
+
+### OAuth Authentication
+
+Same as HTTP MCP — use `clip login`:
+
+```sh
+clip login myserver
+clip logout myserver
+```
+
+### Running
+
+The interface is identical to HTTP MCP:
+
+```sh
+clip myserver tools
+clip myserver search --query "hello"
+```
+
+### How It Works
+
+When you run `clip myserver search --query "..."`, clip:
+
+1. Opens a persistent SSE connection: `GET /sse`
+2. Waits for the `endpoint` event — server sends the message URL (e.g. `/messages?sessionId=abc123`)
+3. Sends `initialize` via `POST <messageUrl>`
+4. Sends `notifications/initialized`
+5. Calls `tools/list`, then `tools/call` — responses arrive over the SSE stream
+
+### Dry Run
+
+Preview the two-step interaction without executing:
+
+```sh
+clip myserver search --query "hello" --dry-run
+```
+
+```sh
+# Step 1: Connect to SSE endpoint
+curl -N 'https://example.com/sse' \
+  -H 'Accept: text/event-stream'
+
+# Step 2: POST to message endpoint (URL from 'endpoint' SSE event)
+curl -X POST '<messageUrl-from-endpoint-event>' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"hello"}}}'
 ```
 
 ---

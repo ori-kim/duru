@@ -1,6 +1,6 @@
 # MCP Target
 
-[Model Context Protocol](https://modelcontextprotocol.io) 서버를 clip 게이트웨이에 등록합니다. 연결 방식에 따라 **HTTP**와 **STDIO** 두 종류가 있습니다.
+[Model Context Protocol](https://modelcontextprotocol.io) 서버를 clip 게이트웨이에 등록합니다. 연결 방식에 따라 **HTTP**, **SSE**, **STDIO** 세 종류가 있습니다.
 
 ## HTTP MCP
 
@@ -100,6 +100,87 @@ curl -X POST 'https://mcp.notion.com/mcp' \
   -H 'Accept: application/json, text/event-stream' \
   -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiJ9...' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_pages","arguments":{"query":"스프린트 회고"}}}'
+```
+
+---
+
+## SSE MCP {#sse}
+
+**legacy SSE transport** 방식의 MCP 서버에 연결합니다. `GET /sse`로 지속 연결을 열어 응답을 수신하고, `POST /messages`로 요청을 전송합니다. Streamable HTTP transport 이전에 만들어진 구버전 MCP 서버에 사용합니다.
+
+### 등록
+
+```sh
+clip add <name> --sse <https://...sse>
+```
+
+```sh
+clip add myserver --sse https://example.com/sse
+```
+
+### Config
+
+`~/.clip/target/mcp/myserver/config.yml`
+
+```yaml
+transport: sse
+url: https://example.com/sse
+
+# 인증 방식
+auth: oauth       # OAuth 2.1 PKCE (clip login으로 인증)
+# auth: apikey   # API 키 — headers로 전달
+# auth: false    # 인증 없음
+
+# API 키 방식일 때
+headers:
+  Authorization: "Bearer ${API_KEY}"
+```
+
+### OAuth 인증
+
+HTTP MCP와 동일하게 `clip login`으로 인증합니다:
+
+```sh
+clip login myserver
+clip logout myserver
+```
+
+### 실행
+
+HTTP MCP와 동일한 인터페이스로 사용합니다:
+
+```sh
+clip myserver tools
+clip myserver search --query "안녕"
+```
+
+### 동작 방식
+
+`clip myserver search --query "..."` 실행 시:
+
+1. `GET /sse` — 지속 SSE 연결 오픈
+2. `endpoint` 이벤트 대기 — 서버가 메시지 URL 전송 (예: `/messages?sessionId=abc123`)
+3. `POST <messageUrl>` — `initialize` 전송
+4. `notifications/initialized` 전송
+5. `tools/list` → `tools/call` — 응답은 SSE 스트림으로 수신
+
+### Dry Run
+
+실제 실행 없이 두 단계 흐름을 미리 확인합니다:
+
+```sh
+clip myserver search --query "안녕" --dry-run
+```
+
+```sh
+# Step 1: SSE 엔드포인트 연결
+curl -N 'https://example.com/sse' \
+  -H 'Accept: text/event-stream'
+
+# Step 2: 메시지 엔드포인트로 POST ('endpoint' SSE 이벤트에서 URL 획득)
+curl -X POST '<messageUrl-from-endpoint-event>' \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"안녕"}}}'
 ```
 
 ---

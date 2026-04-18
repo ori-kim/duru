@@ -15,7 +15,7 @@ MCP 서버와 CLI 도구를 위한 통합 CLI 프록시 게이트웨이 — ACL 
 
 - [Target 개요](docs/ko/targets.md) — target이란, 종류, 공통 config 필드, 글로벌 플래그
 - [CLI target](docs/ko/cli.md) — ACL로 감싼 로컬 CLI 도구, bind, dry run
-- [MCP target](docs/ko/mcp.md) — HTTP/STDIO MCP 서버, OAuth, JSON-RPC 동작 방식
+- [MCP target](docs/ko/mcp.md) — HTTP/SSE/STDIO MCP 서버, OAuth, JSON-RPC 동작 방식
 - [API target](docs/ko/api.md) — OpenAPI 기반 REST target, 파라미터 매핑, 인증
 
 ## 설치
@@ -175,6 +175,7 @@ openapiUrl: https://api.example.com/openapi.json
 |--------|------|
 | `clip add <name> <cmd>` | CLI 대상 등록 |
 | `clip add <name> <https://...mcp>` | HTTP MCP 대상 등록 |
+| `clip add <name> --sse <https://...sse>` | legacy SSE MCP 대상 등록 |
 | `clip add <name> --stdio <cmd> [args]` | STDIO MCP 대상 등록 |
 | `clip add <name> <https://.../openapi.json>` | OpenAPI REST 대상 등록 |
 | `clip remove <name>` | 대상 삭제 |
@@ -215,6 +216,9 @@ clip notion search_pages --query "hello" --dry-run
 #   -H 'Authorization: Bearer eyJ...' \
 #   -H 'Content-Type: application/json' \
 #   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}'
+
+# SSE MCP target → SSE 연결 + POST 두 단계 출력
+clip myserver search --query "hello" --dry-run
 
 # STDIO MCP target → echo 파이프 형태 출력
 clip fs read_file --path /etc/hosts --dry-run

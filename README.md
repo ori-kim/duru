@@ -17,7 +17,7 @@ A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules,
 
 - [Targets overview](docs/en/targets.md) — what targets are, types, common config fields, global flags
 - [CLI target](docs/en/cli.md) — wrapping local CLI tools with ACL, bind, dry run
-- [MCP target](docs/en/mcp.md) — HTTP and STDIO MCP servers, OAuth, how JSON-RPC works
+- [MCP target](docs/en/mcp.md) — HTTP, SSE, and STDIO MCP servers, OAuth, how JSON-RPC works
 - [API target](docs/en/api.md) — OpenAPI-based REST targets, parameter mapping, auth
 
 ## Install
@@ -177,6 +177,7 @@ openapiUrl: https://api.example.com/openapi.json
 |---------|-------------|
 | `clip add <name> <cmd>` | Register a CLI target |
 | `clip add <name> <https://...mcp>` | Register an HTTP MCP target |
+| `clip add <name> --sse <https://...sse>` | Register a legacy SSE MCP target |
 | `clip add <name> --stdio <cmd> [args]` | Register a STDIO MCP target |
 | `clip add <name> <https://.../openapi.json>` | Register an OpenAPI REST target |
 | `clip remove <name>` | Unregister a target |
@@ -217,6 +218,9 @@ clip notion search_pages --query "hello" --dry-run
 #   -H 'Authorization: Bearer eyJ...' \
 #   -H 'Content-Type: application/json' \
 #   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}'
+
+# SSE MCP target → SSE connect + POST steps
+clip myserver search --query "hello" --dry-run
 
 # STDIO MCP target → echo pipe
 clip fs read_file --path /etc/hosts --dry-run

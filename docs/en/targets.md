@@ -13,7 +13,8 @@ clip <target> <subcommand> [args...]
 | Type | Description | Examples |
 |------|-------------|---------|
 | [CLI](./cli.md) | Wraps a local CLI command with ACL enforcement | `gh`, `gh`, `gh` |
-| [MCP (HTTP)](./mcp.md) | Connects to an HTTP-based MCP server | `notion`, `linear` |
+| [MCP (HTTP)](./mcp.md) | Connects to an HTTP MCP server (Streamable HTTP) | `notion`, `linear` |
+| [MCP (SSE)](./mcp.md#sse) | Connects to a legacy SSE-transport MCP server | older MCP servers |
 | [MCP (STDIO)](./mcp.md#stdio) | Spawns a local process as an MCP server | `filesystem`, `sqlite` |
 | [API](./api.md) | Generates CLI tools from an OpenAPI spec | GitHub REST API, Petstore |
 
@@ -23,6 +24,7 @@ clip <target> <subcommand> [args...]
 # Register
 clip add gh gh --deny delete
 clip add notion https://mcp.notion.com/mcp
+clip add myserver --sse https://example.com/sse
 clip add github https://api.github.com --openapi-url https://raw.githubusercontent.com/.../openapi.yaml
 
 # List all targets

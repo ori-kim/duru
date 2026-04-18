@@ -13,7 +13,8 @@ clip <target> <subcommand> [args...]
 | 종류 | 설명 | 예시 |
 |------|------|------|
 | [CLI](./cli.md) | 로컬 CLI 명령어를 ACL로 감싸 실행 | `gh`, `gh`, `gh` |
-| [MCP (HTTP)](./mcp.md) | HTTP로 연결되는 MCP 서버 | `notion`, `linear` |
+| [MCP (HTTP)](./mcp.md) | HTTP MCP 서버 (Streamable HTTP) | `notion`, `linear` |
+| [MCP (SSE)](./mcp.md#sse) | legacy SSE transport MCP 서버 | 구버전 MCP 서버 |
 | [MCP (STDIO)](./mcp.md#stdio) | 로컬 프로세스로 실행되는 MCP 서버 | `filesystem`, `sqlite` |
 | [API](./api.md) | OpenAPI 스펙 기반 REST API | GitHub REST API, Petstore |
 
@@ -23,6 +24,7 @@ clip <target> <subcommand> [args...]
 # 등록
 clip add gh gh --deny delete
 clip add notion https://mcp.notion.com/mcp
+clip add myserver --sse https://example.com/sse
 clip add github https://api.github.com --openapi-url https://raw.githubusercontent.com/.../openapi.yaml
 
 # 목록 확인

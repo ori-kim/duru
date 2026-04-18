@@ -49,11 +49,16 @@ clip gh get pods -n default
 clip gh pr list --json
 ```
 
-**MCP** — HTTP or STDIO MCP server (OAuth supported)
+**MCP** — HTTP (Streamable HTTP), SSE, or STDIO MCP server (OAuth supported)
 ```sh
 clip notion search --query "design doc"
 clip login notion    # OAuth 2.1 PKCE
 ```
+
+MCP transport types:
+- `http` (default) — Streamable HTTP, single endpoint, response may be JSON or SSE
+- `sse` — legacy SSE transport: `GET /sse` for stream, `POST /messages` for requests
+- `stdio` — local process via stdin/stdout
 
 **API** — OpenAPI REST target
 ```sh
@@ -64,8 +69,10 @@ clip petstore getPetById --petId 1 --dry-run   # preview curl
 ## Management commands
 
 ```sh
-clip add <name> <cmd>                     # register CLI target
-clip add <name> <https://...mcp>          # register MCP target
+clip add <name> <cmd>                      # register CLI target
+clip add <name> <https://...mcp>           # register HTTP MCP target
+clip add <name> --sse <https://...sse>     # register SSE MCP target
+clip add <name> --stdio <cmd> [args...]    # register STDIO MCP target
 clip add <name> <https://.../openapi.json> # register API target
 clip remove <name>                        # unregister
 clip refresh <target>                     # re-fetch OpenAPI spec
