@@ -2,6 +2,8 @@
 
 Reads an OpenAPI spec (JSON or YAML) and auto-generates a CLI tool for each operation. Any REST API with an OpenAPI spec is immediately usable through clip — no custom implementation needed.
 
+Supports **OpenAPI 3.x** and **Swagger 2.0**, including `consumes` and `formData` parameters.
+
 ## Register
 
 ```sh

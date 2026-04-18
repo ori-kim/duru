@@ -2,6 +2,10 @@
 
 [Model Context Protocol](https://modelcontextprotocol.io) 서버를 clip 게이트웨이에 등록합니다. 연결 방식에 따라 **HTTP**, **SSE**, **STDIO** 세 종류가 있습니다.
 
+## 결과 타입
+
+tool call 결과는 텍스트 또는 이미지 컨텐츠를 포함할 수 있습니다. 텍스트는 stdout으로 출력하고, 이미지(base64)는 `/tmp/clip-image-{timestamp}.{ext}` 경로로 저장한 뒤 해당 경로를 출력합니다.
+
 ## HTTP MCP
 
 원격 또는 로컬 HTTP 서버로 동작하는 MCP 서버입니다. JSON-RPC over HTTP(SSE)로 통신합니다.

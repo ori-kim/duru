@@ -2,6 +2,8 @@
 
 OpenAPI 스펙(JSON/YAML)을 읽어 각 오퍼레이션을 CLI 도구로 자동 생성합니다. 스펙만 있으면 별도 구현 없이 REST API를 clip으로 호출할 수 있습니다.
 
+**OpenAPI 3.x**와 **Swagger 2.0**(`consumes`, `formData` 파라미터 포함)을 모두 지원합니다.
+
 ## 등록
 
 ```sh

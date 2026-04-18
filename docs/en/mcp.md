@@ -2,6 +2,10 @@
 
 Registers a [Model Context Protocol](https://modelcontextprotocol.io) server with the clip gateway. There are three transport types: **HTTP**, **SSE**, and **STDIO**.
 
+## Result Types
+
+Tool call results may contain text or image content. Text is printed to stdout. Images (base64-encoded) are decoded and saved to `/tmp/clip-image-{timestamp}.{ext}`, and the file path is printed instead.
+
 ## HTTP MCP
 
 Connects to a remote or local HTTP server using JSON-RPC over HTTP (with SSE support).
