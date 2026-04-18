@@ -76,7 +76,7 @@ clip binds            # list bound targets
 
 ## ACL
 
-Rules live in `~/.clip/target/{cli,mcp,api}/<name>/config.yml`. `deny` takes precedence over `allow`.
+Rules live in `~/.clip/target/{cli,mcp,api}/<name>/config.yml`. `deny` takes precedence over `allow`. Exact match or `*` wildcard (e.g. `describe-*`, `*-instances`, `get-*`).
 
 ```yaml
 command: gh
