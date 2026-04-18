@@ -65,3 +65,41 @@ echo "(before other PATH entries so clip intercepts the commands):"
 echo "  export PATH=\"$BIND_DIR:\$PATH\""
 echo ""
 echo "Then: clip bind gh   # 'gh' will now route through clip"
+
+# Optional: Claude Code skill
+echo ""
+printf "Install Claude Code skill? (y/N) "
+read INSTALL_SKILL </dev/tty || INSTALL_SKILL="n"
+case "$INSTALL_SKILL" in
+  [yY]|[yY][eE][sS])
+    "$INSTALL_DIR/clip" skills add claude-code
+    ;;
+  *)
+    echo "Skipped. Run 'clip skills add claude-code' to install later."
+    ;;
+esac
+
+# Optional: zsh completion + autosuggestions
+echo ""
+printf "Configure zsh completion in ~/.zshrc? (y/N) "
+read SETUP_ZSH </dev/tty || SETUP_ZSH="n"
+case "$SETUP_ZSH" in
+  [yY]|[yY][eE][sS])
+    ZSHRC="$HOME/.zshrc"
+    if grep -q 'clip completion zsh' "$ZSHRC" 2>/dev/null; then
+      echo "Already configured in $ZSHRC"
+    else
+      printf '\n# clip zsh completion\neval "$(clip completion zsh)"\n' >> "$ZSHRC"
+      echo "Added completion to $ZSHRC"
+    fi
+    if ! grep -q 'ZSH_AUTOSUGGEST_STRATEGY' "$ZSHRC" 2>/dev/null; then
+      printf 'ZSH_AUTOSUGGEST_STRATEGY=(history completion)\n' >> "$ZSHRC"
+      echo "Added ZSH_AUTOSUGGEST_STRATEGY to $ZSHRC"
+    fi
+    echo "Restart your shell or run: source $ZSHRC"
+    ;;
+  *)
+    echo "Skipped. Add to ~/.zshrc to enable:"
+    echo '  eval "$(clip completion zsh)"'
+    ;;
+esac
