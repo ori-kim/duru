@@ -17,7 +17,7 @@ import { runCompletionCmd } from "./completion.ts";
 import { runProfileCmd, resolveProfile } from "./profile.ts";
 import { runSkillsCmd } from "./skills.ts";
 
-const VERSION = "0.1.0";
+const VERSION = "0.6.4";
 
 const HELP = `
 clip — CLI proxy for MCP servers and CLI tools
