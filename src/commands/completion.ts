@@ -1,11 +1,7 @@
 import { die } from "../utils/errors.ts";
 
-export function buildZshCompletion(): string {
+function buildZshCompletionCore(): string {
   return `\
-# clip zsh completion
-# Add to ~/.zshrc:  eval "$(clip completion zsh)"
-# Inline hints:     ZSH_AUTOSUGGEST_STRATEGY=(history completion)
-
 zmodload zsh/complist 2>/dev/null
 
 zstyle ':completion:*' use-cache yes
@@ -139,16 +135,27 @@ _clip() {
     return
   fi
 }
+`;
+}
 
+// For eval "$(clip completion zsh)" in .zshrc
+export function buildZshCompletion(): string {
+  return `# clip zsh completion
+# Add to ~/.zshrc:  eval "$(clip completion zsh)"
+# Inline hints:     ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+
+${buildZshCompletionCore()}
 compdef _clip clip
 `;
 }
 
 export async function runCompletionCmd(args: string[]): Promise<void> {
-  const shell = args[0];
+  const [shell] = args;
+
   if (!shell || shell === "zsh") {
     process.stdout.write(buildZshCompletion());
     return;
   }
+
   die(`Unsupported shell: "${shell}"\nUsage: clip completion zsh`);
 }

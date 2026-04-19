@@ -35,7 +35,7 @@ export async function loadUserExtensions(registry: Registry): Promise<void> {
   let files: string[];
   try {
     files = readdirSync(extDir)
-      .filter((f) => f.endsWith(".ts") || f.endsWith(".js"))
+      .filter((f) => (f.endsWith(".ts") && !f.endsWith(".d.ts")) || f.endsWith(".js"))
       .sort(); // 파일명 사전순으로 로드 순서 결정
   } catch {
     // extensions 디렉토리가 없으면 조용히 skip

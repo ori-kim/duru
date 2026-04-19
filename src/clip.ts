@@ -21,7 +21,7 @@ import { formatOutput } from "./utils/output.ts";
 
 const registry = createDefaultRegistry();
 
-async function main(): Promise<void> {
+async function main(): Promise<number> {
   await loadUserExtensions(registry);
   await registry.initAll();
   process.on("SIGINT", () => {
@@ -36,66 +36,66 @@ async function main(): Promise<void> {
 
   if (rest.length === 0) {
     console.log(HELP);
-    process.exit(0);
+    return 0;
   }
 
   const targetName = rest[0]!;
 
   if (targetName === "config") {
     await runConfigCmd(rest.slice(1));
-    return;
+    return 0;
   }
   if (targetName === "list") {
     await runList();
-    return;
+    return 0;
   }
   if (targetName === "add") {
     await runAdd(rest.slice(1));
-    return;
+    return 0;
   }
   if (targetName === "remove") {
     await runRemove(rest.slice(1));
-    return;
+    return 0;
   }
   if (targetName === "skills") {
     await runSkillsCmd(rest.slice(1));
-    return;
+    return 0;
   }
   if (targetName === "bind") {
     await runBind(rest.slice(1));
-    return;
+    return 0;
   }
   if (targetName === "unbind") {
     await runUnbind(rest.slice(1));
-    return;
+    return 0;
   }
   if (targetName === "binds") {
     await runBinds();
-    return;
+    return 0;
   }
   if (targetName === "completion") {
     await runCompletionCmd(rest.slice(1));
-    return;
+    return 0;
   }
   if (targetName === "profile") {
     await runProfileCmd(rest.slice(1));
-    return;
+    return 0;
   }
   if (targetName === "alias") {
     await runAliasCmd(rest.slice(1));
-    return;
+    return 0;
   }
   if (targetName === "refresh") {
     await runRefresh(rest.slice(1), registry);
-    return;
+    return 0;
   }
   if (targetName === "login") {
     await runLogin(rest.slice(1));
-    return;
+    return 0;
   }
   if (targetName === "logout") {
     await runLogout(rest.slice(1));
-    return;
+    return 0;
   }
 
   // <target>@<profile> 파싱
@@ -114,7 +114,7 @@ async function main(): Promise<void> {
   if (!rawSubcommand || rawSubcommand === "--help" || rawSubcommand === "-h") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await printTargetHelp(baseName, type as any, target);
-    process.exit(0);
+    return 0;
   }
 
   const rawTargetArgs = rest.slice(2);
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
       if (def.input) lines.push(`  input:  ${JSON.stringify(def.input)}`);
       if (def.description) lines.push(`  desc:   ${def.description}`);
       console.log(lines.join("\n"));
-      process.exit(0);
+      return 0;
     }
   }
 
@@ -157,13 +157,12 @@ async function main(): Promise<void> {
 
   const shouldPassthrough = effectivePassthrough && !effectiveDryRun;
   if (shouldPassthrough) {
-    process.exit(result.exitCode);
-  } else {
-    const jMode = type === "graphql" ? jsonMode : effectiveJsonMode;
-    formatOutput(result, jMode ? "json" : "plain");
+    return result.exitCode;
   }
+  const jMode = type === "graphql" ? jsonMode : effectiveJsonMode;
+  return formatOutput(result, jMode ? "json" : "plain");
 }
 
 main()
-  .then(() => registry.disposeAll())
+  .then((code) => registry.disposeAll().finally(() => process.exit(code ?? 0)))
   .catch(printAndExit);

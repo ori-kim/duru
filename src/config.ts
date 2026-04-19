@@ -216,8 +216,8 @@ export async function loadConfig(): Promise<Config> {
       if (!(await file.exists())) continue;
       try {
         _ext[extType]![name] = YAML.parse(await file.text()) as unknown;
-      } catch {
-        /* 파싱 실패 시 skip */
+      } catch (e) {
+        process.stderr.write(`clip: warning: failed to parse ${configPath}: ${e}\n`);
       }
     }
   }

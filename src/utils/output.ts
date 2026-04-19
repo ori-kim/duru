@@ -3,7 +3,7 @@ import type { TargetResult } from "../extension.ts";
 
 export type OutputMode = "plain" | "json";
 
-export function formatOutput(result: TargetResult, mode: OutputMode): void {
+export function formatOutput(result: TargetResult, mode: OutputMode): number {
   if (result.stderr) {
     process.stderr.write(result.stderr);
   }
@@ -11,8 +11,7 @@ export function formatOutput(result: TargetResult, mode: OutputMode): void {
   if (mode === "json") {
     const text = result.stdout.trim();
     if (!text) {
-      if (result.exitCode !== 0) process.exit(result.exitCode);
-      return;
+      return result.exitCode;
     }
     try {
       const parsed = JSON.parse(text);
@@ -29,5 +28,5 @@ export function formatOutput(result: TargetResult, mode: OutputMode): void {
     }
   }
 
-  process.exit(result.exitCode);
+  return result.exitCode;
 }
