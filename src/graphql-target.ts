@@ -6,6 +6,7 @@ import { die } from "./errors.ts";
 import { formatToolHelp, parseToolArgs } from "./mcp-target.ts";
 import { getStoredAuthHeaders, handleOAuth401, refreshIfExpiring } from "./oauth.ts";
 import type { TargetResult } from "./output.ts";
+import { buildAliasSection } from "./alias.ts";
 import {
   INTROSPECTION_QUERY,
   buildOperation,
@@ -215,8 +216,9 @@ export async function executeGraphql(
   const spec = await loadSchema(target, targetName, forceRefresh);
 
   if (subcommand === "tools") {
-    if (spec.tools.length === 0) return { exitCode: 0, stdout: "No tools available.\n", stderr: "" };
-    return { exitCode: 0, stdout: buildToolsOutput(spec), stderr: "" };
+    const scripts = buildAliasSection(target);
+    if (spec.tools.length === 0) return { exitCode: 0, stdout: `No tools available.${scripts}\n`, stderr: "" };
+    return { exitCode: 0, stdout: `${buildToolsOutput(spec)}${scripts}`, stderr: "" };
   }
 
   if (subcommand === "types") {

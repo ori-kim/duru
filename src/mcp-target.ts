@@ -2,6 +2,7 @@ import type { McpHttpTarget } from "./config.ts";
 import { die } from "./errors.ts";
 import { getStoredAuthHeaders, handleOAuth401, refreshIfExpiring } from "./oauth.ts";
 import type { TargetResult } from "./output.ts";
+import { buildAliasSection } from "./alias.ts";
 
 // --- JSON-RPC 타입 ---
 
@@ -296,13 +297,13 @@ export async function executeMcp(
   if (toolName === "tools") {
     // 목록 출력 모드
     if (tools.length === 0) {
-      return { exitCode: 0, stdout: "No tools available.\n", stderr: "" };
+      return { exitCode: 0, stdout: `No tools available.${buildAliasSection(target)}\n`, stderr: "" };
     }
     const lines = tools.map((t) => {
       const desc = t.description.length > 60 ? `${t.description.slice(0, 57)}...` : t.description;
       return `  ${t.name.padEnd(24)} ${desc}`;
     });
-    return { exitCode: 0, stdout: `Tools:\n${lines.join("\n")}\n`, stderr: "" };
+    return { exitCode: 0, stdout: `Tools:\n${lines.join("\n")}\n${buildAliasSection(target)}`, stderr: "" };
   }
 
   const tool = tools.find((t) => t.name === toolName);

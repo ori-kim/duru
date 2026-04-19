@@ -7,6 +7,7 @@ import { formatToolHelp, parseToolArgs } from "./mcp-target.ts";
 import { getStoredAuthHeaders, handleOAuth401, refreshIfExpiring } from "./oauth.ts";
 import { parseOpenApi } from "./openapi.ts";
 import type { TargetResult } from "./output.ts";
+import { buildAliasSection } from "./alias.ts";
 
 const API_DIR = join(homedir(), ".clip", "target", "api");
 
@@ -109,15 +110,16 @@ export async function executeApi(
   }
 
   if (subcommand === "tools") {
+    const scripts = buildAliasSection(target);
     if (spec.tools.length === 0) {
-      return { exitCode: 0, stdout: "No operations available.\n", stderr: "" };
+      return { exitCode: 0, stdout: `No operations available.${scripts}\n`, stderr: "" };
     }
     const lines = spec.tools.map((t) => {
       const desc = t.description.split("\n")[0] ?? "";
       const truncated = desc.length > 60 ? `${desc.slice(0, 57)}...` : desc;
       return `  ${t.name.padEnd(24)} ${truncated}`;
     });
-    return { exitCode: 0, stdout: `Tools:\n${lines.join("\n")}\n`, stderr: "" };
+    return { exitCode: 0, stdout: `Tools:\n${lines.join("\n")}\n${scripts}`, stderr: "" };
   }
 
   const tool = spec.tools.find((t) => t.name === subcommand);

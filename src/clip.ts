@@ -3,7 +3,7 @@ import { checkAcl } from "./acl.ts";
 import { executeApi } from "./api-target.ts";
 import { BIND_DIR, bindTarget, listBound, unbindTarget } from "./bind.ts";
 import { executeCli } from "./cli-target.ts";
-import type { ApiTarget, CliTarget, GraphqlTarget, GrpcTarget, McpHttpTarget, McpSseTarget, McpStdioTarget, McpTarget } from "./config.ts";
+import type { ApiTarget, CliTarget, GraphqlTarget, GrpcTarget, McpHttpTarget, McpSseTarget, McpStdioTarget, McpTarget, ScriptTarget } from "./config.ts";
 import { addTarget, getTarget, loadConfig, removeTarget } from "./config.ts";
 import { die } from "./errors.ts";
 import { executeGraphql } from "./graphql-target.ts";
@@ -15,6 +15,8 @@ import { forceLogin, getAuthStatus, removeTokens } from "./oauth.ts";
 import { formatOutput } from "./output.ts";
 import { runCompletionCmd } from "./completion.ts";
 import { runProfileCmd, resolveProfile } from "./profile.ts";
+import { resolveAlias, listAliases, runAliasCmd, type HasAliases } from "./alias.ts";
+import { executeScript } from "./script-target.ts";
 import { runSkillsCmd } from "./skills.ts";
 
 const VERSION = "0.6.4";
@@ -38,6 +40,10 @@ Usage:
   clip profile remove <target> <profile>
   clip profile unset <target>           Remove active profile
   clip <target>@<profile> <args>        One-shot profile override
+  clip alias add <target> <name> --subcommand <tool> [--arg X ...] [--input-json '{...}'] [--description "..."]
+  clip alias remove <target> <name>
+  clip alias list <target>
+  clip alias show <target> <name>
   clip bind <target>       Bind target as a native command (no "clip" prefix needed)
   clip unbind <target>     Remove native binding
   clip bind --all          Bind all registered targets
@@ -54,7 +60,7 @@ Global flags:
   --version, -v Show version
 
 Config:
-  ~/.clip/target/{mcp,cli,api,grpc,graphql}/<name>/config.yml
+  ~/.clip/target/{mcp,cli,api,grpc,graphql,script}/<name>/config.yml
 
 Native bind PATH setup (add to shell profile):
   export PATH="${BIND_DIR}:$PATH"
@@ -93,6 +99,12 @@ Examples:
   clip gh get pods -n default
   clip bind gh            # 이후 "gh pr list" 가 clip을 통해 실행됨
   clip unbind gh
+  clip alias add slack send-me --subcommand chat.postMessage --input-json '{"channel":"U123","text":"$1"}' --description "Send DM to me"
+  clip slack send-me "hello"
+  clip alias add gh pods-dev --subcommand get --arg pods --arg -n --arg dev
+  clip gh pods-dev
+  # script target — bash/file 조합 명령
+  clip lag lag my-group    # ~/.clip/target/script/lag/ 에 정의된 스크립트 실행
 
 Tree ACL (~/.clip/target/cli/gh/config.yml 직접 편집):
   command: gh
@@ -157,7 +169,7 @@ function parseGlobalFlags(argv: string[]): {
 
 // --- list / add / remove ---
 
-function formatAcl(target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget): string {
+function formatAcl(target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget | ScriptTarget): string {
   const parts: string[] = [];
   if (target.allow && target.allow.length > 0) parts.push(`allow: ${target.allow.join(",")}`);
   if (target.deny && target.deny.length > 0) parts.push(`deny: ${target.deny.join(",")}`);
@@ -175,8 +187,12 @@ async function runList(): Promise<void> {
   const apiEntries = Object.entries(config.api);
   const grpcEntries = Object.entries(config.grpc);
   const graphqlEntries = Object.entries(config.graphql);
+  const scriptEntries = Object.entries(config.script);
 
-  if (cliEntries.length === 0 && mcpEntries.length === 0 && apiEntries.length === 0 && grpcEntries.length === 0 && graphqlEntries.length === 0) {
+  if (
+    cliEntries.length === 0 && mcpEntries.length === 0 && apiEntries.length === 0 &&
+    grpcEntries.length === 0 && graphqlEntries.length === 0 && scriptEntries.length === 0
+  ) {
     console.log("No targets configured.");
     console.log(`\nAdd one:\n  clip add <name> <command>          # CLI tool`);
     console.log(`  clip add <name> <https://...>      # MCP server`);
@@ -252,6 +268,12 @@ async function runList(): Promise<void> {
     const profileTagGql = b.active ? ` @${b.active}` : "";
     console.log(`  ${name.padEnd(16)} [gql]${bindTag} ${b.endpoint}${profileTagGql}${formatAcl(b)}${statusTag}`);
   }
+  for (const [name, b] of [...scriptEntries].sort(([a], [b]) => a.localeCompare(b))) {
+    const bindTag = bound.has(name) ? " [bind]" : "";
+    const cmdCount = Object.keys(b.commands ?? {}).length;
+    const desc = b.description ? ` — ${b.description}` : "";
+    console.log(`  ${name.padEnd(16)} [script]${bindTag} ${cmdCount} command(s)${desc}${formatAcl(b)}`);
+  }
 }
 
 async function runAdd(args: string[]): Promise<void> {
@@ -264,7 +286,7 @@ async function runAdd(args: string[]): Promise<void> {
   const positionals: string[] = [];
   const flags: Record<string, string> = {};
   // boolean 플래그: 다음 인자를 value로 소비하지 않음
-  const BOOL_FLAGS = new Set(["stdio", "sse", "api", "grpc", "graphql", "plaintext"]);
+  const BOOL_FLAGS = new Set(["stdio", "sse", "api", "grpc", "graphql", "plaintext", "script"]);
   for (let i = 1; i < args.length; i++) {
     const a = args[i] ?? "";
     if (a.startsWith("--")) {
@@ -288,11 +310,12 @@ async function runAdd(args: string[]): Promise<void> {
   const allow = flags["allow"] ? flags["allow"].split(",").map((s) => s.trim()) : undefined;
   const deny = flags["deny"] ? flags["deny"].split(",").map((s) => s.trim()) : undefined;
 
-  // 타입 결정: --type 명시 > --grpc/--api/--stdio 명시 > positional 자동 감지
-  let type = flags["type"] as "mcp" | "cli" | "api" | "grpc" | "graphql" | undefined;
+  // 타입 결정: --type 명시 > --grpc/--api/--stdio/--script 명시 > positional 자동 감지
+  let type = flags["type"] as "mcp" | "cli" | "api" | "grpc" | "graphql" | "script" | undefined;
   if (!type && flags["graphql"]) type = "graphql";
   if (!type && flags["grpc"]) type = "grpc";
   if (!type && flags["api"]) type = "api";
+  if (!type && flags["script"]) type = "script";
   if (!type && flags["url"]) type = "mcp";
   if (!type && flags["stdio"]) type = "mcp";
   if (!type && flags["sse"]) type = "mcp";
@@ -310,7 +333,19 @@ async function runAdd(args: string[]): Promise<void> {
       type = "cli";
     }
   }
-  if (!type) die("Cannot detect type. Provide <command-or-url> or --type mcp|cli|api|grpc|graphql");
+  if (!type) die("Cannot detect type. Provide <command-or-url> or --type mcp|cli|api|grpc|graphql|script");
+
+  if (type === "script") {
+    const description = flags["description"];
+    await addTarget(name, "script", {
+      ...(description ? { description } : {}),
+      commands: {},
+      allow,
+      deny,
+    });
+    console.log(`Added script target "${name}". Edit config: ~/.clip/target/script/${name}/config.yml`);
+    return;
+  }
 
   if (type === "graphql") {
     const endpoint = flags["endpoint"] ?? positionals[0];
@@ -406,7 +441,11 @@ async function runBind(args: string[]): Promise<void> {
   const flag = args[0];
   if (flag === "--all") {
     const config = await loadConfig();
-    const names = [...Object.keys(config.cli), ...Object.keys(config.mcp), ...Object.keys(config.api), ...Object.keys(config.grpc), ...Object.keys(config.graphql)];
+    const names = [
+      ...Object.keys(config.cli), ...Object.keys(config.mcp),
+      ...Object.keys(config.api), ...Object.keys(config.grpc),
+      ...Object.keys(config.graphql), ...Object.keys(config.script),
+    ];
     if (names.length === 0) { console.log("No targets configured."); return; }
     for (const name of names) await bindTarget(name);
     return;
@@ -457,8 +496,8 @@ async function runConfigCmd(args: string[]): Promise<void> {
 
 async function printTargetHelp(
   name: string,
-  type: "cli" | "mcp" | "api" | "grpc" | "graphql",
-  target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget,
+  type: "cli" | "mcp" | "api" | "grpc" | "graphql" | "script",
+  target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget | ScriptTarget,
 ): Promise<void> {
   let detail: string;
   if (type === "mcp") {
@@ -474,6 +513,10 @@ async function printTargetHelp(
     detail = `gRPC: ${(target as GrpcTarget).address}`;
   } else if (type === "graphql") {
     detail = `GraphQL: ${(target as GraphqlTarget).endpoint}`;
+  } else if (type === "script") {
+    const st = target as ScriptTarget;
+    const cmdCount = Object.keys(st.commands ?? {}).length;
+    detail = st.description ? `Script: ${st.description}` : `Script target (${cmdCount} commands)`;
   } else {
     detail = `CLI command: ${(target as CliTarget).command}`;
   }
@@ -499,7 +542,21 @@ async function printTargetHelp(
     console.log(`\nNo ACL restrictions.`);
   }
 
-  if (type === "mcp" || type === "api" || type === "grpc" || type === "graphql") {
+  const aliasList = listAliases(target as HasAliases);
+  if (aliasList.length > 0) {
+    console.log("\nAliases:");
+    for (const s of aliasList) {
+      const detail = s.input
+        ? JSON.stringify(s.input)
+        : s.args?.length
+          ? s.args.join(" ")
+          : "(pass-through)";
+      const desc = s.description ? `  — ${s.description}` : "";
+      console.log(`  ${s.name.padEnd(20)} → ${s.subcommand}  ${detail}${desc}`);
+    }
+  }
+
+  if (type === "mcp" || type === "api" || type === "grpc" || type === "graphql" || type === "script") {
     console.log(`\nRun: clip ${name} tools  — to list available tools`);
   }
   if (type === "api") {
@@ -558,6 +615,7 @@ async function main(): Promise<void> {
   if (targetName === "binds") { await runBinds(); return; }
   if (targetName === "completion") { await runCompletionCmd(rest.slice(1)); return; }
   if (targetName === "profile") { await runProfileCmd(rest.slice(1)); return; }
+  if (targetName === "alias") { await runAliasCmd(rest.slice(1)); return; }
 
   if (targetName === "refresh") {
     const name = rest[1];
@@ -632,8 +690,8 @@ async function main(): Promise<void> {
   const { type } = resolved;
   const target = mergedTarget;
 
-  const subcommand = rest[1];
-  if (!subcommand || subcommand === "--help" || subcommand === "-h") {
+  const rawSubcommand = rest[1];
+  if (!rawSubcommand || rawSubcommand === "--help" || rawSubcommand === "-h") {
     await printTargetHelp(baseName, type, target);
     process.exit(0);
   }
@@ -644,12 +702,36 @@ async function main(): Promise<void> {
   const effectiveJsonMode = jsonMode || rawTargetArgs.includes("--json");
   const effectivePipeMode = pipeMode || rawTargetArgs.includes("--pipe");
   const effectivePassthrough = !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode;
-  const targetArgs = rawTargetArgs.filter((a) => !LATE_FLAGS.has(a));
+  const lateFiltered = rawTargetArgs.filter((a) => !LATE_FLAGS.has(a));
+
+  // alias --help: show alias definition instead of executing
+  const hasHelpFlag = lateFiltered.includes("--help") || lateFiltered.includes("-h");
+  if (hasHelpFlag) {
+    const def = (target as HasAliases).aliases?.[rawSubcommand];
+    if (def) {
+      const lines = [`Alias: ${rawSubcommand}  →  ${def.subcommand}`];
+      if (def.args?.length) lines.push(`  args:   ${def.args.join(" ")}`);
+      if (def.input) lines.push(`  input:  ${JSON.stringify(def.input)}`);
+      if (def.description) lines.push(`  desc:   ${def.description}`);
+      console.log(lines.join("\n"));
+      process.exit(0);
+    }
+  }
+
+  // alias resolution (after profile merge, before ACL check)
+  const targetEnv = (target as { env?: Record<string, string> }).env ?? {};
+  const aliasHit = resolveAlias(
+    target as HasAliases,
+    rawSubcommand,
+    lateFiltered.filter((a) => a !== "--help" && a !== "-h"),
+    { ...process.env as Record<string, string>, ...targetEnv },
+  );
+  const subcommand = aliasHit ? aliasHit.subcommand : rawSubcommand;
+  const targetArgs = aliasHit ? aliasHit.args : lateFiltered;
 
   // ACL 체크 제외: --help 플래그, 또는 내장 메타 명령
   // tools: 모든 타입에서 ACL 우회 (discovery 명령)
   // describe/types: graphql·grpc 전용 메타 명령에서만 ACL 스킵
-  const hasHelpFlag = targetArgs.includes("--help") || targetArgs.includes("-h");
   const isBuiltinSubcommand =
     (subcommand === "tools" && type !== "cli") ||
     ((type === "graphql" || type === "grpc") && (subcommand === "describe" || subcommand === "types"));
@@ -674,6 +756,10 @@ async function main(): Promise<void> {
         ? await executeMcpSse(mcpTarget as McpSseTarget, config.headers, subcommand, targetArgs, targetName, effectiveDryRun)
         : await executeMcp(mcpTarget as McpHttpTarget, config.headers, subcommand, targetArgs, targetName, effectiveDryRun);
     formatOutput(result, effectiveJsonMode ? "json" : "plain", "mcp");
+  } else if (type === "script") {
+    const result = await executeScript(target as ScriptTarget, subcommand, targetArgs, effectivePassthrough && !effectiveDryRun, effectiveDryRun);
+    if (!effectivePassthrough || effectiveDryRun) formatOutput(result, effectiveJsonMode ? "json" : "plain", "script");
+    else process.exit(result.exitCode);
   } else {
     const result = await executeCli(target as CliTarget, subcommand, targetArgs, effectivePassthrough && !effectiveDryRun, effectiveDryRun);
     if (!effectivePassthrough || effectiveDryRun) formatOutput(result, effectiveJsonMode ? "json" : "plain", "cli");

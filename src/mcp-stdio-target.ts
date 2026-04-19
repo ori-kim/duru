@@ -1,6 +1,7 @@
 import type { McpStdioTarget } from "./config.ts";
 import { die } from "./errors.ts";
 import type { TargetResult } from "./output.ts";
+import { buildAliasSection } from "./alias.ts";
 
 // --- JSON-RPC 타입 ---
 
@@ -190,7 +191,8 @@ export async function executeMcpStdio(
     });
     const tools = result.tools ?? [];
     const text = tools.map((t) => `  ${t.name.padEnd(30)} ${t.description}`).join("\n");
-    return { stdout: tools.length ? `Tools:\n${text}` : "No tools available.", stderr: "", exitCode: 0 };
+    const scripts = buildAliasSection(target);
+    return { stdout: tools.length ? `Tools:\n${text}\n${scripts}` : `No tools available.${scripts}`, stderr: "", exitCode: 0 };
   }
 
   // tool call

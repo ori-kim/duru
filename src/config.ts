@@ -1,6 +1,6 @@
 import { readdirSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { join, isAbsolute, resolve, dirname } from "path";
 import YAML from "yaml";
 import { z } from "zod";
 import { die } from "./errors.ts";
@@ -18,6 +18,17 @@ const aclFields = {
   allow: z.array(z.string()).optional(),
   deny: z.array(z.string()).optional(),
   acl: aclTreeSchema.optional(),
+};
+
+const aliasSchema = z.object({
+  subcommand: z.string().min(1),
+  args: z.array(z.string()).optional(),
+  input: z.record(z.unknown()).optional(),
+  description: z.string().optional(),
+});
+
+const aliasFields = {
+  aliases: z.record(aliasSchema).optional(),
 };
 
 export const profileOverrideSchema = z.object({
@@ -46,6 +57,7 @@ const mcpHttpTargetSchema = z.object({
   auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
   ...aclFields,
   ...profileFields,
+  ...aliasFields,
 });
 
 // STDIO MCP (transport: "stdio" 명시 필수)
@@ -56,6 +68,7 @@ const mcpStdioTargetSchema = z.object({
   env: z.record(z.string()).optional(),
   ...aclFields,
   ...profileFields,
+  ...aliasFields,
 });
 
 // SSE MCP (transport: "sse" — legacy MCP SSE transport)
@@ -66,6 +79,7 @@ const mcpSseTargetSchema = z.object({
   auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
   ...aclFields,
   ...profileFields,
+  ...aliasFields,
 });
 
 // stdio/sse를 먼저 체크하여 기존 설정(transport 없음)은 http로 폴백
@@ -79,6 +93,7 @@ const cliTargetSchema = z.object({
   deny: z.array(z.string()).optional(),
   acl: aclTreeSchema.optional(),
   ...profileFields,
+  ...aliasFields,
 });
 
 const apiTargetSchema = z.object({
@@ -88,6 +103,7 @@ const apiTargetSchema = z.object({
   auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
   ...aclFields,
   ...profileFields,
+  ...aliasFields,
 });
 
 const graphqlTargetSchema = z.object({
@@ -97,6 +113,7 @@ const graphqlTargetSchema = z.object({
   oauth: z.boolean().optional(),
   ...aclFields,
   ...profileFields,
+  ...aliasFields,
 });
 
 const grpcTargetSchema = z.object({
@@ -112,6 +129,33 @@ const grpcTargetSchema = z.object({
   oauth: z.boolean().optional(),
   ...aclFields,
   ...profileFields,
+  ...aliasFields,
+});
+
+const RESERVED_SCRIPT_CMDS = ["tools", "describe", "types", "refresh", "login", "logout"];
+
+const scriptCommandSchema = z.object({
+  script: z.string().min(1).optional(),
+  file: z.string().min(1).optional(),
+  description: z.string().optional(),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string()).optional(),
+}).refine((d) => !!d.script !== !!d.file, {
+  message: "exactly one of `script` or `file` must be set",
+});
+
+const scriptTargetSchema = z.object({
+  description: z.string().optional(),
+  commands: z.record(scriptCommandSchema)
+    .refine(
+      (m) => Object.keys(m).every((k) => !RESERVED_SCRIPT_CMDS.includes(k)),
+      { message: `command names cannot be reserved: ${RESERVED_SCRIPT_CMDS.join(", ")}` },
+    )
+    .default({}),
+  env: z.record(z.string()).optional(),
+  ...aclFields,
+  ...profileFields,
+  ...aliasFields,
 });
 
 const TARGET_SCHEMAS = {
@@ -120,11 +164,13 @@ const TARGET_SCHEMAS = {
   api: apiTargetSchema,
   grpc: grpcTargetSchema,
   graphql: graphqlTargetSchema,
+  script: scriptTargetSchema,
 } as const;
 
 // --- Types ---
 
 export type ProfileOverride = z.infer<typeof profileOverrideSchema>;
+export type AliasDef = z.infer<typeof aliasSchema>;
 export type AclNode = z.infer<typeof aclNodeSchema>;
 export type AclTree = z.infer<typeof aclTreeSchema>;
 export type McpHttpTarget = z.infer<typeof mcpHttpTargetSchema>;
@@ -135,6 +181,8 @@ export type CliTarget = z.infer<typeof cliTargetSchema>;
 export type ApiTarget = z.infer<typeof apiTargetSchema>;
 export type GrpcTarget = z.infer<typeof grpcTargetSchema>;
 export type GraphqlTarget = z.infer<typeof graphqlTargetSchema>;
+export type ScriptCommandDef = z.infer<typeof scriptCommandSchema>;
+export type ScriptTarget = z.infer<typeof scriptTargetSchema>;
 export type Config = {
   headers?: Record<string, string>;
   cli: Record<string, CliTarget>;
@@ -142,6 +190,7 @@ export type Config = {
   api: Record<string, ApiTarget>;
   grpc: Record<string, GrpcTarget>;
   graphql: Record<string, GraphqlTarget>;
+  script: Record<string, ScriptTarget>;
 };
 
 export type ResolvedTarget =
@@ -149,14 +198,15 @@ export type ResolvedTarget =
   | { type: "mcp"; target: McpTarget }
   | { type: "api"; target: ApiTarget }
   | { type: "grpc"; target: GrpcTarget }
-  | { type: "graphql"; target: GraphqlTarget };
+  | { type: "graphql"; target: GraphqlTarget }
+  | { type: "script"; target: ScriptTarget };
 
 // --- Paths ---
 
 export const CONFIG_DIR = join(homedir(), ".clip");
 export const TARGET_DIR = join(CONFIG_DIR, "target");
 
-const TARGET_TYPES = ["cli", "mcp", "api", "grpc", "graphql"] as const;
+const TARGET_TYPES = ["cli", "mcp", "api", "grpc", "graphql", "script"] as const;
 type TargetType = typeof TARGET_TYPES[number];
 
 // --- Helpers ---
@@ -183,6 +233,14 @@ function subRecord(
   );
 }
 
+function resolveScriptPath(file: string, baseDir: string): string {
+  if (file.startsWith("~/") || file === "~") {
+    return join(homedir(), file.slice(1));
+  }
+  if (isAbsolute(file)) return file;
+  return resolve(baseDir, file);
+}
+
 // --- Load ---
 
 export async function loadConfig(): Promise<Config> {
@@ -192,6 +250,7 @@ export async function loadConfig(): Promise<Config> {
   const api: Record<string, ApiTarget> = {};
   const grpc: Record<string, GrpcTarget> = {};
   const graphql: Record<string, GraphqlTarget> = {};
+  const script: Record<string, ScriptTarget> = {};
 
   for (const type of TARGET_TYPES) {
     const typeDir = join(TARGET_DIR, type);
@@ -242,11 +301,21 @@ export async function loadConfig(): Promise<Config> {
       } else if (type === "graphql") {
         const t = result.data as GraphqlTarget;
         graphql[name] = { ...t, headers: subRecord(t.headers, env) };
+      } else if (type === "script") {
+        const t = result.data as ScriptTarget;
+        const configDir = dirname(configPath);
+        const resolvedCommands: ScriptTarget["commands"] = {};
+        for (const [cmd, def] of Object.entries(t.commands)) {
+          resolvedCommands[cmd] = def.file
+            ? { ...def, file: resolveScriptPath(def.file, configDir) }
+            : def;
+        }
+        script[name] = { ...t, commands: resolvedCommands };
       }
     }
   }
 
-  return { cli, mcp, api, grpc, graphql };
+  return { cli, mcp, api, grpc, graphql, script };
 }
 
 // --- Management helpers ---
@@ -256,15 +325,17 @@ export async function addTarget(name: string, type: "mcp", target: McpTarget): P
 export async function addTarget(name: string, type: "api", target: ApiTarget): Promise<void>;
 export async function addTarget(name: string, type: "grpc", target: GrpcTarget): Promise<void>;
 export async function addTarget(name: string, type: "graphql", target: GraphqlTarget): Promise<void>;
+export async function addTarget(name: string, type: "script", target: ScriptTarget): Promise<void>;
 export async function addTarget(
   name: string,
   type: TargetType,
-  target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget,
+  target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget | ScriptTarget,
 ): Promise<void> {
   const config = await loadConfig();
   const allNames = new Set([
     ...Object.keys(config.cli), ...Object.keys(config.mcp),
-    ...Object.keys(config.api), ...Object.keys(config.grpc), ...Object.keys(config.graphql),
+    ...Object.keys(config.api), ...Object.keys(config.grpc),
+    ...Object.keys(config.graphql), ...Object.keys(config.script),
   ]);
   if (allNames.has(name) && !config[type]?.[name]) {
     die(`Target name "${name}" is already used by another type. Choose a different name.`);
@@ -307,6 +378,7 @@ export function getTarget(config: Config, name: string): ResolvedTarget {
   if (config.api[name]) return { type: "api", target: config.api[name]! };
   if (config.grpc[name]) return { type: "grpc", target: config.grpc[name]! };
   if (config.graphql[name]) return { type: "graphql", target: config.graphql[name]! };
+  if (config.script[name]) return { type: "script", target: config.script[name]! };
   die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }
 

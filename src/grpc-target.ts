@@ -7,6 +7,7 @@ import { formatToolHelp, parseToolArgs } from "./mcp-target.ts";
 import { getStoredAuthHeaders, refreshIfExpiring } from "./oauth.ts";
 import type { TargetResult } from "./output.ts";
 import { buildJsonSchema, isWellKnownOrScalar, parseMessageDescribe, parseServiceDescribe } from "./grpc-schema.ts";
+import { buildAliasSection } from "./alias.ts";
 import type { ParsedDescribe } from "./grpc-schema.ts";
 
 const GRPC_DIR = join(homedir(), ".clip", "target", "grpc");
@@ -275,7 +276,7 @@ export async function executeGrpc(
         lines.push(`  ${name.padEnd(28)} ${reqShort}${suffix}`);
       }
     }
-    return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
+    return { exitCode: 0, stdout: `${lines.join("\n")}\n${buildAliasSection(target)}`, stderr: "" };
   }
 
   if (subcommand === "describe") {

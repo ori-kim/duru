@@ -5,7 +5,7 @@ export type TargetResult = {
 };
 
 export type OutputMode = "plain" | "json";
-export type TargetType = "mcp" | "cli" | "api" | "grpc" | "graphql";
+export type TargetType = "mcp" | "cli" | "api" | "grpc" | "graphql" | "script";
 
 export function formatOutput(result: TargetResult, mode: OutputMode, _targetType: TargetType): void {
   if (result.stderr) {
