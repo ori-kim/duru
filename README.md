@@ -12,6 +12,7 @@ A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules,
 - [Install](#install)
 - [Quick Start](#quick-start)
 - [Commands](#commands)
+- [Extensions](#extensions)
 - [Documentation](#documentation)
 - [Development](#development)
 
@@ -117,6 +118,24 @@ clip gql query --query '{ users { id name } }'
 
 Flags can be placed anywhere: `clip gh pr list --json`, `clip petstore getPetById --petId 1 --dry-run`
 
+## Extensions
+
+Drop a `.ts` file into `~/.clip/extensions/` to add hooks or new target types:
+
+```ts
+// ~/.clip/extensions/trace.ts
+export default {
+  name: "my:trace",
+  init(api) {
+    api.registerHook("toolcall", (ctx) => {
+      api.logger.info(`→ ${ctx.targetName} ${ctx.subcommand}`);
+    });
+  },
+};
+```
+
+See [docs/en/08-extensions.md](docs/en/08-extensions.md) for the full API: hook phases, target type registration, error handlers, and examples.
+
 ## Documentation
 
 - [Targets overview](docs/en/01-targets.md) — target types, profiles, ACL, global flags
@@ -126,6 +145,7 @@ Flags can be placed anywhere: `clip gh pr list --json`, `clip petstore getPetByI
 - [gRPC target](docs/en/05-grpc.md) — protobuf services, schema refresh, dry run
 - [GraphQL target](docs/en/06-graphql.md) — introspection, queries, mutations, auth
 - [Aliases & Scripts](docs/en/07-aliases.md) — shortcut macros and script bundles
+- [Extensions](docs/en/08-extensions.md) — hooks, new target types, error handlers
 
 ## Development
 

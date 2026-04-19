@@ -1,6 +1,6 @@
 {
   "name": "clip",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "type": "module",
   "bin": {
     "clip": "./clip"
@@ -10,7 +10,7 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "build:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 ./src/clip.ts --outfile=dist/clip-darwin-arm64",
-    "build:darwin-x64":   "bun build --compile --target=bun-darwin-x64   ./src/clip.ts --outfile=dist/clip-darwin-x64",
+    "build:darwin-x64": "bun build --compile --target=bun-darwin-x64   ./src/clip.ts --outfile=dist/clip-darwin-x64",
     "build": "bun run build:darwin-arm64 && bun run build:darwin-x64"
   },
   "dependencies": {

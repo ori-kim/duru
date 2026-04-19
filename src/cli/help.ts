@@ -2,7 +2,7 @@ import { type HasAliases, listAliases } from "../commands/alias.ts";
 import { BIND_DIR } from "../commands/bind.ts";
 import type { ApiTarget, CliTarget, GraphqlTarget, GrpcTarget, McpTarget, ScriptTarget } from "../config.ts";
 
-export const VERSION = "0.6.4";
+export const VERSION = "0.7.2";
 
 export const HELP = `
 clip — CLI proxy for MCP servers and CLI tools
