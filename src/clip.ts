@@ -203,76 +203,113 @@ async function runList(): Promise<void> {
   }
 
   const bound = new Set(await listBound());
+  const tty = process.stdout.isTTY;
+  const c = (code: string, text: string) => tty ? `\x1b[${code}m${text}\x1b[0m` : text;
 
-  console.log("Targets:");
-  for (const [name, b] of [...cliEntries].sort(([a], [b]) => a.localeCompare(b))) {
-    const bindTag = bound.has(name) ? " [bind]" : "";
-    const profileTag = b.active ? ` @${b.active}` : "";
-    console.log(`  ${name.padEnd(16)} [cli]${bindTag} ${b.command}${profileTag}${formatAcl(b)}`);
-  }
-  for (const [name, b] of [...mcpEntries].sort(([a], [b]) => a.localeCompare(b))) {
-    const bindTag = bound.has(name) ? " [bind]" : "";
-    if (b.transport === "stdio") {
+  const COLORS = {
+    cli:     "32",
+    mcp:     "33",
+    api:     "36",
+    grpc:    "1;34",
+    graphql: "38;5;205",
+    script:  "38;5;245",
+  } as const;
+  type GroupKey = keyof typeof COLORS;
+
+  let first = true;
+  const printHeader = (key: GroupKey) => {
+    if (!first) console.log();
+    first = false;
+    console.log(c(COLORS[key], `── ${key} ──`));
+  };
+  const nm = (key: GroupKey, name: string) => c(COLORS[key], name.padEnd(16));
+  const bind = (name: string) => bound.has(name) ? c("2", " [bind]") : "";
+
+  if (cliEntries.length > 0) {
+    printHeader("cli");
+    for (const [name, b] of [...cliEntries].sort(([a], [b]) => a.localeCompare(b))) {
       const profileTag = b.active ? ` @${b.active}` : "";
-      console.log(`  ${name.padEnd(16)} [mcp]${bindTag} ${b.command}${profileTag}${formatAcl(b)}`);
-    } else {
-      const authStatus = await getAuthStatus(name);
-      const statusTag = authStatus
-        ? `  [${authStatus}]`
-        : b.auth === "oauth"
-          ? "  [not authenticated]"
-          : b.auth === "apikey"
-            ? "  [api key]"
-            : "  [no auth]";
-      const transportLabel = b.transport === "sse" ? "SSE: " : "";
-      const profileTag = b.active ? ` @${b.active}` : "";
-      console.log(`  ${name.padEnd(16)} [mcp]${bindTag} ${transportLabel}${b.url}${profileTag}${formatAcl(b)}${statusTag}`);
+      console.log(`  ${nm("cli", name)} ${b.command}${profileTag}${formatAcl(b)}${bind(name)}`);
     }
   }
-  for (const [name, b] of [...apiEntries].sort(([a], [b]) => a.localeCompare(b))) {
-    const bindTag = bound.has(name) ? " [bind]" : "";
-    const authStatus = await getAuthStatus(name, "api");
-    const statusTag = authStatus
-      ? `  [${authStatus}]`
-      : b.auth === "oauth"
-        ? "  [not authenticated]"
-        : b.auth === "apikey"
-          ? "  [api key]"
-          : "  [no auth]";
-    const profileTagApi = b.active ? ` @${b.active}` : "";
-    console.log(`  ${name.padEnd(16)} [api]${bindTag} ${b.baseUrl ?? b.openapiUrl ?? ""}${profileTagApi}${formatAcl(b)}${statusTag}`);
+
+  if (mcpEntries.length > 0) {
+    printHeader("mcp");
+    for (const [name, b] of [...mcpEntries].sort(([a], [b]) => a.localeCompare(b))) {
+      if (b.transport === "stdio") {
+        const profileTag = b.active ? ` @${b.active}` : "";
+        console.log(`  ${nm("mcp", name)} stdio: ${b.command}${profileTag}${formatAcl(b)}${bind(name)}`);
+      } else {
+        const authStatus = await getAuthStatus(name);
+        const statusTag = authStatus
+          ? c("2", `  [${authStatus}]`)
+          : b.auth === "oauth"
+            ? c("2", "  [not authenticated]")
+            : b.auth === "apikey"
+              ? c("2", "  [api key]")
+              : c("2", "  [no auth]");
+        const transportLabel = b.transport === "sse" ? "sse: " : "";
+        const profileTag = b.active ? ` @${b.active}` : "";
+        console.log(`  ${nm("mcp", name)} ${transportLabel}${b.url}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}`);
+      }
+    }
   }
-  for (const [name, b] of [...grpcEntries].sort(([a], [b]) => a.localeCompare(b))) {
-    const bindTag = bound.has(name) ? " [bind]" : "";
-    const authStatus = b.oauth ? await getAuthStatus(name, "grpc") : null;
-    const statusTag = authStatus
-      ? `  [${authStatus}]`
-      : b.oauth
-        ? "  [not authenticated]"
-        : b.metadata?.["authorization"]
-          ? "  [api key]"
-          : "  [no auth]";
-    const profileTagGrpc = b.active ? ` @${b.active}` : "";
-    console.log(`  ${name.padEnd(16)} [grpc]${bindTag} ${b.address}${profileTagGrpc}${formatAcl(b)}${statusTag}`);
+
+  if (apiEntries.length > 0) {
+    printHeader("api");
+    for (const [name, b] of [...apiEntries].sort(([a], [b]) => a.localeCompare(b))) {
+      const authStatus = await getAuthStatus(name, "api");
+      const statusTag = authStatus
+        ? c("2", `  [${authStatus}]`)
+        : b.auth === "oauth"
+          ? c("2", "  [not authenticated]")
+          : b.auth === "apikey"
+            ? c("2", "  [api key]")
+            : c("2", "  [no auth]");
+      const profileTag = b.active ? ` @${b.active}` : "";
+      console.log(`  ${nm("api", name)} ${b.baseUrl ?? b.openapiUrl ?? ""}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}`);
+    }
   }
-  for (const [name, b] of [...graphqlEntries].sort(([a], [b]) => a.localeCompare(b))) {
-    const bindTag = bound.has(name) ? " [bind]" : "";
-    const authStatus = b.oauth ? await getAuthStatus(name, "graphql") : null;
-    const statusTag = authStatus
-      ? `  [${authStatus}]`
-      : b.oauth
-        ? "  [not authenticated]"
-        : b.headers?.["authorization"]
-          ? "  [api key]"
-          : "  [no auth]";
-    const profileTagGql = b.active ? ` @${b.active}` : "";
-    console.log(`  ${name.padEnd(16)} [gql]${bindTag} ${b.endpoint}${profileTagGql}${formatAcl(b)}${statusTag}`);
+
+  if (grpcEntries.length > 0) {
+    printHeader("grpc");
+    for (const [name, b] of [...grpcEntries].sort(([a], [b]) => a.localeCompare(b))) {
+      const authStatus = b.oauth ? await getAuthStatus(name, "grpc") : null;
+      const statusTag = authStatus
+        ? c("2", `  [${authStatus}]`)
+        : b.oauth
+          ? c("2", "  [not authenticated]")
+          : b.metadata?.["authorization"]
+            ? c("2", "  [api key]")
+            : c("2", "  [no auth]");
+      const profileTag = b.active ? ` @${b.active}` : "";
+      console.log(`  ${nm("grpc", name)} ${b.address}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}`);
+    }
   }
-  for (const [name, b] of [...scriptEntries].sort(([a], [b]) => a.localeCompare(b))) {
-    const bindTag = bound.has(name) ? " [bind]" : "";
-    const cmdCount = Object.keys(b.commands ?? {}).length;
-    const desc = b.description ? ` — ${b.description}` : "";
-    console.log(`  ${name.padEnd(16)} [script]${bindTag} ${cmdCount} command(s)${desc}${formatAcl(b)}`);
+
+  if (graphqlEntries.length > 0) {
+    printHeader("graphql");
+    for (const [name, b] of [...graphqlEntries].sort(([a], [b]) => a.localeCompare(b))) {
+      const authStatus = b.oauth ? await getAuthStatus(name, "graphql") : null;
+      const statusTag = authStatus
+        ? c("2", `  [${authStatus}]`)
+        : b.oauth
+          ? c("2", "  [not authenticated]")
+          : b.headers?.["authorization"]
+            ? c("2", "  [api key]")
+            : c("2", "  [no auth]");
+      const profileTag = b.active ? ` @${b.active}` : "";
+      console.log(`  ${nm("graphql", name)} ${b.endpoint}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}`);
+    }
+  }
+
+  if (scriptEntries.length > 0) {
+    printHeader("script");
+    for (const [name, b] of [...scriptEntries].sort(([a], [b]) => a.localeCompare(b))) {
+      const cmdCount = Object.keys(b.commands ?? {}).length;
+      const desc = b.description ? ` — ${b.description}` : "";
+      console.log(`  ${nm("script", name)} ${cmdCount} command(s)${desc}${formatAcl(b)}${bind(name)}`);
+    }
   }
 }
 

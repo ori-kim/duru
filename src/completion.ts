@@ -16,17 +16,22 @@ zstyle ':completion:*:*:clip:*' group-name ''
 zstyle ':completion:*:*:clip:*' verbose yes
 
 # Group header format (colored)
-zstyle ':completion:*:*:clip:*:cli-targets' format '%F{green}── %d ──%f'
-zstyle ':completion:*:*:clip:*:mcp-targets' format '%F{yellow}── %d ──%f'
-zstyle ':completion:*:*:clip:*:api-targets' format '%F{cyan}── %d ──%f'
-zstyle ':completion:*:*:clip:*:builtins'    format '%B%F{blue}── %d ──%f%b'
-zstyle ':completion:*:*:clip:*:tools'       format '%F{246}── %d ──%f'
+zstyle ':completion:*:*:clip:*:cli-targets'     format '%F{green}── %d ──%f'
+zstyle ':completion:*:*:clip:*:mcp-targets'     format '%F{yellow}── %d ──%f'
+zstyle ':completion:*:*:clip:*:api-targets'     format '%F{cyan}── %d ──%f'
+zstyle ':completion:*:*:clip:*:grpc-targets'    format '%B%F{blue}── %d ──%f%b'
+zstyle ':completion:*:*:clip:*:graphql-targets' format '%F{205}── %d ──%f'
+zstyle ':completion:*:*:clip:*:script-targets'  format '%F{245}── %d ──%f'
+zstyle ':completion:*:*:clip:*:builtins'        format '── %d ──'
+zstyle ':completion:*:*:clip:*:tools'           format '%F{246}── %d ──%f'
 
 # Item colors per group
-zstyle ':completion:*:*:clip:*:cli-targets' list-colors '=*=32'
-zstyle ':completion:*:*:clip:*:mcp-targets' list-colors '=*=33'
-zstyle ':completion:*:*:clip:*:api-targets' list-colors '=*=36'
-zstyle ':completion:*:*:clip:*:builtins'    list-colors '=*=34;1'
+zstyle ':completion:*:*:clip:*:cli-targets'     list-colors '=*=32'
+zstyle ':completion:*:*:clip:*:mcp-targets'     list-colors '=*=33'
+zstyle ':completion:*:*:clip:*:api-targets'     list-colors '=*=36'
+zstyle ':completion:*:*:clip:*:grpc-targets'    list-colors '=*=34;1'
+zstyle ':completion:*:*:clip:*:graphql-targets' list-colors '=*=38;5;205'
+zstyle ':completion:*:*:clip:*:script-targets'  list-colors '=*=38;5;245'
 
 _clip_cache_policy() {
   local -a outdated
@@ -51,7 +56,7 @@ _clip() {
       'skills:install AI agent integration (claude-code, gemini, ...)'
       'completion:generate shell completion script'
     )
-    local -a cli_targets=() mcp_targets=() api_targets=()
+    local -a cli_targets=() mcp_targets=() api_targets=() grpc_targets=() graphql_targets=() script_targets=()
     local t name detail
     for t in "$tdir"/cli/*(N/); do
       name="\${t:t}"
@@ -68,10 +73,28 @@ _clip() {
       detail=$(awk '/^baseUrl:/{b=$2} /^openapiUrl:/{u=$2} END{print (b?b:u)}' "$t/config.yml" 2>/dev/null)
       api_targets+=("$name:$detail")
     done
+    for t in "$tdir"/grpc/*(N/); do
+      name="\${t:t}"
+      detail=$(awk '/^address:/{print $2; exit}' "$t/config.yml" 2>/dev/null)
+      grpc_targets+=("$name:$detail")
+    done
+    for t in "$tdir"/graphql/*(N/); do
+      name="\${t:t}"
+      detail=$(awk '/^endpoint:/{print $2; exit}' "$t/config.yml" 2>/dev/null)
+      graphql_targets+=("$name:$detail")
+    done
+    for t in "$tdir"/script/*(N/); do
+      name="\${t:t}"
+      detail=$(awk '/^description:/{sub(/^description: */, ""); print; exit}' "$t/config.yml" 2>/dev/null)
+      script_targets+=("$name:$detail")
+    done
     # targets first, built-ins last
-    (( \${#cli_targets} )) && _describe -t cli-targets 'cli' cli_targets
-    (( \${#mcp_targets} )) && _describe -t mcp-targets 'mcp' mcp_targets
-    (( \${#api_targets} )) && _describe -t api-targets 'api' api_targets
+    (( \${#cli_targets} ))     && _describe -t cli-targets     'cli'     cli_targets
+    (( \${#mcp_targets} ))     && _describe -t mcp-targets     'mcp'     mcp_targets
+    (( \${#api_targets} ))     && _describe -t api-targets     'api'     api_targets
+    (( \${#grpc_targets} ))    && _describe -t grpc-targets    'grpc'    grpc_targets
+    (( \${#graphql_targets} )) && _describe -t graphql-targets 'graphql' graphql_targets
+    (( \${#script_targets} ))  && _describe -t script-targets  'script'  script_targets
     _describe -t builtins 'built-in' builtins
     return
   fi
