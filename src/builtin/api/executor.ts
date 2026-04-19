@@ -3,7 +3,7 @@ import { join } from "path";
 import YAML from "yaml";
 import { buildAliasSection } from "../../commands/alias.ts";
 import { handleOAuth401 } from "../../commands/oauth.ts";
-import type { TargetResult } from "../../extension.ts";
+import type { TargetResult, Tool } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
 import { parseOpenApi } from "../../schema/openapi.ts";
 import { die } from "../../utils/errors.ts";
@@ -263,4 +263,9 @@ export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promi
   }
 
   return { exitCode: 0, stdout, stderr: "" };
+}
+
+export async function describeApiTools(target: ApiTarget, targetName: string): Promise<Tool[]> {
+  const raw = await loadSpec(targetName, target.openapiUrl);
+  return parseOpenApi(raw).tools;
 }

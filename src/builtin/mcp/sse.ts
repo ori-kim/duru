@@ -5,6 +5,7 @@ import type { ExecutorContext } from "../../extension.ts";
 import { die } from "../../utils/errors.ts";
 import { formatToolHelp, parseToolArgs } from "../../utils/tool-args.ts";
 import type { McpSseTarget } from "./schema.ts";
+import { writeToolsCache } from "./tools-cache.ts";
 
 // --- JSON-RPC 타입 ---
 
@@ -244,6 +245,12 @@ export async function executeMcpSse(target: McpSseTarget, ctx: ExecutorContext):
     // tools/list
     const toolsResult = (await session.call("tools/list")) as { tools: McpTool[] };
     const tools: McpTool[] = toolsResult?.tools ?? [];
+
+    await writeToolsCache(targetName, tools).catch(() => {});
+
+    if (toolName === "refresh") {
+      return { exitCode: 0, stdout: `Refreshed "${targetName}" schema (${tools.length} tools)\n`, stderr: "" };
+    }
 
     if (toolName === "tools") {
       const scripts = buildAliasSection(target);

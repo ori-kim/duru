@@ -2,7 +2,9 @@ import { buildAliasSection } from "../../commands/alias.ts";
 import type { TargetResult } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
 import { die } from "../../utils/errors.ts";
+import { formatToolHelp, parseToolArgs as parseToolArgsTyped } from "../../utils/tool-args.ts";
 import type { McpStdioTarget } from "./schema.ts";
+import { writeToolsCache } from "./tools-cache.ts";
 
 // --- JSON-RPC 타입 ---
 
@@ -61,26 +63,6 @@ async function* readLines(stream: ReadableStream<Uint8Array>): AsyncGenerator<st
 function shellQuote(arg: string): string {
   if (/^[a-zA-Z0-9._\-/:=@,+]+$/.test(arg)) return arg;
   return `'${arg.replace(/'/g, "'\\''")}'`;
-}
-
-// --- tool args 파싱 (--key value 형식) ---
-
-function parseToolArgs(args: string[]): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i] ?? "";
-    if (a.startsWith("--")) {
-      const key = a.slice(2);
-      const val = args[i + 1];
-      if (val !== undefined && !val.startsWith("--")) {
-        result[key] = val;
-        i++;
-      } else {
-        result[key] = true;
-      }
-    }
-  }
-  return result;
 }
 
 // --- 세션 실행 ---
@@ -169,9 +151,11 @@ async function runStdioSession<T>(target: McpStdioTarget, action: (send: SendFn)
 // --- 공개 API ---
 
 export async function executeMcpStdio(target: McpStdioTarget, ctx: ExecutorContext): Promise<TargetResult> {
-  const { subcommand, args, dryRun } = ctx;
-  if (dryRun && subcommand !== "tools") {
-    const toolArgs = parseToolArgs(args);
+  const { subcommand, args, dryRun, targetName } = ctx;
+  const hasHelp = args.includes("--help") || args.includes("-h");
+
+  if (dryRun && subcommand !== "tools" && subcommand !== "refresh") {
+    const toolArgs = parseToolArgsTyped(args, {});
     const payload = JSON.stringify({
       jsonrpc: "2.0",
       id: 1,
@@ -182,13 +166,27 @@ export async function executeMcpStdio(target: McpStdioTarget, ctx: ExecutorConte
     return { exitCode: 0, stdout: `echo '${payload.replace(/'/g, "'\\''")}' | ${cmd}\n`, stderr: "" };
   }
 
-  if (subcommand === "tools") {
+  if (subcommand === "tools" || subcommand === "refresh" || hasHelp) {
     const result = await runStdioSession(target, async (send) => {
       const resp = await send({ jsonrpc: "2.0", method: "tools/list" });
       if (resp.error) die(`tools/list error: ${resp.error.message}`);
       return resp.result as { tools: McpTool[] };
     });
     const tools = result.tools ?? [];
+    await writeToolsCache(targetName, tools).catch(() => {});
+
+    if (subcommand === "refresh") {
+      return { exitCode: 0, stdout: `Refreshed "${targetName}" schema (${tools.length} tools)\n`, stderr: "" };
+    }
+
+    if (hasHelp) {
+      const tool = tools.find((t) => t.name === subcommand);
+      if (!tool) {
+        return { exitCode: 1, stdout: "", stderr: `Tool "${subcommand}" not found. Run: clip ${targetName} tools\n` };
+      }
+      return formatToolHelp(tool);
+    }
+
     const text = tools.map((t) => `  ${t.name.padEnd(30)} ${t.description}`).join("\n");
     const scripts = buildAliasSection(target);
     return {
@@ -200,7 +198,7 @@ export async function executeMcpStdio(target: McpStdioTarget, ctx: ExecutorConte
 
   // tool call
   const toolName = subcommand;
-  const toolArgs = parseToolArgs(args);
+  const toolArgs = parseToolArgsTyped(args, {});
 
   const result = await runStdioSession(target, async (send) => {
     const resp = await send({

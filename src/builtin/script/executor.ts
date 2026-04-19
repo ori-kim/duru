@@ -92,3 +92,4 @@ export async function executeScript(target: ScriptTarget, ctx: ExecutorContext):
   const stderr = await new Response(proc.stderr as ReadableStream<Uint8Array>).text();
   return { exitCode, stdout, stderr };
 }
+

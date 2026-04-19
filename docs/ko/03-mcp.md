@@ -60,13 +60,22 @@ clip logout notion
 # 사용 가능한 도구 목록
 clip notion tools
 
+# 도구 입력 스키마 확인 (캐시 기반 — 최초 이후 네트워크 불필요)
+clip notion search_pages --help
+clip notion --help search_pages   # --help 위치 자유
+
 # 도구 실행
 clip notion search_pages --query "스프린트 회고"
 clip notion get_page --page_id abc123
 clip notion create_page --parent_id def456 --title "새 페이지"
+```
 
-# 파라미터 확인
-clip notion search_pages --help
+tool schema는 최초 `tools` 조회 또는 `tools/call` 시 `~/.clip/target/mcp/notion/tools.json`에 캐시됩니다. 이후 `--help` 호출은 네트워크·인증 없이 즉시 응답합니다.
+
+캐시를 강제 갱신하려면:
+
+```sh
+clip notion refresh
 ```
 
 ### 동작 방식

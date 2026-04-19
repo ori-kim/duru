@@ -18,6 +18,7 @@ import { dispatch } from "./dispatch.ts";
 import { loadUserExtensions } from "./extension-loader.ts";
 import { printAndExit } from "./utils/errors.ts";
 import { formatOutput } from "./utils/output.ts";
+import { formatToolHelp } from "./utils/tool-args.ts";
 
 const registry = createDefaultRegistry();
 
@@ -110,14 +111,22 @@ async function main(): Promise<number> {
   const { type } = resolved;
   const target = mergedTarget;
 
-  const rawSubcommand = rest[1];
+  let rawSubcommand = rest[1];
+  let rawTargetArgsBase = rest.slice(2);
+
+  // clip <target> --help <tool> → treat --help as a flag, use next positional as subcommand
+  if ((rawSubcommand === "--help" || rawSubcommand === "-h") && rest[2] && !rest[2].startsWith("-")) {
+    rawSubcommand = rest[2];
+    rawTargetArgsBase = ["--help", ...rest.slice(3)];
+  }
+
   if (!rawSubcommand || rawSubcommand === "--help" || rawSubcommand === "-h") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await printTargetHelp(baseName, type as any, target);
     return 0;
   }
 
-  const rawTargetArgs = rest.slice(2);
+  const rawTargetArgs = rawTargetArgsBase;
   const LATE_FLAGS = new Set(["--dry-run", "--json", "--pipe", "--debug"]);
   const effectiveDryRun = dryRun || rawTargetArgs.includes("--dry-run");
   if (rawTargetArgs.includes("--debug")) process.env["CLIP_EXT_TRACE"] = "1";
@@ -127,16 +136,33 @@ async function main(): Promise<number> {
   const lateFiltered = rawTargetArgs.filter((a) => !LATE_FLAGS.has(a));
 
   const hasHelpFlag = lateFiltered.includes("--help") || lateFiltered.includes("-h");
-  if (hasHelpFlag) {
-    const def = (target as HasAliases).aliases?.[rawSubcommand];
-    if (def) {
-      const lines = [`Alias: ${rawSubcommand}  →  ${def.subcommand}`];
-      if (def.args?.length) lines.push(`  args:   ${def.args.join(" ")}`);
-      if (def.input) lines.push(`  input:  ${JSON.stringify(def.input)}`);
-      if (def.description) lines.push(`  desc:   ${def.description}`);
+  if (hasHelpFlag && rawSubcommand !== "tools") {
+    const aliasDef = (target as HasAliases).aliases?.[rawSubcommand];
+    if (aliasDef) {
+      const lines = [`Alias: ${rawSubcommand}  →  ${aliasDef.subcommand}`];
+      if (aliasDef.args?.length) lines.push(`  args:   ${aliasDef.args.join(" ")}`);
+      if (aliasDef.input) lines.push(`  input:  ${JSON.stringify(aliasDef.input)}`);
+      if (aliasDef.description) lines.push(`  desc:   ${aliasDef.description}`);
       console.log(lines.join("\n"));
       return 0;
     }
+
+    const def = registry.getTargetType(type);
+    if (def?.describeTools) {
+      const tools = await def.describeTools(target, { targetName: baseName });
+      if (tools !== null) {
+        const tool = tools.find((t) => t.name === rawSubcommand);
+        if (tool) {
+          const r = formatToolHelp(tool);
+          process.stdout.write(r.stdout);
+          return r.exitCode;
+        }
+        process.stderr.write(`Tool "${rawSubcommand}" not found. Run: clip ${baseName} tools\n`);
+        return 1;
+      }
+      // null = cache miss (mcp) → executor 경로로 fallback (executor 내부 --help 처리)
+    }
+    // describeTools 미구현(cli 등) → executor로 fallback
   }
 
   const result = await dispatch(

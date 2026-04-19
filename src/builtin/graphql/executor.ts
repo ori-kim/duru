@@ -3,7 +3,7 @@ import { homedir } from "os";
 import { join } from "path";
 import { buildAliasSection } from "../../commands/alias.ts";
 import { handleOAuth401 } from "../../commands/oauth.ts";
-import type { TargetResult } from "../../extension.ts";
+import type { TargetResult, Tool } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
 import {
   INTROSPECTION_QUERY,
@@ -338,4 +338,13 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
   const query = buildOperation(tool, variables, selection);
 
   return executeQuery(target, targetName, query, variables, opName, ctxHeaders);
+}
+
+export async function describeGraphqlTools(target: GraphqlTarget, targetName: string): Promise<Tool[]> {
+  const spec = await loadSchema(target, targetName);
+  return spec.tools.map((t) => ({
+    name: t.name,
+    description: t.description ?? "",
+    inputSchema: t.inputSchema,
+  }));
 }

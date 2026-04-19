@@ -3,7 +3,7 @@ import { homedir } from "os";
 import { join } from "path";
 import { buildAliasSection } from "../../commands/alias.ts";
 import { getStoredAuthHeaders, refreshIfExpiring } from "../../commands/oauth.ts";
-import type { TargetResult } from "../../extension.ts";
+import type { TargetResult, Tool } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
 import { buildJsonSchema, isWellKnownOrScalar, parseMessageDescribe, parseServiceDescribe } from "../../schema/grpc.ts";
 import type { ParsedDescribe } from "../../schema/grpc.ts";
@@ -427,4 +427,19 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
     stdout: "",
     stderr: grpcCode ? `gRPC [${grpcCode}]: ${result.stderr}` : result.stderr,
   };
+}
+
+export async function describeGrpcTools(target: GrpcTarget, targetName: string): Promise<Tool[]> {
+  await ensureGrpcurl();
+  validateTls(target);
+  const schema = await loadSchema(target, targetName);
+  const visible = schema.services.filter((s) => !HIDDEN_SERVICES.has(s.name));
+  const multiService = visible.length > 1;
+  return visible.flatMap((svc) =>
+    svc.methods.map((m) => ({
+      name: multiService ? `${svc.name.split(".").pop()}.${m.name}` : m.name,
+      description: `${m.requestType} → ${m.responseType}`,
+      inputSchema: m.inputSchema,
+    })),
+  );
 }

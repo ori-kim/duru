@@ -60,13 +60,22 @@ clip logout notion
 # List available tools
 clip notion tools
 
+# Show input schema for a tool (cached — no network after first use)
+clip notion search_pages --help
+clip notion --help search_pages   # --help position is flexible
+
 # Call a tool
 clip notion search_pages --query "sprint retro"
 clip notion get_page --page_id abc123
 clip notion create_page --parent_id def456 --title "New page"
+```
 
-# Show parameters for a tool
-clip notion search_pages --help
+Tool schemas are cached in `~/.clip/target/mcp/notion/tools.json` after the first `tools` or `tools/call` request. Subsequent `--help` calls are instant and require no network or authentication.
+
+To force-refresh the cache:
+
+```sh
+clip notion refresh
 ```
 
 ### How It Works

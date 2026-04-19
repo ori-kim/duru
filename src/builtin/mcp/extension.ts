@@ -10,6 +10,7 @@ import {
 } from "./schema.ts";
 import { executeMcpSse } from "./sse.ts";
 import { executeMcpStdio } from "./stdio.ts";
+import { readToolsCache } from "./tools-cache.ts";
 
 function executeMcpUnified(target: McpTarget, ctx: ExecutorContext): Promise<TargetResult> {
   if (target.transport === "stdio") return executeMcpStdio(target as McpStdioTarget, ctx);
@@ -24,6 +25,7 @@ export const extension: ClipExtension = {
       type: "mcp",
       schema: mcpTargetSchema,
       executor: (target, ctx) => executeMcpUnified(target as McpTarget, ctx),
+      describeTools: (_, { targetName }) => readToolsCache(targetName),
     });
   },
 };

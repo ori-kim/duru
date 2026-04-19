@@ -4,6 +4,12 @@ export type TargetResult = {
   stderr: string;
 };
 
+export type Tool = {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+};
+
 export type ExecutorContext = {
   targetName: string;
   subcommand: string;
@@ -55,6 +61,7 @@ export type TargetTypeDef<T = unknown> = {
   type: string;
   schema: AnySchema<T>;
   executor: (target: T, ctx: ExecutorContext) => Promise<TargetResult>;
+  describeTools?: (target: T, ctx: { targetName: string }) => Promise<Tool[] | null>;
 };
 
 export type HookOpts = {

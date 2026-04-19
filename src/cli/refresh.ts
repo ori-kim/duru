@@ -8,8 +8,8 @@ export async function runRefresh(args: string[], registry: Registry): Promise<vo
   if (!name) die("Usage: clip refresh <target>");
   const cfg = await loadConfig();
   const resolved = getTarget(cfg, name);
-  if (!["api", "grpc", "graphql"].includes(resolved.type)) {
-    die(`"${name}" is not an API, gRPC, or GraphQL target. refresh only applies to those types.`);
+  if (!["api", "grpc", "graphql", "mcp"].includes(resolved.type)) {
+    die(`"${name}" is not an API, gRPC, GraphQL, or MCP target. refresh only applies to those types.`);
   }
   const result = await dispatch(
     cfg,

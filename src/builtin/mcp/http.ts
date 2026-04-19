@@ -5,6 +5,7 @@ import type { ExecutorContext } from "../../extension.ts";
 import { die } from "../../utils/errors.ts";
 import { formatToolHelp, parseToolArgs } from "../../utils/tool-args.ts";
 import type { McpHttpTarget } from "./schema.ts";
+import { writeToolsCache } from "./tools-cache.ts";
 
 // --- JSON-RPC 타입 ---
 
@@ -210,6 +211,12 @@ export async function executeMcp(target: McpHttpTarget, ctx: ExecutorContext): P
   // 3. tools/list — help 출력 또는 schema 획득
   const toolsResult = (await mcpCall(session, "tools/list")) as { tools: McpTool[] };
   const tools: McpTool[] = toolsResult?.tools ?? [];
+
+  await writeToolsCache(targetName, tools).catch(() => {});
+
+  if (toolName === "refresh") {
+    return { exitCode: 0, stdout: `Refreshed "${targetName}" schema (${tools.length} tools)\n`, stderr: "" };
+  }
 
   if (toolName === "tools") {
     if (tools.length === 0) {
