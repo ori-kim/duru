@@ -27,18 +27,16 @@ A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules,
 
 ## Install
 
+Requires [Bun](https://bun.sh) ≥ 1.0.
+
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ori-kim/cli-proxy/main/install.sh | sh
+bun install -g github:ori-kim/cli-proxy
 ```
-
-Installs to `~/.local/bin/clip`. Set `CLIP_INSTALL_DIR` to override.
-
-**Manual:** [Latest release](https://github.com/ori-kim/cli-proxy/releases/latest) · macOS only (darwin-arm64, darwin-x64)
 
 Add to PATH if needed:
 
 ```sh
-export PATH="$PATH:$HOME/.local/bin"
+export PATH="$PATH:$HOME/.bun/bin"
 ```
 
 **Native bind** — route commands through clip without the `clip` prefix:
