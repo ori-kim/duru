@@ -1,164 +1,53 @@
 import { readdirSync } from "fs";
 import { homedir } from "os";
-import { join, isAbsolute, resolve, dirname } from "path";
+import { dirname, isAbsolute, join, resolve } from "path";
 import YAML from "yaml";
-import { z } from "zod";
-import { die } from "./errors.ts";
+import { type ApiTarget, apiTargetSchema } from "./builtin/api/schema.ts";
+import { type CliTarget, cliTargetSchema } from "./builtin/cli/schema.ts";
+import { type GraphqlTarget, graphqlTargetSchema } from "./builtin/graphql/schema.ts";
+import { type GrpcTarget, grpcTargetSchema } from "./builtin/grpc/schema.ts";
+import {
+  type McpHttpTarget,
+  type McpSseTarget,
+  type McpStdioTarget,
+  type McpTarget,
+  mcpTargetSchema,
+} from "./builtin/mcp/schema.ts";
+import { type ScriptCommandDef, type ScriptTarget, scriptTargetSchema } from "./builtin/script/schema.ts";
+import type { TargetResult } from "./extension.ts";
+import { die } from "./utils/errors.ts";
+import {
+  type AclNode,
+  type AclTree,
+  type AliasDef,
+  type ProfileOverride,
+  profileOverrideSchema,
+} from "./utils/target-schema.ts";
 
-// --- Schemas ---
-
-const aclNodeSchema = z.object({
-  allow: z.array(z.string()).optional(),
-  deny: z.array(z.string()).optional(),
-});
-
-const aclTreeSchema = z.record(aclNodeSchema);
-
-const aclFields = {
-  allow: z.array(z.string()).optional(),
-  deny: z.array(z.string()).optional(),
-  acl: aclTreeSchema.optional(),
+// Re-export for backward compatibility
+export { profileOverrideSchema };
+export type {
+  ProfileOverride,
+  AliasDef,
+  AclNode,
+  AclTree,
+  McpHttpTarget,
+  McpStdioTarget,
+  McpSseTarget,
+  McpTarget,
+  CliTarget,
+  ApiTarget,
+  GrpcTarget,
+  GraphqlTarget,
+  ScriptCommandDef,
+  ScriptTarget,
+  TargetResult,
 };
 
-const aliasSchema = z.object({
-  subcommand: z.string().min(1),
-  args: z.array(z.string()).optional(),
-  input: z.record(z.unknown()).optional(),
-  description: z.string().optional(),
-});
+export const TARGET_TYPES = ["cli", "mcp", "api", "grpc", "graphql", "script"] as const;
+export type TargetType = (typeof TARGET_TYPES)[number];
 
-const aliasFields = {
-  aliases: z.record(aliasSchema).optional(),
-};
-
-export const profileOverrideSchema = z.object({
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
-  command: z.string().optional(),
-  url: z.string().url().optional(),
-  endpoint: z.string().url().optional(),
-  address: z.string().optional(),
-  baseUrl: z.string().url().optional(),
-  openapiUrl: z.string().url().optional(),
-  headers: z.record(z.string()).optional(),
-  metadata: z.record(z.string()).optional(),
-});
-
-const profileFields = {
-  profiles: z.record(profileOverrideSchema).optional(),
-  active: z.string().optional(),
-};
-
-// HTTP MCP (기본값, 기존 설정 호환 — transport 미지정 시 "http"로 처리)
-const mcpHttpTargetSchema = z.object({
-  transport: z.literal("http").optional().default("http"),
-  url: z.string().url(),
-  headers: z.record(z.string()).optional(),
-  auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
-  ...aclFields,
-  ...profileFields,
-  ...aliasFields,
-});
-
-// STDIO MCP (transport: "stdio" 명시 필수)
-const mcpStdioTargetSchema = z.object({
-  transport: z.literal("stdio"),
-  command: z.string().min(1),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
-  ...aclFields,
-  ...profileFields,
-  ...aliasFields,
-});
-
-// SSE MCP (transport: "sse" — legacy MCP SSE transport)
-const mcpSseTargetSchema = z.object({
-  transport: z.literal("sse"),
-  url: z.string().url(),
-  headers: z.record(z.string()).optional(),
-  auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
-  ...aclFields,
-  ...profileFields,
-  ...aliasFields,
-});
-
-// stdio/sse를 먼저 체크하여 기존 설정(transport 없음)은 http로 폴백
-const mcpTargetSchema = z.union([mcpStdioTargetSchema, mcpSseTargetSchema, mcpHttpTargetSchema]);
-
-const cliTargetSchema = z.object({
-  command: z.string().min(1),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
-  allow: z.array(z.string()).optional(),
-  deny: z.array(z.string()).optional(),
-  acl: aclTreeSchema.optional(),
-  ...profileFields,
-  ...aliasFields,
-});
-
-const apiTargetSchema = z.object({
-  openapiUrl: z.string().url().optional(),
-  baseUrl: z.string().url().optional(),
-  headers: z.record(z.string()).optional(),
-  auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
-  ...aclFields,
-  ...profileFields,
-  ...aliasFields,
-});
-
-const graphqlTargetSchema = z.object({
-  endpoint: z.string().url(),
-  introspect: z.boolean().optional(),
-  headers: z.record(z.string()).optional(),
-  oauth: z.boolean().optional(),
-  ...aclFields,
-  ...profileFields,
-  ...aliasFields,
-});
-
-const grpcTargetSchema = z.object({
-  address: z.string().min(1),
-  plaintext: z.boolean().optional(),
-  proto: z.string().min(1).optional(),
-  importPaths: z.array(z.string()).optional(),
-  metadata: z.record(z.string()).optional(),
-  reflectMetadata: z.record(z.string()).optional(),
-  deadline: z.number().positive().optional(),
-  emitDefaults: z.boolean().optional(),
-  allowUnknownFields: z.boolean().optional(),
-  oauth: z.boolean().optional(),
-  ...aclFields,
-  ...profileFields,
-  ...aliasFields,
-});
-
-const RESERVED_SCRIPT_CMDS = ["tools", "describe", "types", "refresh", "login", "logout"];
-
-const scriptCommandSchema = z.object({
-  script: z.string().min(1).optional(),
-  file: z.string().min(1).optional(),
-  description: z.string().optional(),
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
-}).refine((d) => !!d.script !== !!d.file, {
-  message: "exactly one of `script` or `file` must be set",
-});
-
-const scriptTargetSchema = z.object({
-  description: z.string().optional(),
-  commands: z.record(scriptCommandSchema)
-    .refine(
-      (m) => Object.keys(m).every((k) => !RESERVED_SCRIPT_CMDS.includes(k)),
-      { message: `command names cannot be reserved: ${RESERVED_SCRIPT_CMDS.join(", ")}` },
-    )
-    .default({}),
-  env: z.record(z.string()).optional(),
-  ...aclFields,
-  ...profileFields,
-  ...aliasFields,
-});
-
-const TARGET_SCHEMAS = {
+export const TARGET_SCHEMAS = {
   cli: cliTargetSchema,
   mcp: mcpTargetSchema,
   api: apiTargetSchema,
@@ -169,20 +58,6 @@ const TARGET_SCHEMAS = {
 
 // --- Types ---
 
-export type ProfileOverride = z.infer<typeof profileOverrideSchema>;
-export type AliasDef = z.infer<typeof aliasSchema>;
-export type AclNode = z.infer<typeof aclNodeSchema>;
-export type AclTree = z.infer<typeof aclTreeSchema>;
-export type McpHttpTarget = z.infer<typeof mcpHttpTargetSchema>;
-export type McpStdioTarget = z.infer<typeof mcpStdioTargetSchema>;
-export type McpSseTarget = z.infer<typeof mcpSseTargetSchema>;
-export type McpTarget = McpHttpTarget | McpStdioTarget | McpSseTarget;
-export type CliTarget = z.infer<typeof cliTargetSchema>;
-export type ApiTarget = z.infer<typeof apiTargetSchema>;
-export type GrpcTarget = z.infer<typeof grpcTargetSchema>;
-export type GraphqlTarget = z.infer<typeof graphqlTargetSchema>;
-export type ScriptCommandDef = z.infer<typeof scriptCommandSchema>;
-export type ScriptTarget = z.infer<typeof scriptTargetSchema>;
 export type Config = {
   headers?: Record<string, string>;
   cli: Record<string, CliTarget>;
@@ -191,6 +66,7 @@ export type Config = {
   grpc: Record<string, GrpcTarget>;
   graphql: Record<string, GraphqlTarget>;
   script: Record<string, ScriptTarget>;
+  _ext: Record<string, Record<string, unknown>>; // extension 타겟: type -> name -> raw config
 };
 
 export type ResolvedTarget =
@@ -199,15 +75,13 @@ export type ResolvedTarget =
   | { type: "api"; target: ApiTarget }
   | { type: "grpc"; target: GrpcTarget }
   | { type: "graphql"; target: GraphqlTarget }
-  | { type: "script"; target: ScriptTarget };
+  | { type: "script"; target: ScriptTarget }
+  | { type: string; target: unknown }; // extension 타겟
 
 // --- Paths ---
 
 export const CONFIG_DIR = join(homedir(), ".clip");
 export const TARGET_DIR = join(CONFIG_DIR, "target");
-
-const TARGET_TYPES = ["cli", "mcp", "api", "grpc", "graphql", "script"] as const;
-type TargetType = typeof TARGET_TYPES[number];
 
 // --- Helpers ---
 
@@ -251,6 +125,7 @@ export async function loadConfig(): Promise<Config> {
   const grpc: Record<string, GrpcTarget> = {};
   const graphql: Record<string, GraphqlTarget> = {};
   const script: Record<string, ScriptTarget> = {};
+  const _ext: Record<string, Record<string, unknown>> = {};
 
   for (const type of TARGET_TYPES) {
     const typeDir = join(TARGET_DIR, type);
@@ -306,16 +181,48 @@ export async function loadConfig(): Promise<Config> {
         const configDir = dirname(configPath);
         const resolvedCommands: ScriptTarget["commands"] = {};
         for (const [cmd, def] of Object.entries(t.commands)) {
-          resolvedCommands[cmd] = def.file
-            ? { ...def, file: resolveScriptPath(def.file, configDir) }
-            : def;
+          resolvedCommands[cmd] = def.file ? { ...def, file: resolveScriptPath(def.file, configDir) } : def;
         }
         script[name] = { ...t, commands: resolvedCommands };
       }
     }
   }
 
-  return { cli, mcp, api, grpc, graphql, script };
+  // extension 타겟 타입: TARGET_DIR 아래 빌트인 외 타입 폴더의 raw config를 저장
+  const builtinSet = new Set<string>(TARGET_TYPES);
+  let extTypeDirs: string[];
+  try {
+    extTypeDirs = readdirSync(TARGET_DIR, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !builtinSet.has(d.name))
+      .map((d) => d.name);
+  } catch {
+    extTypeDirs = [];
+  }
+
+  for (const extType of extTypeDirs) {
+    const typeDir = join(TARGET_DIR, extType);
+    let names: string[];
+    try {
+      names = readdirSync(typeDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+    } catch {
+      continue;
+    }
+    _ext[extType] = {};
+    for (const name of names) {
+      const configPath = join(typeDir, name, "config.yml");
+      const file = Bun.file(configPath);
+      if (!(await file.exists())) continue;
+      try {
+        _ext[extType]![name] = YAML.parse(await file.text()) as unknown;
+      } catch {
+        /* 파싱 실패 시 skip */
+      }
+    }
+  }
+
+  return { cli, mcp, api, grpc, graphql, script, _ext };
 }
 
 // --- Management helpers ---
@@ -333,9 +240,13 @@ export async function addTarget(
 ): Promise<void> {
   const config = await loadConfig();
   const allNames = new Set([
-    ...Object.keys(config.cli), ...Object.keys(config.mcp),
-    ...Object.keys(config.api), ...Object.keys(config.grpc),
-    ...Object.keys(config.graphql), ...Object.keys(config.script),
+    ...Object.keys(config.cli),
+    ...Object.keys(config.mcp),
+    ...Object.keys(config.api),
+    ...Object.keys(config.grpc),
+    ...Object.keys(config.graphql),
+    ...Object.keys(config.script),
+    ...Object.values(config._ext ?? {}).flatMap((targets) => Object.keys(targets)),
   ]);
   if (allNames.has(name) && !config[type]?.[name]) {
     die(`Target name "${name}" is already used by another type. Choose a different name.`);
@@ -369,6 +280,22 @@ export async function removeTarget(name: string): Promise<void> {
       return;
     }
   }
+  const builtinSet = new Set<string>(TARGET_TYPES);
+  let extTypeDirs: string[];
+  try {
+    extTypeDirs = readdirSync(TARGET_DIR, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !builtinSet.has(d.name))
+      .map((d) => d.name);
+  } catch {
+    extTypeDirs = [];
+  }
+  for (const extType of extTypeDirs) {
+    const dir = join(TARGET_DIR, extType, name);
+    if (await Bun.file(join(dir, "config.yml")).exists()) {
+      await Bun.spawn(["rm", "-rf", dir]).exited;
+      return;
+    }
+  }
   die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }
 
@@ -379,6 +306,9 @@ export function getTarget(config: Config, name: string): ResolvedTarget {
   if (config.grpc[name]) return { type: "grpc", target: config.grpc[name]! };
   if (config.graphql[name]) return { type: "graphql", target: config.graphql[name]! };
   if (config.script[name]) return { type: "script", target: config.script[name]! };
+  for (const [extType, targets] of Object.entries(config._ext ?? {})) {
+    if (targets[name] !== undefined) return { type: extType, target: targets[name]! };
+  }
   die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }
 
