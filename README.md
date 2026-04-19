@@ -1,5 +1,7 @@
 # clip
 
+<img src="assets/icon.png" alt="clip icon" width="120" />
+
 [한국어](README.ko.md)
 
 A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules, handle OAuth auth, and integrate with AI agents from one command.

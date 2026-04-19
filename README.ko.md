@@ -1,5 +1,7 @@
 # clip
 
+<img src="assets/icon.png" alt="clip icon" width="120" />
+
 MCP 서버와 CLI 도구를 위한 통합 CLI 프록시 게이트웨이 — ACL 규칙 적용, OAuth 인증, AI 에이전트 통합을 하나의 커맨드로.
 
 ## 목차
