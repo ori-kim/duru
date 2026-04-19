@@ -1,6 +1,6 @@
 # Targets
 
-clip의 모든 동작은 **target**을 통해 이루어집니다. target은 외부 CLI 도구, MCP 서버, REST API를 clip 게이트웨이에 등록한 단위입니다.
+clip의 모든 동작은 **target**을 통해 이루어집니다. target은 외부 CLI 도구, MCP 서버, API를 clip 게이트웨이에 등록한 단위입니다.
 
 등록된 target은 다음과 같이 실행합니다:
 
@@ -12,11 +12,14 @@ clip <target> <subcommand> [args...]
 
 | 종류 | 설명 | 예시 |
 |------|------|------|
-| [CLI](./cli.md) | 로컬 CLI 명령어를 ACL로 감싸 실행 | `gh`, `gh`, `gh` |
-| [MCP (HTTP)](./mcp.md) | HTTP MCP 서버 (Streamable HTTP) | `notion`, `linear` |
-| [MCP (SSE)](./mcp.md#sse) | legacy SSE transport MCP 서버 | 구버전 MCP 서버 |
-| [MCP (STDIO)](./mcp.md#stdio) | 로컬 프로세스로 실행되는 MCP 서버 | `filesystem`, `sqlite` |
-| [API](./api.md) | OpenAPI 스펙 기반 REST API | GitHub REST API, Petstore |
+| [CLI](./02-cli.md) | 로컬 CLI 명령어를 ACL로 감싸 실행 | `gh`, `gh`, `gh` |
+| [MCP (HTTP)](./03-mcp.md) | HTTP MCP 서버 (Streamable HTTP) | `notion`, `linear` |
+| [MCP (SSE)](./03-mcp.md#sse) | legacy SSE transport MCP 서버 | 구버전 MCP 서버 |
+| [MCP (STDIO)](./03-mcp.md#stdio) | 로컬 프로세스로 실행되는 MCP 서버 | `filesystem`, `sqlite` |
+| [API](./04-api.md) | OpenAPI 스펙 기반 REST API | GitHub REST API, Petstore |
+| [gRPC](./05-grpc.md) | gRPC 서버 (reflection 또는 proto 파일) | 내부 서비스 |
+| [GraphQL](./06-graphql.md) | introspection 기반 GraphQL API | GraphQL 엔드포인트 |
+| [Script](./07-aliases.md#script-target) | 이름 있는 쉘 스크립트를 target으로 묶기 | 개발 자동화 |
 
 ## 등록 및 관리
 
@@ -26,6 +29,9 @@ clip add gh gh --deny delete
 clip add notion https://mcp.notion.com/mcp
 clip add myserver --sse https://example.com/sse
 clip add github https://api.github.com --openapi-url https://raw.githubusercontent.com/.../openapi.yaml
+clip add my-api localhost:50051 --grpc ./api.proto
+clip add gql https://api.example.com/graphql --graphql
+clip add my-scripts --script
 
 # 목록 확인
 clip list
@@ -43,6 +49,11 @@ clip remove gh
   api/<name>/config.yml
         spec.json          # 캐시된 OpenAPI 스펙
         auth.json          # OAuth / API key 토큰
+  grpc/<name>/config.yml
+        schema.json        # 캐시된 gRPC 스키마
+  graphql/<name>/config.yml
+        schema.json        # 캐시된 GraphQL 스키마
+  script/<name>/config.yml
 ```
 
 ## 공통 필드
@@ -71,6 +82,13 @@ auth: apikey       # 헤더로 직접 전달
 headers:
   Authorization: "Bearer ${GITHUB_TOKEN}"
   X-Custom-Header: "value"
+
+# Alias — 커스텀 서브커맨드 단축키
+aliases:
+  my-alias:
+    subcommand: real-subcommand
+    args: ["--flag", "value"]
+    description: "단축키 설명"
 ```
 
 `deny`가 `allow`보다 항상 우선합니다.
@@ -139,27 +157,14 @@ clip profile remove mygh alpha-kr
 - `env`, `headers`, `metadata`: target 기본값 위에 profile 값을 **병합** (profile 우선)
 - `allow`, `deny`, `acl`: target에서만 관리 (profile이 ACL 우회 불가)
 
-### config.yml 구조 예시
-
-```yaml
-command: gh
-allow: [get, describe, logs, top]
-profiles:
-  prod-kr:
-    args: [exec, example/prod/kr, --, gh]
-  alpha-kr:
-    args: [exec, example/alpha/kr, --, gh]
-active: prod-kr
-```
-
 ## 글로벌 플래그
 
 모든 target 실행 시 어디에든 붙일 수 있습니다:
 
 ```sh
-clip gh pr list --json            # JSON 출력
+clip gh pr list --json              # JSON 출력
 clip notion search_pages --dry-run  # curl 미리 확인
-clip gh pr list --pipe            # TTY라도 버퍼 모드 강제
+clip gh pr list --pipe              # TTY라도 버퍼 모드 강제
 ```
 
 | 플래그 | 설명 |

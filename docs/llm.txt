@@ -1,0 +1,387 @@
+# clip
+
+> A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules, handle OAuth auth, and integrate with AI agents from one command.
+
+clip wraps external CLI tools, MCP servers, REST/gRPC/GraphQL APIs behind a single gateway. Every call passes through ACL checks. OAuth tokens are managed per target.
+
+## Quick reference
+
+```sh
+clip <target> <subcommand> [args...]   # run any registered target
+clip list                               # list all targets
+clip <target> tools                     # list available operations
+clip <target> describe <op>            # show method/type details
+clip <target> types                    # list types (gRPC/GraphQL)
+```
+
+Global flags: `--json`, `--pipe`, `--dry-run` — can appear anywhere in the command.
+
+## Target types
+
+| Type | Register | Notes |
+|------|----------|-------|
+| CLI | `clip add <name> <cmd>` | wraps local command with ACL |
+| MCP HTTP | `clip add <name> <https://...mcp>` | Streamable HTTP, OAuth supported |
+| MCP SSE | `clip add <name> --sse <url>` | legacy SSE transport |
+| MCP STDIO | `clip add <name> --stdio <cmd>` | local process |
+| API | `clip add <name> <https://.../openapi.json>` | OpenAPI spec auto-generates tools |
+| gRPC | `clip add <name> <host:port> --grpc [proto]` | requires grpcurl in PATH |
+| GraphQL | `clip add <name> <https://.../graphql> --graphql` | introspection-based |
+| Script | `clip add <name> --script` | shell scripts bundled as target |
+
+---
+
+## CLI Target
+
+Registers a locally installed CLI tool. clip runs the command after ACL checks.
+
+```sh
+clip add gh gh --deny delete
+clip add gh gh --args "-c,my-cluster"
+```
+
+Config (`~/.clip/target/cli/gh/config.yml`):
+```yaml
+command: gh
+args: []
+env:
+  GH_TOKEN: "${GH_TOKEN}"
+allow: [pr, repo, issue]
+deny: [delete]
+acl:
+  pr:
+    allow: [list, view, create, checkout]
+  repo:
+    deny: [delete, rename]
+```
+
+Running:
+```sh
+clip gh pr list                     # passthrough (TTY)
+clip gh pr list --pipe              # buffered
+clip gh pr list --json              # JSON output
+clip gh pr list --label bug --dry-run   # preview command
+```
+
+Native bind — run without `clip` prefix:
+```sh
+clip bind gh
+export PATH="$HOME/.clip/bin:$PATH"
+gh pr list    # routes through clip
+```
+
+---
+
+## MCP Target
+
+### HTTP MCP
+
+```sh
+clip add notion https://mcp.notion.com/mcp
+clip login notion    # OAuth 2.1 PKCE
+```
+
+Config (`~/.clip/target/mcp/notion/config.yml`):
+```yaml
+transport: http
+url: https://mcp.notion.com/mcp
+auth: oauth           # or: apikey, false
+headers:
+  Authorization: "Bearer ${NOTION_API_KEY}"
+```
+
+Running:
+```sh
+clip notion tools
+clip notion search_pages --query "sprint retro"
+clip notion search_pages --query "sprint retro" --dry-run
+# curl -X POST 'https://mcp.notion.com/mcp' -H 'Authorization: Bearer ...' -d '{...}'
+```
+
+Protocol: JSON-RPC 2.0 — clip sends initialize → notifications/initialized → tools/list → tools/call.
+
+### SSE MCP (legacy)
+
+```sh
+clip add myserver --sse https://example.com/sse
+```
+
+Transport: persistent `GET /sse` stream + `POST /messages` for requests.
+
+### STDIO MCP
+
+```sh
+clip add fs --stdio npx -y @modelcontextprotocol/server-filesystem $HOME
+```
+
+Config:
+```yaml
+transport: stdio
+command: npx
+args: ["-y", "@modelcontextprotocol/server-filesystem", "$HOME"]
+env:
+  NOTION_API_KEY: "${NOTION_API_KEY}"
+```
+
+A new process is spawned for every invocation.
+
+---
+
+## API Target (OpenAPI)
+
+Reads an OpenAPI spec and auto-generates a CLI tool for each operation. Supports OpenAPI 3.x and Swagger 2.0.
+
+```sh
+clip add github https://api.github.com \
+  --openapi-url https://raw.githubusercontent.com/.../api.github.com.json
+```
+
+Config:
+```yaml
+baseUrl: https://api.github.com
+openapiUrl: https://raw.githubusercontent.com/.../api.github.com.json
+auth: apikey
+headers:
+  Authorization: "Bearer ${GITHUB_TOKEN}"
+  X-GitHub-Api-Version: "2022-11-28"
+allow: [pulls_list, repos_get]
+deny: [repos_delete]
+```
+
+Running:
+```sh
+clip github tools
+clip github pulls_list --owner ori-kim --repo cli-proxy --state open
+clip github pulls_get --owner ori-kim --repo cli-proxy --pull_number 1
+clip github pulls_list --owner ori-kim --repo cli-proxy --dry-run
+# curl -X GET 'https://api.github.com/repos/ori-kim/cli-proxy/pulls' -H 'Authorization: Bearer ...'
+```
+
+Parameters are auto-mapped to path/query/header/body based on spec. Tool names come from `operationId`.
+
+Refresh spec: `clip refresh github`
+
+---
+
+## gRPC Target
+
+Requires `grpcurl` in PATH (`brew install grpcurl`).
+
+```sh
+clip add my-api localhost:50051 --grpc ./api.proto
+```
+
+Config (`~/.clip/target/grpc/my-api/config.yml`):
+```yaml
+address: localhost:50051
+plaintext: true
+proto: ./api.proto
+importPaths: [./proto]
+metadata:
+  authorization: "Bearer ${API_TOKEN}"
+reflectMetadata:
+  authorization: "Bearer ${API_TOKEN}"
+deadline: 30
+emitDefaults: false
+```
+
+Running:
+```sh
+clip my-api tools
+clip my-api describe UserService.GetUser
+clip my-api types
+clip my-api UserService.GetUser --id 123
+clip my-api UserService.GetUser --id 123 --dry-run
+# grpcurl -plaintext -d '{"id":"123"}' localhost:50051 UserService/GetUser
+```
+
+Schema is fetched via reflection (or proto parse) and cached at `~/.clip/target/grpc/<name>/schema.json`.
+Refresh: `clip refresh my-api`
+
+---
+
+## GraphQL Target
+
+Uses introspection to discover operations. Schema cached at `~/.clip/target/graphql/<name>/schema.json`.
+
+```sh
+clip add gql https://api.example.com/graphql --graphql
+```
+
+Config (`~/.clip/target/graphql/gql/config.yml`):
+```yaml
+endpoint: https://api.example.com/graphql
+headers:
+  Authorization: "Bearer ${GRAPHQL_TOKEN}"
+oauth: false
+introspect: false
+```
+
+Running:
+```sh
+clip gql tools
+clip gql describe User
+clip gql types
+clip gql getUser --id 123
+clip gql query --query '{ users { id name } }'
+clip gql getUser --id 123 --dry-run
+# curl -X POST '...' -H 'Content-Type: application/json' -d '{"query":"..."}'
+```
+
+OAuth: set `oauth: true`, then `clip login gql`.
+Refresh schema: `clip refresh gql`
+
+---
+
+## Aliases
+
+Any target can define shortcut subcommands in config.yml:
+
+```yaml
+aliases:
+  sprint:
+    subcommand: search_pages
+    args: ["--query", "sprint retro"]
+    description: "Search sprint retro pages"
+  page:
+    subcommand: get_page
+    input:
+      page_id: "$1"
+```
+
+Placeholders: `$@` (all args), `$*` (args as string), `$1`/`$2` (positional), `${VAR}` (env var), `$$` (literal $).
+If no placeholder, user args are appended after the template.
+
+```sh
+clip notion sprint           # → search_pages --query "sprint retro"
+clip notion page abc123      # → get_page with page_id="abc123"
+```
+
+---
+
+## Script Target
+
+Bundles named shell commands as a clip target.
+
+```sh
+clip add my-scripts --script
+```
+
+Config (`~/.clip/target/script/my-scripts/config.yml`):
+```yaml
+description: "Dev scripts"
+commands:
+  deploy:
+    script: |
+      echo "Deploying to $1..."
+      ./deploy.sh "$1"
+    args: [env]
+    description: "Deploy to environment"
+  greet:
+    file: ./scripts/greet.sh
+    args: [name]
+```
+
+`script` and `file` are mutually exclusive. Files must be executable.
+
+```sh
+clip my-scripts tools
+clip my-scripts deploy production
+clip my-scripts deploy production --dry-run
+# script: echo "Deploying to $1..." / ./deploy.sh "$1"
+# args: ["production"]
+```
+
+---
+
+## Profiles
+
+Override target fields per environment:
+
+```sh
+clip profile add mygh prod-kr --args "exec,example/prod/kr,--,gh"
+clip profile add mygh alpha-kr --args "exec,example/alpha/kr,--,gh"
+clip profile use mygh prod-kr         # set active
+clip mygh@alpha-kr get pods           # one-shot override
+clip profile list mygh
+clip profile unset mygh
+```
+
+`profile add` flags: `--args`, `--command`, `--env KEY=VAL`, `--url`, `--endpoint`, `--address`, `--base-url`, `--header KEY:VAL`, `--metadata KEY=VAL`.
+
+Merge rules: scalar/array fields replace, map fields (env/headers/metadata) merge. ACL is target-only.
+
+---
+
+## ACL
+
+Set inline at registration or edit config.yml directly.
+
+```sh
+clip add gh gh --allow pr,repo --deny delete
+```
+
+```yaml
+# Tree rules in config.yml
+acl:
+  pr:
+    allow: [list, view, create]
+    deny: [close, merge]
+  repo:
+    deny: [delete]
+```
+
+`deny` takes precedence over `allow`. Rules evaluated left-to-right on the argument tree. Wildcards supported: `describe-*`, `get-*`.
+
+---
+
+## Auth
+
+```yaml
+auth: false     # no auth (default)
+auth: oauth     # OAuth 2.1 PKCE — use `clip login <target>`
+auth: apikey    # headers-based
+headers:
+  Authorization: "Bearer ${TOKEN}"
+```
+
+Tokens stored at `~/.clip/target/{mcp,api,graphql}/<name>/auth.json`. Refreshed automatically before expiry.
+
+Global env vars: `~/.clip/.env` — referenced as `${VAR}` in config.yml.
+
+---
+
+## Management commands
+
+```sh
+clip list
+clip remove <name>
+clip refresh <target>
+clip login <target>
+clip logout <target>
+clip bind <target>       # create native shim at ~/.clip/bin/<name>
+clip unbind <target>
+clip binds
+clip skills add claude-code
+clip completion zsh
+```
+
+---
+
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ori-kim/cli-proxy/main/install.sh | sh
+export PATH="$PATH:$HOME/.local/bin"
+
+# Optional: native bind support
+export PATH="$HOME/.clip/bin:$PATH"
+
+# Claude Code skill
+clip skills add claude-code
+
+# Zsh completion
+eval "$(clip completion zsh)"
+```
+
+macOS only (darwin-arm64, darwin-x64). Requires Bun ≥ 1.1 for development.

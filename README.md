@@ -4,21 +4,23 @@
 
 A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules, handle OAuth auth, and integrate with AI agents from one command.
 
+## Table of Contents
+
+- [Features](#features)
+- [Install](#install)
+- [Quick Start](#quick-start)
+- [Commands](#commands)
+- [Documentation](#documentation)
+- [Development](#development)
+
 ## Features
 
-- **Unified proxy** — wrap any CLI tool or MCP server behind a single gateway
+- **Unified proxy** — wrap any CLI tool, MCP server, REST/GraphQL/gRPC API behind a single gateway
 - **ACL enforcement** — allow or deny subcommands per target with tree-based rules
 - **OAuth 2.1 PKCE** — secure token management for MCP server authentication
 - **Agent integration** — install as a Claude Code skill for AI agent workflows
 - **JSON/pipe output** — machine-friendly mode for scripting and agent pipelines
 - **Dry run** — preview the exact curl/command that would execute, without running it
-
-## Documentation
-
-- [Targets overview](docs/en/targets.md) — what targets are, types, common config fields, global flags
-- [CLI target](docs/en/cli.md) — wrapping local CLI tools with ACL, bind, dry run
-- [MCP target](docs/en/mcp.md) — HTTP, SSE, and STDIO MCP servers, OAuth, how JSON-RPC works
-- [API target](docs/en/api.md) — OpenAPI-based REST targets, parameter mapping, auth
 
 ## Install
 
@@ -30,158 +32,55 @@ Installs to `~/.local/bin/clip`. Set `CLIP_INSTALL_DIR` to override.
 
 **Manual:** [Latest release](https://github.com/ori-kim/cli-proxy/releases/latest) · macOS only (darwin-arm64, darwin-x64)
 
-### PATH setup
-
-If `~/.local/bin` is not in your PATH, add this to your shell profile:
+Add to PATH if needed:
 
 ```sh
 export PATH="$PATH:$HOME/.local/bin"
 ```
 
-### Native bind (optional)
-
-Bind lets you route a command through clip without the `clip` prefix:
+**Native bind** — route commands through clip without the `clip` prefix:
 
 ```sh
-clip bind gh   # 'gh' now routes through clip
-gh pr list     # same as: clip gh pr list
+clip bind gh
+export PATH="$HOME/.clip/bin:$PATH"   # add before other entries
+gh pr list   # routes through clip
 ```
 
-Add `~/.clip/bin` **before** other entries so clip intercepts the command:
+**Claude Code skill:**
 
 ```sh
-export PATH="$HOME/.clip/bin:$PATH"
+clip skills add claude-code
 ```
 
-## Zsh Completion
-
-Add to `~/.zshrc`:
+**Zsh completion:**
 
 ```sh
 eval "$(clip completion zsh)"
 ```
 
-Then restart your shell or run `source ~/.zshrc`.
-
-- `clip <TAB>` — registered targets grouped by type (cli / mcp / api), with URL or command shown as description; built-in commands listed last
-- `clip <target> <TAB>` — tool / operation names with descriptions (cached for 1 hour)
-- `clip gh pr <TAB>` — delegates to the original command's own completion
-
-For inline grey hints while typing, add [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) and:
-
-```sh
-ZSH_AUTOSUGGEST_STRATEGY=(history completion)
-```
-
-To force a cache refresh:
-
-```sh
-rm -f ~/.zcompcache/clip-tools-*
-```
-
-## Claude Code Integration
-
-Install clip as a Claude Code skill to let AI agents use your registered targets:
-
-```sh
-# via skills.sh (GitHub repo, no registration required)
-npx skills add https://github.com/ori-kim/cli-proxy
-
-# or via clip itself
-clip skills add claude-code
-```
-
-Once installed, Claude Code can call any clip target as a tool — ACL rules are enforced on every invocation.
-
 ## Quick Start
 
 ```sh
-# Register a CLI tool
+# CLI tool
 clip add gh gh --deny delete
 clip gh pr list
 
-# Register an MCP server and authenticate
+# HTTP MCP server (with OAuth)
 clip add notion https://mcp.notion.com/mcp
 clip login notion
 clip notion search --query "..."
 
-# Register an OpenAPI REST API
+# OpenAPI REST
 clip add petstore https://petstore3.swagger.io/api/v3/openapi.json
 clip petstore getPetById --petId 1
 
-# Register a gRPC server
+# gRPC
 clip add my-api localhost:50051 --grpc ./api.proto
-clip my-api tools
 clip my-api UserService.GetUser --id 123
 
-# Register a GraphQL API
+# GraphQL
 clip add gql https://api.example.com/graphql --graphql
-clip gql tools
 clip gql query --query '{ users { id name } }'
-
-
-# Manage targets
-clip list
-clip remove notion
-```
-
-## ACL Rules
-
-Inline flags set top-level rules:
-
-```sh
-clip add gh gh --deny delete
-```
-
-For tree-based rules, edit `~/.clip/target/cli/gh/config.yml` directly:
-
-```yaml
-command: gh
-acl:
-  repo:
-    allow: [list, view]
-  pr:
-    deny: [delete]
-```
-
-`deny` takes precedence over `allow`. Rules are evaluated left-to-right on the argument tree.
-
-## Configuration
-
-| Path | Purpose |
-|------|---------|
-| `~/.clip/target/{cli,mcp,api,grpc,graphql}/<name>/config.yml` | Target config and ACL rules |
-| `~/.clip/target/{mcp,api}/<name>/auth.json` | OAuth tokens |
-| `~/.clip/target/api/<name>/spec.json` | Cached OpenAPI spec |
-| `~/.clip/target/grpc/<name>/schema.json` | Cached gRPC proto schema |
-| `~/.clip/target/graphql/<name>/schema.json` | Cached GraphQL schema |
-| `~/.clip/.env` | Global env vars (substituted into `config.yml`) |
-
-### Auth config
-
-The `auth` field controls authentication per target:
-
-```yaml
-# No auth (default)
-auth: false
-
-# OAuth 2.1 PKCE — use `clip login <target>` to authenticate
-auth: oauth
-
-# API key — provide token via headers
-auth: apikey
-headers:
-  Authorization: "Bearer ${API_KEY}"
-```
-
-### API target fields
-
-```yaml
-# baseUrl: where requests are sent (required)
-baseUrl: https://api.example.com
-
-# openapiUrl: where to fetch the OpenAPI spec (optional if spec.json is present locally)
-openapiUrl: https://api.example.com/openapi.json
 ```
 
 ## Commands
@@ -189,71 +88,40 @@ openapiUrl: https://api.example.com/openapi.json
 | Command | Description |
 |---------|-------------|
 | `clip add <name> <cmd>` | Register a CLI target |
-| `clip add <name> <https://...mcp>` | Register an HTTP MCP target |
-| `clip add <name> --sse <https://...sse>` | Register a legacy SSE MCP target |
-| `clip add <name> --stdio <cmd> [args]` | Register a STDIO MCP target |
-| `clip add <name> <https://.../openapi.json>` | Register an OpenAPI REST target |
-| `clip add <name> <host:port> --grpc [proto]` | Register a gRPC target |
-| `clip add <name> <https://.../graphql> --graphql` | Register a GraphQL target |
-| `clip remove <name>` | Unregister a target |
-| `clip list` | List all targets with auth status |
-| `clip login <target>` | Authenticate via OAuth |
-| `clip logout <target>` | Remove stored token |
-| `clip refresh <target>` | Re-fetch OpenAPI spec |
-| `clip <target> tools` | List available tools / operations |
-| `clip <target> describe <Service.Method>` | Show gRPC method signature |
-| `clip <target> describe <type>` | Show GraphQL type definition |
-| `clip <target> types` | List all gRPC message types or GraphQL types |
-| `clip profile add <name> <profile> [opts]` | Create or update a profile |
-| `clip profile use <name> <profile>` | Set active profile |
-| `clip profile list <name>` | List profiles for a target |
-| `clip profile remove <name> <profile>` | Delete a profile |
-| `clip profile unset <name>` | Clear active profile |
-| `clip <name>@<profile> <args>` | One-shot profile override |
-| `clip bind <target>` | Create a native command shim |
-| `clip unbind <target>` | Remove native command shim |
-| `clip binds` | List currently bound targets |
-| `clip skills add claude-code` | Install as Claude Code skill |
-| `clip completion zsh` | Print zsh completion script |
+| `clip add <name> <https://...mcp>` | Register HTTP MCP |
+| `clip add <name> --sse <url>` | Register SSE MCP (legacy) |
+| `clip add <name> --stdio <cmd> [args]` | Register STDIO MCP |
+| `clip add <name> <https://.../openapi.json>` | Register OpenAPI REST |
+| `clip add <name> <host:port> --grpc [proto]` | Register gRPC |
+| `clip add <name> <https://.../graphql> --graphql` | Register GraphQL |
+| `clip add <name> --script` | Register script target |
+| `clip remove <name>` | Unregister |
+| `clip list` | List all targets |
+| `clip login / logout <target>` | OAuth authentication |
+| `clip refresh <target>` | Re-fetch spec or schema |
+| `clip <target> tools` | List available tools/operations |
+| `clip <target> describe <op>` | Show method/type details |
+| `clip <target> types` | List all types (gRPC/GraphQL) |
+| `clip profile add/use/list/remove/unset` | Manage profiles |
+| `clip <target>@<profile> <args>` | One-shot profile override |
+| `clip bind / unbind <target>` | Native command shim |
+| `clip binds` | List bound targets |
+| `clip skills add claude-code` | Install Claude Code skill |
+| `clip completion zsh` | Print zsh completion |
 
 **Global flags:** `--json`, `--pipe`, `--dry-run`, `--help`, `--version`
 
-Flags can be placed anywhere in the command:
+Flags can be placed anywhere: `clip gh pr list --json`, `clip petstore getPetById --petId 1 --dry-run`
 
-```sh
-clip gh pr list --json
-clip petstore getPetById --petId 1 --dry-run
-clip notion search --query "hello" --json --dry-run
-```
+## Documentation
 
-## Dry Run
-
-Preview what would execute without actually running anything:
-
-```sh
-# API target → equivalent curl command (with auth headers)
-clip --dry-run petstore getPetById --petId 1
-# curl -X GET 'https://petstore3.swagger.io/api/v3/pet/1' \
-#   -H 'Accept: application/json'
-
-# HTTP MCP target → JSON-RPC curl
-clip notion search_pages --query "hello" --dry-run
-# curl -X POST 'https://mcp.notion.com/mcp' \
-#   -H 'Authorization: Bearer eyJ...' \
-#   -H 'Content-Type: application/json' \
-#   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}'
-
-# SSE MCP target → SSE connect + POST steps
-clip myserver search --query "hello" --dry-run
-
-# STDIO MCP target → echo pipe
-clip fs read_file --path /etc/hosts --dry-run
-# echo '{"jsonrpc":"2.0","id":1,...}' | npx @modelcontextprotocol/server-filesystem /
-
-# CLI target → final command string (after ACL/prepend processing)
-clip --dry-run gh get pods -n default
-# gh get pods -n default
-```
+- [Targets overview](docs/en/01-targets.md) — target types, profiles, ACL, global flags
+- [CLI target](docs/en/02-cli.md) — wrap local CLI tools with ACL, bind, dry run
+- [MCP target](docs/en/03-mcp.md) — HTTP, SSE, and STDIO MCP servers, OAuth
+- [API target](docs/en/04-api.md) — OpenAPI-based REST, parameter mapping, auth
+- [gRPC target](docs/en/05-grpc.md) — protobuf services, schema refresh, dry run
+- [GraphQL target](docs/en/06-graphql.md) — introspection, queries, mutations, auth
+- [Aliases & Scripts](docs/en/07-aliases.md) — shortcut macros and script bundles
 
 ## Development
 
