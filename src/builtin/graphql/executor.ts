@@ -1,12 +1,10 @@
 import { mkdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import type { GraphqlTarget } from "./config.ts";
-import { die } from "./errors.ts";
-import { formatToolHelp, parseToolArgs } from "./mcp-target.ts";
-import { getStoredAuthHeaders, handleOAuth401, refreshIfExpiring } from "./oauth.ts";
-import type { TargetResult } from "./output.ts";
-import { buildAliasSection } from "./alias.ts";
+import { buildAliasSection } from "../../commands/alias.ts";
+import { handleOAuth401 } from "../../commands/oauth.ts";
+import type { TargetResult } from "../../extension.ts";
+import type { ExecutorContext } from "../../extension.ts";
 import {
   INTROSPECTION_QUERY,
   buildOperation,
@@ -16,8 +14,11 @@ import {
   gqlTypeToString,
   parseDotPath,
   parseIntrospection,
-} from "./graphql-schema.ts";
-import type { GqlSpec, GqlTool, IntrospectionField, IntrospectionInputValue } from "./graphql-schema.ts";
+} from "../../schema/graphql.ts";
+import type { GqlSpec, GqlTool, IntrospectionField, IntrospectionInputValue } from "../../schema/graphql.ts";
+import { die } from "../../utils/errors.ts";
+import { formatToolHelp, parseToolArgs } from "../../utils/tool-args.ts";
+import type { GraphqlTarget } from "./schema.ts";
 
 const GRAPHQL_DIR = join(homedir(), ".clip", "target", "graphql");
 const BUILTIN_SCALARS = new Set(["Boolean", "String", "Int", "Float", "ID"]);
@@ -26,29 +27,22 @@ function schemaCachePath(targetName: string): string {
   return join(GRAPHQL_DIR, targetName, "schema.json");
 }
 
-async function buildHeaders(
-  target: GraphqlTarget,
-  targetName: string,
-): Promise<Record<string, string>> {
-  const base: Record<string, string> = {
+function buildHeaders(target: GraphqlTarget, extraHeaders: Record<string, string> = {}): Record<string, string> {
+  return {
     "Content-Type": "application/json",
-    "Accept": "application/graphql-response+json, application/json;q=0.9",
+    Accept: "application/graphql-response+json, application/json;q=0.9",
     ...(target.headers ?? {}),
+    ...extraHeaders,
   };
-
-  const refreshed = await refreshIfExpiring(targetName, "graphql");
-  if (refreshed) return { ...base, ...refreshed };
-
-  const stored = await getStoredAuthHeaders(targetName, "graphql");
-  if (stored) return { ...base, ...stored };
-
-  return base;
 }
 
 async function safeJson(r: Response): Promise<Record<string, unknown>> {
   const text = await r.text();
-  try { return JSON.parse(text) as Record<string, unknown>; }
-  catch { return { error: text || `HTTP ${r.status}` }; }
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { error: text || `HTTP ${r.status}` };
+  }
 }
 
 async function postGraphql(
@@ -57,7 +51,7 @@ async function postGraphql(
   body: Record<string, unknown>,
   existingHeaders?: Record<string, string>,
 ): Promise<{ resp: Response; json: Record<string, unknown> }> {
-  const headers = existingHeaders ?? await buildHeaders(target, targetName);
+  const headers = existingHeaders ?? buildHeaders(target);
   const resp = await fetch(target.endpoint, {
     method: "POST",
     headers,
@@ -81,6 +75,7 @@ async function loadSchema(
   target: GraphqlTarget,
   targetName: string,
   forceRefresh = false,
+  extraHeaders: Record<string, string> = {},
 ): Promise<GqlSpec> {
   const cachePath = schemaCachePath(targetName);
   const cacheFile = Bun.file(cachePath);
@@ -89,17 +84,18 @@ async function loadSchema(
     try {
       const raw = JSON.parse(await cacheFile.text()) as Record<string, unknown>;
       return parseIntrospection(raw);
-    } catch { /* 손상 → 재fetch */ }
+    } catch {
+      /* 손상 → 재fetch */
+    }
   }
 
   if (target.introspect === false) {
     die(
-      `"${targetName}" has introspect: false and no cached schema.\n` +
-      `Place introspection response at: ${cachePath}`,
+      `"${targetName}" has introspect: false and no cached schema.\n` + `Place introspection response at: ${cachePath}`,
     );
   }
 
-  const headers = await buildHeaders(target, targetName);
+  const headers = buildHeaders(target, extraHeaders);
   const { resp, json } = await postGraphql(target, targetName, { query: INTROSPECTION_QUERY }, headers);
 
   if (!resp.ok) {
@@ -125,9 +121,7 @@ async function loadSchema(
 }
 
 function formatToolsLine(tool: GqlTool, prefix: string): string {
-  const argStr = tool.args.length > 0
-    ? `(${tool.args.map((a) => a.name).join(", ")})`
-    : "";
+  const argStr = tool.args.length > 0 ? `(${tool.args.map((a) => a.name).join(", ")})` : "";
   return `  ${(prefix + tool.rootField + argStr).padEnd(40)} ${gqlTypeToString(tool.returnType)}`;
 }
 
@@ -154,11 +148,12 @@ async function executeQuery(
   query: string,
   variables: Record<string, unknown>,
   operationName?: string,
+  extraHeaders: Record<string, string> = {},
 ): Promise<TargetResult> {
   const body: Record<string, unknown> = { query, variables };
   if (operationName) body["operationName"] = operationName;
 
-  const { resp, json } = await postGraphql(target, targetName, body);
+  const { resp, json } = await postGraphql(target, targetName, body, buildHeaders(target, extraHeaders));
 
   if (!resp.ok) {
     return {
@@ -174,7 +169,6 @@ async function executeQuery(
   if (errors?.length) {
     const errStr = JSON.stringify(errors, null, 2) + "\n";
     if (data !== null && data !== undefined) {
-      // partial data
       return {
         exitCode: 1,
         stdout: JSON.stringify(data, null, 2) + "\n",
@@ -191,17 +185,12 @@ async function executeQuery(
   };
 }
 
-export async function executeGraphql(
-  target: GraphqlTarget,
-  _globalHeaders: Record<string, string> | undefined,
-  subcommand: string,
-  rawArgs: string[],
-  targetName: string,
-  forceRefresh = false,
-): Promise<TargetResult> {
+export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext): Promise<TargetResult> {
+  const { subcommand, args: rawArgs, targetName, headers: ctxHeaders } = ctx;
+  const forceRefresh = subcommand === "refresh";
 
   if (subcommand === "refresh") {
-    const spec = await loadSchema(target, targetName, true);
+    const spec = await loadSchema(target, targetName, true, ctxHeaders);
     const total = spec.tools.length;
     const typeCount = [...spec.types.values()].filter(
       (t) => !BUILTIN_SCALARS.has(t.name) && !["Query", "Mutation", "Subscription"].includes(t.name),
@@ -213,7 +202,7 @@ export async function executeGraphql(
     };
   }
 
-  const spec = await loadSchema(target, targetName, forceRefresh);
+  const spec = await loadSchema(target, targetName, forceRefresh, ctxHeaders);
 
   if (subcommand === "tools") {
     const scripts = buildAliasSection(target);
@@ -235,8 +224,14 @@ export async function executeGraphql(
     const arg = rawArgs[0];
     if (!arg) {
       const lines = ["Services (root types):"];
-      if (spec.queryTypeName) lines.push(`  ${spec.queryTypeName}  (${spec.tools.filter(t => t.operationType === "query").length} query fields)`);
-      if (spec.mutationTypeName) lines.push(`  ${spec.mutationTypeName}  (${spec.tools.filter(t => t.operationType === "mutation").length} mutation fields)`);
+      if (spec.queryTypeName)
+        lines.push(
+          `  ${spec.queryTypeName}  (${spec.tools.filter((t) => t.operationType === "query").length} query fields)`,
+        );
+      if (spec.mutationTypeName)
+        lines.push(
+          `  ${spec.mutationTypeName}  (${spec.tools.filter((t) => t.operationType === "mutation").length} mutation fields)`,
+        );
       lines.push(`\nRun: clip ${targetName} types    — list all types`);
       return { exitCode: 0, stdout: lines.join("\n") + "\n", stderr: "" };
     }
@@ -297,7 +292,7 @@ export async function executeGraphql(
         return { exitCode: 1, stdout: "", stderr: `Invalid JSON in --variables\n` };
       }
     }
-    return executeQuery(target, targetName, rawQuery, variables);
+    return executeQuery(target, targetName, rawQuery, variables, undefined, ctxHeaders);
   }
 
   // RPC 도구 호출
@@ -342,5 +337,5 @@ export async function executeGraphql(
   const opName = `${tool.operationType === "query" ? "q" : "m"}_${tool.rootField}`;
   const query = buildOperation(tool, variables, selection);
 
-  return executeQuery(target, targetName, query, variables, opName);
+  return executeQuery(target, targetName, query, variables, opName, ctxHeaders);
 }

@@ -1,13 +1,14 @@
 import { homedir } from "os";
 import { join } from "path";
 import YAML from "yaml";
-import type { ApiTarget } from "./config.ts";
-import { die } from "./errors.ts";
-import { formatToolHelp, parseToolArgs } from "./mcp-target.ts";
-import { getStoredAuthHeaders, handleOAuth401, refreshIfExpiring } from "./oauth.ts";
-import { parseOpenApi } from "./openapi.ts";
-import type { TargetResult } from "./output.ts";
-import { buildAliasSection } from "./alias.ts";
+import { buildAliasSection } from "../../commands/alias.ts";
+import { handleOAuth401 } from "../../commands/oauth.ts";
+import type { TargetResult } from "../../extension.ts";
+import type { ExecutorContext } from "../../extension.ts";
+import { parseOpenApi } from "../../schema/openapi.ts";
+import { die } from "../../utils/errors.ts";
+import { formatToolHelp, parseToolArgs } from "../../utils/tool-args.ts";
+import type { ApiTarget } from "./schema.ts";
 
 const API_DIR = join(homedir(), ".clip", "target", "api");
 
@@ -23,7 +24,7 @@ async function loadSpec(targetName: string, specUrl: string | undefined, forceRe
     if (!(await cacheFile.exists())) {
       die(
         `No spec URL configured for "${targetName}" and no local spec found.\n` +
-        `Place your OpenAPI spec at: ${cachePath}`,
+          `Place your OpenAPI spec at: ${cachePath}`,
       );
     }
     try {
@@ -89,15 +90,9 @@ function buildCurlCommand(
   return `${parts.join(" \\\n")}\n`;
 }
 
-export async function executeApi(
-  target: ApiTarget,
-  globalHeaders: Record<string, string> | undefined,
-  subcommand: string,
-  rawArgs: string[],
-  targetName: string,
-  forceRefresh = false,
-  dryRun = false,
-): Promise<TargetResult> {
+export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promise<TargetResult> {
+  const { headers: globalHeaders, subcommand, args: rawArgs, targetName, dryRun } = ctx;
+  const forceRefresh = subcommand === "refresh";
   const raw = await loadSpec(targetName, target.openapiUrl, forceRefresh);
   const spec = parseOpenApi(raw);
 
@@ -135,26 +130,19 @@ export async function executeApi(
     return formatToolHelp(tool);
   }
 
-  const oauthEnabled = target.auth === "oauth";
   const mergedHeaders: Record<string, string> = {
-    ...(globalHeaders ?? {}),
     ...(target.headers ?? {}),
+    ...(globalHeaders ?? {}),
   };
-
-  if (oauthEnabled) {
-    const refreshed = await refreshIfExpiring(targetName, "api");
-    if (refreshed) Object.assign(mergedHeaders, refreshed);
-
-    const stored = await getStoredAuthHeaders(targetName, "api");
-    if (stored) Object.assign(mergedHeaders, stored);
-  }
 
   let rawBaseUrl = target.baseUrl ?? spec.baseUrl ?? "";
   // 상대 경로 baseUrl을 spec URL 기준으로 절대 경로로 변환
   if (rawBaseUrl && !rawBaseUrl.startsWith("http://") && !rawBaseUrl.startsWith("https://")) {
     try {
       rawBaseUrl = new URL(rawBaseUrl, target.openapiUrl).toString();
-    } catch { /* rawBaseUrl 그대로 사용 */ }
+    } catch {
+      /* rawBaseUrl 그대로 사용 */
+    }
   }
   const baseUrl = rawBaseUrl.replace(/\/+$/, "");
   if (!baseUrl) {
@@ -231,7 +219,7 @@ export async function executeApi(
 
   let resp = await doFetch(mergedHeaders);
 
-  if (resp.status === 401 && oauthEnabled && target.baseUrl) {
+  if (resp.status === 401 && target.auth === "oauth" && target.baseUrl) {
     const authHeaders = await handleOAuth401(targetName, target.baseUrl, resp, "api");
     Object.assign(mergedHeaders, authHeaders);
     resp = await doFetch(mergedHeaders);

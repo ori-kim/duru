@@ -1,9 +1,10 @@
 import { existsSync, statSync } from "fs";
-import type { ScriptCommandDef, ScriptTarget } from "./config.ts";
-import { die } from "./errors.ts";
-import type { TargetResult } from "./output.ts";
-import { buildAliasSection } from "./alias.ts";
-import type { HasAliases } from "./alias.ts";
+import { buildAliasSection } from "../../commands/alias.ts";
+import type { HasAliases } from "../../commands/alias.ts";
+import type { TargetResult } from "../../extension.ts";
+import type { ExecutorContext } from "../../extension.ts";
+import { die } from "../../utils/errors.ts";
+import type { ScriptCommandDef, ScriptTarget } from "./schema.ts";
 
 function buildToolsOutput(target: ScriptTarget): string {
   const cmds = Object.entries(target.commands ?? {}).sort(([a], [b]) => a.localeCompare(b));
@@ -32,7 +33,14 @@ function buildCommandHelp(name: string, def: ScriptCommandDef): string {
   if (def.file) {
     lines.push("", `File: ${def.file}`);
   } else if (def.script) {
-    lines.push("", "Script:", def.script.split("\n").map((l) => `  ${l}`).join("\n"));
+    lines.push(
+      "",
+      "Script:",
+      def.script
+        .split("\n")
+        .map((l) => `  ${l}`)
+        .join("\n"),
+    );
   }
   return lines.join("\n");
 }
@@ -51,13 +59,8 @@ function buildSpawnArgs(subcommand: string, def: ScriptCommandDef, userArgs: str
   return ["bash", "-c", def.script!, `clip-${subcommand}`, ...userArgs];
 }
 
-export async function executeScript(
-  target: ScriptTarget,
-  subcommand: string,
-  args: string[],
-  passthrough = false,
-  dryRun = false,
-): Promise<TargetResult> {
+export async function executeScript(target: ScriptTarget, ctx: ExecutorContext): Promise<TargetResult> {
+  const { subcommand, args, dryRun, passthrough } = ctx;
   if (subcommand === "tools") {
     return { exitCode: 0, stdout: buildToolsOutput(target) + "\n", stderr: "" };
   }
@@ -72,9 +75,7 @@ export async function executeScript(
   const env = { ...process.env, ...(target.env ?? {}), ...(def.env ?? {}) } as Record<string, string>;
 
   if (dryRun) {
-    const preview = def.file
-      ? `# file: ${def.file}\n`
-      : `# script:\n${def.script}\n`;
+    const preview = def.file ? `# file: ${def.file}\n` : `# script:\n${def.script}\n`;
     return { exitCode: 0, stdout: `${preview}# args: ${JSON.stringify(args)}\n`, stderr: "" };
   }
 

@@ -1,7 +1,8 @@
-import type { McpStdioTarget } from "./config.ts";
-import { die } from "./errors.ts";
-import type { TargetResult } from "./output.ts";
-import { buildAliasSection } from "./alias.ts";
+import { buildAliasSection } from "../../commands/alias.ts";
+import type { TargetResult } from "../../extension.ts";
+import type { ExecutorContext } from "../../extension.ts";
+import { die } from "../../utils/errors.ts";
+import type { McpStdioTarget } from "./schema.ts";
 
 // --- JSON-RPC 타입 ---
 
@@ -86,10 +87,7 @@ function parseToolArgs(args: string[]): Record<string, unknown> {
 
 type SendFn = (req: JsonRpcRequest) => Promise<JsonRpcResponse>;
 
-async function runStdioSession<T>(
-  target: McpStdioTarget,
-  action: (send: SendFn) => Promise<T>,
-): Promise<T> {
+async function runStdioSession<T>(target: McpStdioTarget, action: (send: SendFn) => Promise<T>): Promise<T> {
   const proc = Bun.spawn({
     cmd: [target.command, ...(target.args ?? [])],
     stdin: "pipe",
@@ -130,7 +128,9 @@ async function runStdioSession<T>(
             return parsed;
           }
           // id 불일치(notification 등)는 무시
-        } catch { /* non-JSON 무시 */ }
+        } catch {
+          /* non-JSON 무시 */
+        }
       }
     };
 
@@ -155,7 +155,11 @@ async function runStdioSession<T>(
 
     return await action(send);
   } finally {
-    try { proc.stdin.end(); } catch { /* ignore */ }
+    try {
+      proc.stdin.end();
+    } catch {
+      /* ignore */
+    }
     const killTimer = setTimeout(() => proc.kill(), 2_000);
     await proc.exited;
     clearTimeout(killTimer);
@@ -164,13 +168,8 @@ async function runStdioSession<T>(
 
 // --- 공개 API ---
 
-export async function executeMcpStdio(
-  target: McpStdioTarget,
-  subcommand: string,
-  args: string[],
-  _targetName: string,
-  dryRun = false,
-): Promise<TargetResult> {
+export async function executeMcpStdio(target: McpStdioTarget, ctx: ExecutorContext): Promise<TargetResult> {
+  const { subcommand, args, dryRun } = ctx;
   if (dryRun && subcommand !== "tools") {
     const toolArgs = parseToolArgs(args);
     const payload = JSON.stringify({
@@ -192,7 +191,11 @@ export async function executeMcpStdio(
     const tools = result.tools ?? [];
     const text = tools.map((t) => `  ${t.name.padEnd(30)} ${t.description}`).join("\n");
     const scripts = buildAliasSection(target);
-    return { stdout: tools.length ? `Tools:\n${text}\n${scripts}` : `No tools available.${scripts}`, stderr: "", exitCode: 0 };
+    return {
+      stdout: tools.length ? `Tools:\n${text}\n${scripts}` : `No tools available.${scripts}`,
+      stderr: "",
+      exitCode: 0,
+    };
   }
 
   // tool call

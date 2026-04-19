@@ -1,21 +1,19 @@
 import { mkdirSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import type { GrpcTarget } from "./config.ts";
-import { die } from "./errors.ts";
-import { formatToolHelp, parseToolArgs } from "./mcp-target.ts";
-import { getStoredAuthHeaders, refreshIfExpiring } from "./oauth.ts";
-import type { TargetResult } from "./output.ts";
-import { buildJsonSchema, isWellKnownOrScalar, parseMessageDescribe, parseServiceDescribe } from "./grpc-schema.ts";
-import { buildAliasSection } from "./alias.ts";
-import type { ParsedDescribe } from "./grpc-schema.ts";
+import { buildAliasSection } from "../../commands/alias.ts";
+import { getStoredAuthHeaders, refreshIfExpiring } from "../../commands/oauth.ts";
+import type { TargetResult } from "../../extension.ts";
+import type { ExecutorContext } from "../../extension.ts";
+import { buildJsonSchema, isWellKnownOrScalar, parseMessageDescribe, parseServiceDescribe } from "../../schema/grpc.ts";
+import type { ParsedDescribe } from "../../schema/grpc.ts";
+import { die } from "../../utils/errors.ts";
+import { formatToolHelp, parseToolArgs } from "../../utils/tool-args.ts";
+import type { GrpcTarget } from "./schema.ts";
 
 const GRPC_DIR = join(homedir(), ".clip", "target", "grpc");
 
-const HIDDEN_SERVICES = new Set([
-  "grpc.reflection.v1.ServerReflection",
-  "grpc.reflection.v1alpha.ServerReflection",
-]);
+const HIDDEN_SERVICES = new Set(["grpc.reflection.v1.ServerReflection", "grpc.reflection.v1alpha.ServerReflection"]);
 
 type GrpcMethod = {
   name: string;
@@ -45,9 +43,9 @@ async function ensureGrpcurl(): Promise<void> {
   if (exitCode !== 0) {
     die(
       "grpcurl not found in PATH.\n" +
-      "Install: brew install grpcurl\n" +
-      "Or:      go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest\n" +
-      "Requires grpcurl 1.8.7+ for gRPC reflection v1 support.",
+        "Install: brew install grpcurl\n" +
+        "Or:      go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest\n" +
+        "Requires grpcurl 1.8.7+ for gRPC reflection v1 support.",
     );
   }
 }
@@ -93,10 +91,7 @@ function makeRpcFlags(target: GrpcTarget, token?: string): string[] {
 
 function validateTls(target: GrpcTarget): void {
   if (target.plaintext && target.address.endsWith(":443")) {
-    die(
-      `TLS is required on port 443. Remove "plaintext: true" from config.\n` +
-      `Address: ${target.address}`,
-    );
+    die(`TLS is required on port 443. Remove "plaintext: true" from config.\n` + `Address: ${target.address}`);
   }
 }
 
@@ -110,6 +105,11 @@ function warnMetadata(metadata: Record<string, string> | undefined): void {
   }
 }
 
+function tokenFromHeaders(headers: Record<string, string>): string | undefined {
+  const val = headers["Authorization"] ?? headers["authorization"];
+  return val?.replace(/^Bearer\s+/i, "");
+}
+
 async function getAuthToken(targetName: string): Promise<string | undefined> {
   const refreshed = await refreshIfExpiring(targetName, "grpc");
   if (refreshed?.["Authorization"]) return refreshed["Authorization"].replace(/^Bearer\s+/i, "");
@@ -117,18 +117,27 @@ async function getAuthToken(targetName: string): Promise<string | undefined> {
   return stored?.["Authorization"]?.replace(/^Bearer\s+/i, "");
 }
 
-async function loadSchema(target: GrpcTarget, targetName: string, forceRefresh = false): Promise<GrpcSchemaCache> {
+async function loadSchema(
+  target: GrpcTarget,
+  targetName: string,
+  forceRefresh = false,
+  authHeaders: Record<string, string> = {},
+): Promise<GrpcSchemaCache> {
   const cachePath = schemaCachePath(targetName);
   const cacheFile = Bun.file(cachePath);
 
   if (!forceRefresh && (await cacheFile.exists())) {
-    try { return JSON.parse(await cacheFile.text()) as GrpcSchemaCache; } catch { /* 손상 → 재로드 */ }
+    try {
+      return JSON.parse(await cacheFile.text()) as GrpcSchemaCache;
+    } catch {
+      /* 손상 → 재로드 */
+    }
   }
 
   warnMetadata(target.metadata);
   warnMetadata(target.reflectMetadata);
 
-  const token = await getAuthToken(targetName);
+  const token = tokenFromHeaders(authHeaders) ?? (await getAuthToken(targetName));
   const baseFlags = makeBaseFlags(target);
   const reflectFlags = makeReflectFlags(target, token);
 
@@ -137,11 +146,15 @@ async function loadSchema(target: GrpcTarget, targetName: string, forceRefresh =
   if (listResult.exitCode !== 0) {
     die(
       `Failed to list gRPC services for "${targetName}":\n${listResult.stderr.trim()}\n\n` +
-      `If reflection is disabled, add "proto: ./service.proto" to config.yml.`,
+        `If reflection is disabled, add "proto: ./service.proto" to config.yml.`,
     );
   }
 
-  const serviceNames = listResult.stdout.trim().split("\n").map((s) => s.trim()).filter(Boolean);
+  const serviceNames = listResult.stdout
+    .trim()
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   // 2. 각 service describe → method 파싱
   const parsedServiceMethods = new Map<string, ReturnType<typeof parseServiceDescribe>>();
@@ -214,10 +227,8 @@ function resolveMethod(
   const matches: { service: GrpcService; method: GrpcMethod; fqn: string }[] = [];
   for (const svc of schema.services) {
     const svcShort = svc.name.split(".").pop()!;
-    const matchesSvc = !serviceHint ||
-      svc.name === serviceHint ||
-      svcShort === serviceHint ||
-      svc.name.endsWith(`.${serviceHint}`);
+    const matchesSvc =
+      !serviceHint || svc.name === serviceHint || svcShort === serviceHint || svc.name.endsWith(`.${serviceHint}`);
 
     if (matchesSvc) {
       const method = svc.methods.find((m) => m.name === methodName);
@@ -227,7 +238,9 @@ function resolveMethod(
   if (matches.length === 0) return null;
   if (matches.length > 1) {
     const fqns = matches.map((m) => m.fqn).join(", ");
-    process.stderr.write(`[clip] warning: ambiguous method "${subcommand}", using first match. Use full name to disambiguate: ${fqns}\n`);
+    process.stderr.write(
+      `[clip] warning: ambiguous method "${subcommand}", using first match. Use full name to disambiguate: ${fqns}\n`,
+    );
   }
   return matches[0]!;
 }
@@ -237,19 +250,14 @@ function toolDisplayName(svc: GrpcService, method: GrpcMethod, multiService: boo
   return `${svc.name.split(".").pop()}.${method.name}`;
 }
 
-export async function executeGrpc(
-  target: GrpcTarget,
-  _globalHeaders: Record<string, string> | undefined,
-  subcommand: string,
-  rawArgs: string[],
-  targetName: string,
-  forceRefresh = false,
-): Promise<TargetResult> {
+export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Promise<TargetResult> {
+  const { subcommand, args: rawArgs, targetName, headers: ctxHeaders } = ctx;
+  const forceRefresh = subcommand === "refresh";
   await ensureGrpcurl();
   validateTls(target);
 
   if (subcommand === "refresh") {
-    const schema = await loadSchema(target, targetName, true);
+    const schema = await loadSchema(target, targetName, true, ctxHeaders);
     const total = schema.services.reduce((n, s) => n + s.methods.length, 0);
     return {
       exitCode: 0,
@@ -258,7 +266,7 @@ export async function executeGrpc(
     };
   }
 
-  const schema = await loadSchema(target, targetName, forceRefresh);
+  const schema = await loadSchema(target, targetName, forceRefresh, ctxHeaders);
 
   if (subcommand === "tools") {
     const visible = schema.services.filter((s) => !HIDDEN_SERVICES.has(s.name));
@@ -348,8 +356,7 @@ export async function executeGrpc(
   }
 
   if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
-    const streaming = method.serverStreaming || method.clientStreaming
-      ? " (streaming — v1 unsupported)" : "";
+    const streaming = method.serverStreaming || method.clientStreaming ? " (streaming — v1 unsupported)" : "";
     return formatToolHelp({
       name: subcommand,
       description: `gRPC: ${fqn}${streaming}\nRequest:  ${method.requestType}\nResponse: ${method.responseType}`,
@@ -359,20 +366,19 @@ export async function executeGrpc(
 
   const args = parseToolArgs(rawArgs, method.inputSchema);
   const body = Object.keys(args).length > 0 ? args : {};
-  const token = await getAuthToken(targetName);
+  const token = tokenFromHeaders(ctxHeaders);
   const baseFlags = makeBaseFlags(target);
   const rpcFlags = makeRpcFlags(target, token);
 
-  const result = await spawnGrpcurl([
-    ...baseFlags, ...rpcFlags,
-    "-d", JSON.stringify(body),
-    target.address, fqn,
-  ]);
+  const result = await spawnGrpcurl([...baseFlags, ...rpcFlags, "-d", JSON.stringify(body), target.address, fqn]);
 
   if (result.exitCode === 0) {
     let stdout: string;
-    try { stdout = JSON.stringify(JSON.parse(result.stdout), null, 2) + "\n"; }
-    catch { stdout = result.stdout; }
+    try {
+      stdout = JSON.stringify(JSON.parse(result.stdout), null, 2) + "\n";
+    } catch {
+      stdout = result.stdout;
+    }
     return { exitCode: 0, stdout, stderr: "" };
   }
 
@@ -384,14 +390,20 @@ export async function executeGrpc(
     const newToken = await getAuthToken(targetName);
     if (newToken) {
       const retry = await spawnGrpcurl([
-        ...baseFlags, ...makeRpcFlags(target, newToken),
-        "-d", JSON.stringify(body),
-        target.address, fqn,
+        ...baseFlags,
+        ...makeRpcFlags(target, newToken),
+        "-d",
+        JSON.stringify(body),
+        target.address,
+        fqn,
       ]);
       if (retry.exitCode === 0) {
         let stdout: string;
-        try { stdout = JSON.stringify(JSON.parse(retry.stdout), null, 2) + "\n"; }
-        catch { stdout = retry.stdout; }
+        try {
+          stdout = JSON.stringify(JSON.parse(retry.stdout), null, 2) + "\n";
+        } catch {
+          stdout = retry.stdout;
+        }
         return { exitCode: 0, stdout, stderr: "" };
       }
     }
@@ -401,7 +413,7 @@ export async function executeGrpc(
       stderr: [
         "gRPC UNAUTHENTICATED. To set up auth:",
         "  Option 1: Add to config.yml:",
-        '    metadata:',
+        "    metadata:",
         '      authorization: "Bearer <token>"',
         "  Option 2: Store token in ~/.clip/target/grpc/" + targetName + "/auth.json",
         "",

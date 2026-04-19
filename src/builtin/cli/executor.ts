@@ -1,19 +1,15 @@
-import type { CliTarget } from "./config.ts";
-import { die } from "./errors.ts";
-import type { TargetResult } from "./output.ts";
+import type { TargetResult } from "../../extension.ts";
+import type { ExecutorContext } from "../../extension.ts";
+import { die } from "../../utils/errors.ts";
+import type { CliTarget } from "./schema.ts";
 
 function shellQuote(arg: string): string {
   if (/^[a-zA-Z0-9._\-/:=@,+]+$/.test(arg)) return arg;
   return `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
-export async function executeCli(
-  target: CliTarget,
-  subcommand: string,
-  args: string[],
-  passthrough = false,
-  dryRun = false,
-): Promise<TargetResult> {
+export async function executeCli(target: CliTarget, ctx: ExecutorContext): Promise<TargetResult> {
+  const { subcommand, args, dryRun, passthrough } = ctx;
   const cmd = [target.command, ...(target.args ?? []), subcommand, ...args];
 
   if (dryRun) {

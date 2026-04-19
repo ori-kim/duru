@@ -1,9 +1,10 @@
-import type { McpSseTarget } from "./config.ts";
-import { die } from "./errors.ts";
-import { getStoredAuthHeaders, handleOAuth401 } from "./oauth.ts";
-import type { TargetResult } from "./output.ts";
-import { formatToolHelp, parseToolArgs } from "./mcp-target.ts";
-import { buildAliasSection } from "./alias.ts";
+import { buildAliasSection } from "../../commands/alias.ts";
+import { handleOAuth401 } from "../../commands/oauth.ts";
+import type { TargetResult } from "../../extension.ts";
+import type { ExecutorContext } from "../../extension.ts";
+import { die } from "../../utils/errors.ts";
+import { formatToolHelp, parseToolArgs } from "../../utils/tool-args.ts";
+import type { McpSseTarget } from "./schema.ts";
 
 // --- JSON-RPC 타입 ---
 
@@ -67,22 +68,23 @@ type SseSession = {
   close: () => void;
 };
 
-async function openSseSession(target: McpSseTarget, targetName: string): Promise<SseSession> {
-  const oauthEnabled = target.auth === "oauth";
-  const authHeaders = oauthEnabled ? ((await getStoredAuthHeaders(targetName)) ?? {}) : {};
-
+async function openSseSession(
+  target: McpSseTarget,
+  targetName: string,
+  externalHeaders: Record<string, string> = {},
+): Promise<SseSession> {
   const connectHeaders: Record<string, string> = {
     Accept: "text/event-stream",
     "Cache-Control": "no-cache",
     ...(target.headers ?? {}),
-    ...authHeaders,
+    ...externalHeaders,
   };
 
   const sseResp = await fetch(target.url, { headers: connectHeaders }).catch((e: unknown) => {
     die(`Failed to connect to SSE endpoint at ${target.url}: ${e}`);
   });
 
-  if (sseResp.status === 401 && oauthEnabled) {
+  if (sseResp.status === 401 && target.auth === "oauth") {
     const refreshed = await handleOAuth401(targetName, target.url, sseResp);
     Object.assign(connectHeaders, refreshed);
     return openSseSession({ ...target, headers: connectHeaders }, targetName);
@@ -122,7 +124,9 @@ async function openSseSession(target: McpSseTarget, targetName: string): Promise
                 p.resolve(parsed);
               }
             }
-          } catch { /* non-JSON 무시 */ }
+          } catch {
+            /* non-JSON 무시 */
+          }
         }
       }
     } catch (e) {
@@ -147,7 +151,7 @@ async function openSseSession(target: McpSseTarget, targetName: string): Promise
   const postHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     ...(target.headers ?? {}),
-    ...authHeaders,
+    ...externalHeaders,
   };
 
   const call = async (method: string, params?: unknown): Promise<unknown> => {
@@ -210,14 +214,8 @@ function buildSseDryRunOutput(target: McpSseTarget, headers: Record<string, stri
 
 // --- 공개 API ---
 
-export async function executeMcpSse(
-  target: McpSseTarget,
-  globalHeaders: Record<string, string> | undefined,
-  toolName: string,
-  rawArgs: string[],
-  targetName: string,
-  dryRun = false,
-): Promise<TargetResult> {
+export async function executeMcpSse(target: McpSseTarget, ctx: ExecutorContext): Promise<TargetResult> {
+  const { headers: globalHeaders, subcommand: toolName, args: rawArgs, targetName, dryRun } = ctx;
   if (dryRun && toolName !== "tools") {
     const headers: Record<string, string> = { ...(globalHeaders ?? {}), ...(target.headers ?? {}) };
     const toolArgs = parseToolArgs(rawArgs, {});
@@ -230,7 +228,7 @@ export async function executeMcpSse(
     return { exitCode: 0, stdout: buildSseDryRunOutput(target, headers, body), stderr: "" };
   }
 
-  const session = await openSseSession(target, targetName);
+  const session = await openSseSession(target, targetName, globalHeaders);
 
   try {
     // initialize

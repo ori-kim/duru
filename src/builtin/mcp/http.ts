@@ -1,8 +1,10 @@
-import type { McpHttpTarget } from "./config.ts";
-import { die } from "./errors.ts";
-import { getStoredAuthHeaders, handleOAuth401, refreshIfExpiring } from "./oauth.ts";
-import type { TargetResult } from "./output.ts";
-import { buildAliasSection } from "./alias.ts";
+import { buildAliasSection } from "../../commands/alias.ts";
+import { handleOAuth401, refreshIfExpiring } from "../../commands/oauth.ts";
+import type { TargetResult } from "../../extension.ts";
+import type { ExecutorContext } from "../../extension.ts";
+import { die } from "../../utils/errors.ts";
+import { formatToolHelp, parseToolArgs } from "../../utils/tool-args.ts";
+import type { McpHttpTarget } from "./schema.ts";
 
 // --- JSON-RPC 타입 ---
 
@@ -154,75 +156,6 @@ async function mcpNotify(session: McpSession, method: string, params?: unknown):
   await mcpPost(session, req);
 }
 
-// --- Tool 인자 파싱 ---
-
-export function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  const props = (inputSchema["properties"] as Record<string, { type?: string | string[] }> | undefined) ?? {};
-
-  let i = 0;
-  while (i < rawArgs.length) {
-    const arg = rawArgs[i] ?? "";
-
-    const eqIdx = arg.indexOf("=");
-    let key: string;
-    let rawVal: string | undefined;
-
-    if (arg.startsWith("--")) {
-      if (eqIdx >= 0) {
-        key = arg.slice(2, eqIdx);
-        rawVal = arg.slice(eqIdx + 1);
-        i++;
-      } else {
-        key = arg.slice(2);
-        const next = rawArgs[i + 1];
-        if (!next || next.startsWith("--")) {
-          result[key] = true;
-          i++;
-          continue;
-        }
-        rawVal = next;
-        i += 2;
-      }
-    } else if (eqIdx > 0) {
-      // key=value 형식
-      key = arg.slice(0, eqIdx);
-      rawVal = arg.slice(eqIdx + 1);
-      i++;
-    } else {
-      i++;
-      continue;
-    }
-
-    // inputSchema를 기반으로 타입 변환
-    const propDef = props[key];
-    const propType = Array.isArray(propDef?.type) ? propDef.type[0] : propDef?.type;
-
-    if (propType === "number" || propType === "integer") {
-      result[key] = Number(rawVal);
-    } else if (propType === "boolean") {
-      result[key] = rawVal === "true" || rawVal === "1";
-    } else if (propType === "string") {
-      result[key] = rawVal;
-    } else if (propType === "object" || propType === "array") {
-      try {
-        result[key] = JSON.parse(rawVal);
-      } catch {
-        result[key] = rawVal;
-      }
-    } else {
-      // 타입 정보 없음(any) 등: JSON 파싱 성공 시 그 값, 실패 시 원본 문자열
-      try {
-        result[key] = JSON.parse(rawVal);
-      } catch {
-        result[key] = rawVal;
-      }
-    }
-  }
-
-  return result;
-}
-
 // --- MCP target 실행 ---
 
 function buildMcpCurlCommand(url: string, headers: Record<string, string>, body: string): string {
@@ -234,27 +167,17 @@ function buildMcpCurlCommand(url: string, headers: Record<string, string>, body:
   return `${parts.join(" \\\n")}\n`;
 }
 
-export async function executeMcp(
-  target: McpHttpTarget,
-  globalHeaders: Record<string, string> | undefined,
-  toolName: string,
-  rawArgs: string[],
-  targetName: string,
-  dryRun = false,
-): Promise<TargetResult> {
+export async function executeMcp(target: McpHttpTarget, ctx: ExecutorContext): Promise<TargetResult> {
+  const { headers: globalHeaders, subcommand: toolName, args: rawArgs, targetName, dryRun } = ctx;
   const oauthEnabled = target.auth === "oauth";
 
   if (dryRun && toolName !== "tools") {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
-      ...(globalHeaders ?? {}),
       ...(target.headers ?? {}),
+      ...(globalHeaders ?? {}),
     };
-    if (oauthEnabled) {
-      const stored = await getStoredAuthHeaders(targetName);
-      if (stored) Object.assign(headers, stored);
-    }
     const toolArgs = parseToolArgs(rawArgs, {});
     const body = JSON.stringify({
       jsonrpc: "2.0",
@@ -267,18 +190,12 @@ export async function executeMcp(
 
   const session: McpSession = {
     url: target.url,
-    headers: { ...(globalHeaders ?? {}), ...(target.headers ?? {}) },
+    headers: { ...(target.headers ?? {}), ...(globalHeaders ?? {}) },
     sessionId: null,
     nextId: 1,
     targetName,
     oauthEnabled,
   };
-
-  // 저장된 OAuth 토큰 미리 로드
-  if (oauthEnabled) {
-    const storedHeaders = await getStoredAuthHeaders(targetName);
-    if (storedHeaders) Object.assign(session.headers, storedHeaders);
-  }
 
   // 1. Initialize
   await mcpCall(session, "initialize", {
@@ -295,7 +212,6 @@ export async function executeMcp(
   const tools: McpTool[] = toolsResult?.tools ?? [];
 
   if (toolName === "tools") {
-    // 목록 출력 모드
     if (tools.length === 0) {
       return { exitCode: 0, stdout: `No tools available.${buildAliasSection(target)}\n`, stderr: "" };
     }
@@ -344,24 +260,4 @@ export async function executeMcp(
   const stderr = callResult?.isError ? stdout : "";
 
   return { exitCode, stdout: callResult?.isError ? "" : stdout, stderr };
-}
-
-export function formatToolHelp(tool: { name: string; description: string; inputSchema: Record<string, unknown> }): TargetResult {
-  const schema = tool.inputSchema;
-  const props = (schema["properties"] as Record<string, { type?: unknown; default?: unknown }> | undefined) ?? {};
-  const required = new Set((schema["required"] as string[] | undefined) ?? []);
-
-  const lines = [`Usage: clip <target> ${tool.name} [--param value ...]`, "", tool.description];
-
-  if (Object.keys(props).length > 0) {
-    lines.push("", "Parameters:");
-    for (const [name, prop] of Object.entries(props).sort()) {
-      const type = Array.isArray(prop.type) ? prop.type.filter((t) => t !== "null").join("|") : String(prop.type ?? "any");
-      const req = required.has(name) ? " (required)" : "";
-      const def = prop.default != null ? `  [default: ${prop.default}]` : "";
-      lines.push(`  --${name.padEnd(22)} ${type}${req}${def}`);
-    }
-  }
-
-  return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
 }
