@@ -66,16 +66,16 @@ echo "  export PATH=\"$BIND_DIR:\$PATH\""
 echo ""
 echo "Then: clip bind gh   # 'gh' will now route through clip"
 
-# Optional: Claude Code skill
+# Optional: Agents skill (via skills.sh)
 echo ""
-printf "Install Claude Code skill? (y/N) "
+printf "Install Agents skill via skills.sh? (y/N) "
 read INSTALL_SKILL </dev/tty || INSTALL_SKILL="n"
 case "$INSTALL_SKILL" in
   [yY]|[yY][eE][sS])
-    "$INSTALL_DIR/clip" skills add claude-code
+    npx skills add ori-kim/cli-proxy
     ;;
   *)
-    echo "Skipped. Run 'clip skills add claude-code' to install later."
+    echo "Skipped. Run 'npx skills add ori-kim/cli-proxy' to install later."
     ;;
 esac
 

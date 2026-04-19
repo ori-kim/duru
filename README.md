@@ -48,11 +48,13 @@ export PATH="$HOME/.clip/bin:$PATH"   # add before other entries
 gh pr list   # routes through clip
 ```
 
-**Claude Code skill:**
+**Agents skill:**
 
 ```sh
-clip skills add claude-code
+npx skills add ori-kim/cli-proxy
 ```
+
+Install via [skills.sh](https://skills.sh) — GitHub repo-based skill registry.
 
 **Zsh completion:**
 
@@ -108,7 +110,7 @@ clip gql query --query '{ users { id name } }'
 | `clip <target>@<profile> <args>` | One-shot profile override |
 | `clip bind / unbind <target>` | Native command shim |
 | `clip binds` | List bound targets |
-| `clip skills add claude-code` | Install Claude Code skill |
+| `npx skills add ori-kim/cli-proxy` | Install agent skill via skills.sh |
 | `clip completion zsh` | Print zsh completion |
 
 **Global flags:** `--json`, `--pipe`, `--dry-run`, `--help`, `--version`

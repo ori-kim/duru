@@ -46,11 +46,13 @@ export PATH="$HOME/.clip/bin:$PATH"   # 다른 항목보다 앞에 추가
 gh pr list   # clip을 통해 라우팅됨
 ```
 
-**Claude Code 스킬 설치:**
+**Agents 스킬 설치:**
 
 ```sh
-clip skills add claude-code
+npx skills add ori-kim/cli-proxy
 ```
+
+[skills.sh](https://skills.sh) — 깃허브 레포 기반 스킬 레지스트리를 통해 설치.
 
 **Zsh 자동완성:**
 
@@ -106,7 +108,7 @@ clip gql query --query '{ users { id name } }'
 | `clip <target>@<profile> <args>` | 1회성 profile override |
 | `clip bind / unbind <target>` | 네이티브 명령어 심 |
 | `clip binds` | 바인드된 대상 목록 |
-| `clip skills add claude-code` | Claude Code 스킬 설치 |
+| `npx skills add ori-kim/cli-proxy` | skills.sh로 에이전트 스킬 설치 |
 | `clip completion zsh` | zsh 자동완성 스크립트 출력 |
 
 **글로벌 플래그:** `--json`, `--pipe`, `--dry-run`, `--help`, `--version`
