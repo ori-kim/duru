@@ -43,6 +43,10 @@ rm -f /tmp/clip.sha256
 
 chmod +x "$INSTALL_DIR/clip"
 
+# Remove macOS quarantine and apply ad-hoc signature so the binary runs without Gatekeeper prompts
+xattr -d com.apple.quarantine "$INSTALL_DIR/clip" 2>/dev/null || true
+codesign --force --sign - "$INSTALL_DIR/clip" 2>/dev/null || true
+
 echo "Installed clip to $INSTALL_DIR/clip"
 "$INSTALL_DIR/clip" --version
 
