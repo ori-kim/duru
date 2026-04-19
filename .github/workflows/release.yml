@@ -25,7 +25,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun build --compile --target=${{ matrix.target }} ./src/clip.ts --outfile=${{ matrix.asset }}
-      - run: codesign --force --sign - ${{ matrix.asset }}
       - run: shasum -a 256 ${{ matrix.asset }} > ${{ matrix.asset }}.sha256
       - uses: softprops/action-gh-release@v2
         with:
