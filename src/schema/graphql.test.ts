@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import {
-  gqlTypeToString,
-  gqlTypeToJsonSchema,
-  autoSelect,
-  parseDotPath,
-  buildOperation,
-  parseIntrospection,
-  findTool,
-  describeType,
-  type IntrospectionTypeRef,
-  type IntrospectionType,
   type GqlTool,
-} from "./graphql-schema.ts";
+  type IntrospectionType,
+  type IntrospectionTypeRef,
+  autoSelect,
+  buildOperation,
+  describeType,
+  findTool,
+  gqlTypeToJsonSchema,
+  gqlTypeToString,
+  parseDotPath,
+  parseIntrospection,
+} from "./graphql.ts";
 
 // --- 헬퍼 ---
 
@@ -41,9 +41,7 @@ describe("gqlTypeToString", () => {
     expect(gqlTypeToString(nonNull(list(nonNull(named("Int")))))).toBe("[Int!]!");
   });
   test("중첩: [[Int!]!]!", () => {
-    expect(
-      gqlTypeToString(nonNull(list(nonNull(list(nonNull(named("Int"))))))),
-    ).toBe("[[Int!]!]!");
+    expect(gqlTypeToString(nonNull(list(nonNull(list(nonNull(named("Int")))))))).toBe("[[Int!]!]!");
   });
 });
 
@@ -167,7 +165,7 @@ describe("autoSelect", () => {
     expect(sel).toContain("id");
     expect(sel).toContain("name");
     expect(sel).toContain("score");
-    expect(sel).not.toContain("old");   // deprecated
+    expect(sel).not.toContain("old"); // deprecated
     expect(sel).not.toContain("posts"); // args 있음
   });
   test("NON_NULL 래핑된 타입 처리", () => {
@@ -189,15 +187,13 @@ describe("parseDotPath", () => {
     expect(parseDotPath("address.city")).toBe("{ address { city } }");
   });
   test("공유 prefix 병합", () => {
-    expect(parseDotPath("address.city,address.country")).toBe(
-      "{ address { city country } }",
-    );
+    expect(parseDotPath("address.city,address.country")).toBe("{ address { city country } }");
   });
   test("깊은 중첩", () => {
     expect(parseDotPath("a.b.c,a.b.d")).toBe("{ a { b { c d } } }");
   });
   test("괄호 안 쉼표는 분리하지 않음", () => {
-    const result = parseDotPath("repositories(first:5,after:\"x\").nodes.name");
+    const result = parseDotPath('repositories(first:5,after:"x").nodes.name');
     expect(result).toBe('{ repositories(first:5,after:"x") { nodes { name } } }');
   });
   test("빈 문자열", () => {
@@ -368,10 +364,10 @@ describe("parseIntrospection", () => {
       {
         kind: "OBJECT",
         name: "Query",
-        fields: [
-          { name: "old", description: null, args: [], type: named("String"), isDeprecated: true },
-        ],
-        inputFields: null, enumValues: null, possibleTypes: null,
+        fields: [{ name: "old", description: null, args: [], type: named("String"), isDeprecated: true }],
+        inputFields: null,
+        enumValues: null,
+        possibleTypes: null,
       },
     ];
     const s = parseIntrospection({ __schema: { queryType: { name: "Query" }, mutationType: null, types } });
@@ -418,7 +414,10 @@ describe("describeType", () => {
     const out = describeType({
       kind: "UNION",
       name: "SearchResult",
-      possibleTypes: [{ name: "User", kind: "OBJECT" }, { name: "Post", kind: "OBJECT" }],
+      possibleTypes: [
+        { name: "User", kind: "OBJECT" },
+        { name: "Post", kind: "OBJECT" },
+      ],
     });
     expect(out).toContain("union SearchResult = User | Post");
   });

@@ -39,8 +39,18 @@ const SCALARS: Record<string, Record<string, unknown>> = {
 };
 
 const PROTO_KEYWORDS = new Set([
-  "message", "enum", "service", "rpc", "syntax", "option",
-  "import", "package", "reserved", "extensions", "extend", "oneof",
+  "message",
+  "enum",
+  "service",
+  "rpc",
+  "syntax",
+  "option",
+  "import",
+  "package",
+  "reserved",
+  "extensions",
+  "extend",
+  "oneof",
 ]);
 
 export type ParsedField = {
@@ -90,7 +100,10 @@ export function parseMessageDescribe(text: string): ParsedDescribe {
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!inBody) {
-      if (line.endsWith("{")) { inBody = true; depth = 1; }
+      if (line.endsWith("{")) {
+        inBody = true;
+        depth = 1;
+      }
       continue;
     }
 
@@ -111,10 +124,17 @@ export function parseMessageDescribe(text: string): ParsedDescribe {
 
     // oneof group {
     const oneofM = line.match(/^oneof\s+(\w+)\s*\{/);
-    if (oneofM) { currentOneof = oneofM[1]; depth++; continue; }
+    if (oneofM) {
+      currentOneof = oneofM[1];
+      depth++;
+      continue;
+    }
 
     // nested message or enum — skip contents
-    if (/^(?:message|enum)\s+\w+\s*\{/.test(line)) { depth++; continue; }
+    if (/^(?:message|enum)\s+\w+\s*\{/.test(line)) {
+      depth++;
+      continue;
+    }
 
     // closing brace
     if (line === "}" || line === "};") {
@@ -164,9 +184,11 @@ export function parseMessageDescribe(text: string): ParsedDescribe {
 export function parseServiceDescribe(text: string): ParsedMethod[] {
   const methods: ParsedMethod[] = [];
   for (const line of text.split("\n")) {
-    const m = line.trim().match(
-      /^rpc\s+(\w+)\s*\(\s*(stream\s+)?([.A-Za-z0-9_]+)\s*\)\s*returns\s*\(\s*(stream\s+)?([.A-Za-z0-9_]+)\s*\)/,
-    );
+    const m = line
+      .trim()
+      .match(
+        /^rpc\s+(\w+)\s*\(\s*(stream\s+)?([.A-Za-z0-9_]+)\s*\)\s*returns\s*\(\s*(stream\s+)?([.A-Za-z0-9_]+)\s*\)/,
+      );
     if (m) {
       methods.push({
         name: m[1]!,
@@ -233,7 +255,5 @@ export function buildJsonSchema(
 }
 
 export function isWellKnownOrScalar(typeName: string): boolean {
-  return typeName in WELL_KNOWN ||
-    typeName in SCALARS ||
-    typeName.startsWith("google.protobuf.");
+  return typeName in WELL_KNOWN || typeName in SCALARS || typeName.startsWith("google.protobuf.");
 }

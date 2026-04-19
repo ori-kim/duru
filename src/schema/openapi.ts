@@ -47,13 +47,17 @@ function deref(root: unknown, val: unknown): unknown {
 
 export function toolNameFromOp(method: string, path: string, opId?: string): string {
   if (opId) {
-    return opId.replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    return opId
+      .replace(/[^a-zA-Z0-9_-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
   }
-  const sanitized = path
-    .replace(/\{[^}]+\}/g, (m) => m.slice(1, -1))
-    .replace(/[^a-zA-Z0-9]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "") || "root";
+  const sanitized =
+    path
+      .replace(/\{[^}]+\}/g, (m) => m.slice(1, -1))
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "root";
   return `${method.toLowerCase()}-${sanitized}`;
 }
 
@@ -72,7 +76,13 @@ function flattenParams(
   params: ParamDef[],
   requestBody: unknown,
   bodyContentType: string | undefined,
-): { inputSchema: Record<string, unknown>; pathParams: string[]; queryParams: string[]; headerParams: string[]; hasFormData: boolean } {
+): {
+  inputSchema: Record<string, unknown>;
+  pathParams: string[];
+  queryParams: string[];
+  headerParams: string[];
+  hasFormData: boolean;
+} {
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
   const pathParams: string[] = [];
@@ -125,7 +135,9 @@ function flattenParams(
 
 function extractBaseUrl(spec: Record<string, unknown>): string | undefined {
   // OpenAPI 3.x
-  const servers = spec["servers"] as Array<{ url: string; variables?: Record<string, { default: string }> }> | undefined;
+  const servers = spec["servers"] as
+    | Array<{ url: string; variables?: Record<string, { default: string }> }>
+    | undefined;
   if (servers?.length) {
     let url = servers[0]!.url;
     const vars = servers[0]!.variables ?? {};

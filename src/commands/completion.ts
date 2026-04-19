@@ -1,4 +1,4 @@
-import { die } from "./errors.ts";
+import { die } from "../utils/errors.ts";
 
 export function buildZshCompletion(): string {
   return `\

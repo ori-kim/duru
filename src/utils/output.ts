@@ -1,13 +1,9 @@
-export type TargetResult = {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-};
+export type { TargetResult } from "../extension.ts";
+import type { TargetResult } from "../extension.ts";
 
 export type OutputMode = "plain" | "json";
-export type TargetType = "mcp" | "cli" | "api" | "grpc" | "graphql" | "script";
 
-export function formatOutput(result: TargetResult, mode: OutputMode, _targetType: TargetType): void {
+export function formatOutput(result: TargetResult, mode: OutputMode): void {
   if (result.stderr) {
     process.stderr.write(result.stderr);
   }

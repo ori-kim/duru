@@ -92,17 +92,11 @@ describe("expandInput", () => {
 
 describe("flattenInput", () => {
   test("string values", () => {
-    expect(flattenInput({ channel: "U123", text: "hello" })).toEqual([
-      "--channel", "U123",
-      "--text", "hello",
-    ]);
+    expect(flattenInput({ channel: "U123", text: "hello" })).toEqual(["--channel", "U123", "--text", "hello"]);
   });
 
   test("non-string values → JSON", () => {
-    expect(flattenInput({ count: 5, flag: true })).toEqual([
-      "--count", "5",
-      "--flag", "true",
-    ]);
+    expect(flattenInput({ count: 5, flag: true })).toEqual(["--count", "5", "--flag", "true"]);
   });
 
   test("object value → JSON stringify", () => {
@@ -125,7 +119,7 @@ describe("resolveAlias", () => {
         subcommand: "get",
         args: ["pods", "-n", "dev"],
       },
-      "pass": {
+      pass: {
         subcommand: "echo",
       },
     },

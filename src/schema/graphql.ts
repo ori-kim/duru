@@ -148,10 +148,7 @@ export function gqlTypeToJsonSchema(
 }
 
 /** 리턴 타입의 scalar 필드를 자동 선택 (빈 문자열 = 스칼라/enum 자체가 리프) */
-export function autoSelect(
-  returnType: IntrospectionTypeRef,
-  types: Map<string, IntrospectionType>,
-): string {
+export function autoSelect(returnType: IntrospectionTypeRef, types: Map<string, IntrospectionType>): string {
   const named = getNamedType(returnType);
   if (!named) return "";
 
@@ -246,11 +243,7 @@ export function parseDotPath(expr: string): string {
 }
 
 /** GraphQL operation 문자열 빌드 */
-export function buildOperation(
-  tool: GqlTool,
-  variables: Record<string, unknown>,
-  selection: string,
-): string {
+export function buildOperation(tool: GqlTool, variables: Record<string, unknown>, selection: string): string {
   const usedArgs = tool.args.filter((a) => a.name in variables);
   const varDefs = usedArgs.map((a) => `$${a.name}: ${gqlTypeToString(a.type)}`).join(", ");
   const argBind = usedArgs.map((a) => `${a.name}: $${a.name}`).join(", ");
@@ -288,9 +281,7 @@ export function describeType(type: IntrospectionType): string {
     return lines.join("\n");
   }
 
-  const keyword =
-    type.kind === "INPUT_OBJECT" ? "input" :
-    type.kind === "INTERFACE" ? "interface" : "type";
+  const keyword = type.kind === "INPUT_OBJECT" ? "input" : type.kind === "INTERFACE" ? "interface" : "type";
 
   if (type.description) lines.push(`# ${type.description}`);
   lines.push(`${keyword} ${type.name} {`);
@@ -302,9 +293,8 @@ export function describeType(type: IntrospectionType): string {
     }
   } else {
     for (const f of type.fields ?? []) {
-      const argStr = f.args.length > 0
-        ? `(${f.args.map((a) => `${a.name}: ${gqlTypeToString(a.type)}`).join(", ")})`
-        : "";
+      const argStr =
+        f.args.length > 0 ? `(${f.args.map((a) => `${a.name}: ${gqlTypeToString(a.type)}`).join(", ")})` : "";
       const deprecated = f.isDeprecated ? " @deprecated" : "";
       lines.push(`  ${f.name}${argStr}: ${gqlTypeToString(f.type)}${deprecated}`);
     }
@@ -359,9 +349,7 @@ export function parseIntrospection(raw: Record<string, unknown>): GqlSpec {
     if (!rootType) return;
     for (const field of rootType.fields ?? []) {
       if (field.isDeprecated) continue;
-      const inputSchema = field.args.length > 0
-        ? buildInputSchema(field.args, types)
-        : { type: "object" };
+      const inputSchema = field.args.length > 0 ? buildInputSchema(field.args, types) : { type: "object" };
       tools.push({
         name: field.name,
         description: field.description ?? null,

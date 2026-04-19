@@ -1,6 +1,6 @@
 import { basename, join } from "path";
-import { CONFIG_DIR } from "./config.ts";
-import { die } from "./errors.ts";
+import { CONFIG_DIR, getTarget, loadConfig } from "../config.ts";
+import { die } from "../utils/errors.ts";
 
 export const BIND_DIR = join(CONFIG_DIR, "bin");
 
@@ -37,7 +37,9 @@ export async function bindTarget(name: string): Promise<void> {
 
 export async function unbindTarget(name: string): Promise<void> {
   const shimPath = join(BIND_DIR, name);
-  const content = await Bun.file(shimPath).text().catch(() => null);
+  const content = await Bun.file(shimPath)
+    .text()
+    .catch(() => null);
   if (content === null) {
     console.log(`"${name}" is not bound.`);
     return;
@@ -60,4 +62,57 @@ export async function listBound(): Promise<string[]> {
   const out = (await new Response(lsProc.stdout as ReadableStream<Uint8Array>).text()).trim();
   if (!out) return [];
   return out.split("\n").filter(Boolean);
+}
+
+export async function runBind(args: string[]): Promise<void> {
+  const flag = args[0];
+  if (flag === "--all") {
+    const config = await loadConfig();
+    const names = [
+      ...Object.keys(config.cli),
+      ...Object.keys(config.mcp),
+      ...Object.keys(config.api),
+      ...Object.keys(config.grpc),
+      ...Object.keys(config.graphql),
+      ...Object.keys(config.script),
+    ];
+    if (names.length === 0) {
+      console.log("No targets configured.");
+      return;
+    }
+    for (const name of names) await bindTarget(name);
+    return;
+  }
+  const name = flag;
+  if (!name) die("Usage: clip bind <target> | clip bind --all");
+  const config = await loadConfig();
+  getTarget(config, name);
+  await bindTarget(name);
+}
+
+export async function runUnbind(args: string[]): Promise<void> {
+  const flag = args[0];
+  if (flag === "--all") {
+    const names = await listBound();
+    if (names.length === 0) {
+      console.log("No bindings found.");
+      return;
+    }
+    for (const name of names) await unbindTarget(name);
+    return;
+  }
+  const name = flag;
+  if (!name) die("Usage: clip unbind <target> | clip unbind --all");
+  await unbindTarget(name);
+}
+
+export async function runBinds(): Promise<void> {
+  const names = await listBound();
+  if (names.length === 0) {
+    console.log("No native bindings.");
+    console.log(`\nBind a target with: clip bind <target>`);
+    return;
+  }
+  console.log("Bound targets:");
+  for (const name of names) console.log(`  ${name}  (${BIND_DIR}/${name} → clip)`);
 }

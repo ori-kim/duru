@@ -1,6 +1,6 @@
 import { homedir } from "os";
 import { join } from "path";
-import { die } from "./errors.ts";
+import { die } from "../utils/errors.ts";
 
 // --- 경로 ---
 
@@ -287,7 +287,12 @@ async function doRefresh(stored: StoredAuth): Promise<TokenResponse | null> {
 
 // --- Full OAuth Flow ---
 
-async function runFullOAuthFlow(targetName: string, serverUrl: string, resp401?: Response, kind: AuthKind = "mcp"): Promise<StoredAuth> {
+async function runFullOAuthFlow(
+  targetName: string,
+  serverUrl: string,
+  resp401?: Response,
+  kind: AuthKind = "mcp",
+): Promise<StoredAuth> {
   // 1. Protected Resource Metadata 조회
   const hintUrl = resp401 ? parseResourceMetadataUrl(resp401) : undefined;
   const resourceMeta = await fetchResourceMetadata(serverUrl, hintUrl);
@@ -384,7 +389,10 @@ async function runFullOAuthFlow(targetName: string, serverUrl: string, resp401?:
 // --- Export 함수 ---
 
 /** 저장된 토큰으로 Authorization 헤더 반환. 없거나 만료되면 null. */
-export async function getStoredAuthHeaders(targetName: string, kind: AuthKind = "mcp"): Promise<Record<string, string> | null> {
+export async function getStoredAuthHeaders(
+  targetName: string,
+  kind: AuthKind = "mcp",
+): Promise<Record<string, string> | null> {
   const auth = await loadAuth(targetName, kind);
   if (!auth) return null;
   // 만료된 토큰은 null 반환 (호출부에서 401로 처리)
@@ -393,7 +401,10 @@ export async function getStoredAuthHeaders(targetName: string, kind: AuthKind = 
 }
 
 /** 만료 5분 전이면 refresh 시도. 새 헤더 반환 또는 null. */
-export async function refreshIfExpiring(targetName: string, kind: AuthKind = "mcp"): Promise<Record<string, string> | null> {
+export async function refreshIfExpiring(
+  targetName: string,
+  kind: AuthKind = "mcp",
+): Promise<Record<string, string> | null> {
   const auth = await loadAuth(targetName, kind);
   if (!auth) return null;
 

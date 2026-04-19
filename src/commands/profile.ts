@@ -1,5 +1,5 @@
-import { getTarget, loadConfig, updateTarget, type ProfileOverride } from "./config.ts";
-import { die } from "./errors.ts";
+import { type ProfileOverride, getTarget, loadConfig, updateTarget } from "../config.ts";
+import { die } from "../utils/errors.ts";
 
 // --- Types ---
 
@@ -16,7 +16,7 @@ export function applyOverride<T extends HasProfiles>(target: T, override: Profil
     if (val === undefined) continue;
     if ((key === "env" || key === "headers" || key === "metadata") && typeof val === "object") {
       // 병합: target 기본값 위에 profile 값 덮어씀
-      merged[key] = { ...(target[key as keyof T] as object | undefined ?? {}), ...val };
+      merged[key] = { ...((target[key as keyof T] as object | undefined) ?? {}), ...val };
     } else {
       merged[key] = val;
     }
@@ -39,35 +39,48 @@ export function resolveProfile<T extends HasProfiles>(
 
 async function runProfileAdd(args: string[]): Promise<void> {
   const [targetName, profileName, ...rest] = args;
-  if (!targetName || !profileName) die("Usage: clip profile add <target> <profile> [--args a,b] [--url ...] [--env K=V ...]");
+  if (!targetName || !profileName)
+    die("Usage: clip profile add <target> <profile> [--args a,b] [--url ...] [--env K=V ...]");
 
   const flags: Record<string, string | string[] | Record<string, string>> = {};
   for (let i = 0; i < rest.length; i++) {
     const flag = rest[i]!;
     const val = rest[i + 1];
-    if (flag === "--args" && val) { flags["args"] = val.split(",").map((s) => s.trim()); i++; }
-    else if (flag === "--url" && val) { flags["url"] = val; i++; }
-    else if (flag === "--command" && val) { flags["command"] = val; i++; }
-    else if (flag === "--endpoint" && val) { flags["endpoint"] = val; i++; }
-    else if (flag === "--address" && val) { flags["address"] = val; i++; }
-    else if (flag === "--base-url" && val) { flags["baseUrl"] = val; i++; }
-    else if (flag === "--openapi-url" && val) { flags["openapiUrl"] = val; i++; }
-    else if (flag === "--env" && val) {
+    if (flag === "--args" && val) {
+      flags["args"] = val.split(",").map((s) => s.trim());
+      i++;
+    } else if (flag === "--url" && val) {
+      flags["url"] = val;
+      i++;
+    } else if (flag === "--command" && val) {
+      flags["command"] = val;
+      i++;
+    } else if (flag === "--endpoint" && val) {
+      flags["endpoint"] = val;
+      i++;
+    } else if (flag === "--address" && val) {
+      flags["address"] = val;
+      i++;
+    } else if (flag === "--base-url" && val) {
+      flags["baseUrl"] = val;
+      i++;
+    } else if (flag === "--openapi-url" && val) {
+      flags["openapiUrl"] = val;
+      i++;
+    } else if (flag === "--env" && val) {
       const [k, v] = val.split("=", 2);
       if (!k || v === undefined) die(`--env must be KEY=VALUE, got: ${val}`);
-      flags["env"] = { ...(flags["env"] as Record<string, string> | undefined ?? {}), [k]: v };
+      flags["env"] = { ...((flags["env"] as Record<string, string> | undefined) ?? {}), [k]: v };
       i++;
-    }
-    else if (flag === "--header" && val) {
+    } else if (flag === "--header" && val) {
       const [k, v] = val.split(":", 2);
       if (!k || v === undefined) die(`--header must be KEY:VALUE, got: ${val}`);
-      flags["headers"] = { ...(flags["headers"] as Record<string, string> | undefined ?? {}), [k.trim()]: v.trim() };
+      flags["headers"] = { ...((flags["headers"] as Record<string, string> | undefined) ?? {}), [k.trim()]: v.trim() };
       i++;
-    }
-    else if (flag === "--metadata" && val) {
+    } else if (flag === "--metadata" && val) {
       const [k, v] = val.split("=", 2);
       if (!k || v === undefined) die(`--metadata must be KEY=VALUE, got: ${val}`);
-      flags["metadata"] = { ...(flags["metadata"] as Record<string, string> | undefined ?? {}), [k]: v };
+      flags["metadata"] = { ...((flags["metadata"] as Record<string, string> | undefined) ?? {}), [k]: v };
       i++;
     }
   }
@@ -118,7 +131,7 @@ async function runProfileList(args: string[]): Promise<void> {
   for (const name of names.sort()) {
     const marker = name === active ? " (active)" : "";
     const p = profiles[name]!;
-    const detail = p.args ? `args: [${p.args.join(", ")}]` : p.url ?? p.address ?? p.endpoint ?? p.baseUrl ?? "";
+    const detail = p.args ? `args: [${p.args.join(", ")}]` : (p.url ?? p.address ?? p.endpoint ?? p.baseUrl ?? "");
     console.log(`  ${name}${marker}  — ${detail}`);
   }
 }

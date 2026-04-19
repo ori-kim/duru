@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import type { CliTarget } from "../config.ts";
+import { ClipError } from "../utils/errors.ts";
 import { applyOverride, resolveProfile } from "./profile.ts";
-import type { CliTarget } from "./config.ts";
 
 const base: CliTarget = {
   command: "gh",
@@ -62,16 +63,6 @@ describe("resolveProfile", () => {
   });
 
   test("non-existent profile exits process", () => {
-    const orig = process.exit;
-    let exitCalled = false;
-    process.exit = (() => { exitCalled = true; throw new Error("exit"); }) as never;
-    try {
-      resolveProfile(targetWithProfiles, "does-not-exist");
-    } catch {
-      // expected
-    } finally {
-      process.exit = orig;
-    }
-    expect(exitCalled).toBe(true);
+    expect(() => resolveProfile(targetWithProfiles, "does-not-exist")).toThrow(ClipError);
   });
 });

@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  buildJsonSchema,
-  isWellKnownOrScalar,
-  parseMessageDescribe,
-  parseServiceDescribe,
-} from "./grpc-schema.ts";
-import type { ParsedDescribe } from "./grpc-schema.ts";
+import { buildJsonSchema, isWellKnownOrScalar, parseMessageDescribe, parseServiceDescribe } from "./grpc.ts";
+import type { ParsedDescribe } from "./grpc.ts";
 
 // --- parseServiceDescribe ---
 
@@ -233,10 +228,13 @@ describe("buildJsonSchema: scalars", () => {
 describe("buildJsonSchema: message 변환", () => {
   test("repeated scalar → array", () => {
     const types = new Map<string, ParsedDescribe>([
-      ["pkg.Req", {
-        kind: "message",
-        fields: [{ name: "tags", typeName: "string", repeated: true, isMap: false }],
-      }],
+      [
+        "pkg.Req",
+        {
+          kind: "message",
+          fields: [{ name: "tags", typeName: "string", repeated: true, isMap: false }],
+        },
+      ],
     ]);
     const schema = buildJsonSchema("pkg.Req", types);
     expect(schema).toMatchObject({
@@ -247,17 +245,22 @@ describe("buildJsonSchema: message 변환", () => {
 
   test("map<string,int32> → additionalProperties", () => {
     const types = new Map<string, ParsedDescribe>([
-      ["pkg.Msg", {
-        kind: "message",
-        fields: [{
-          name: "counts",
-          typeName: "map",
-          repeated: false,
-          isMap: true,
-          mapKeyType: "string",
-          mapValueType: "int32",
-        }],
-      }],
+      [
+        "pkg.Msg",
+        {
+          kind: "message",
+          fields: [
+            {
+              name: "counts",
+              typeName: "map",
+              repeated: false,
+              isMap: true,
+              mapKeyType: "string",
+              mapValueType: "int32",
+            },
+          ],
+        },
+      ],
     ]);
     const schema = buildJsonSchema("pkg.Msg", types);
     expect(schema).toMatchObject({
@@ -274,10 +277,13 @@ describe("buildJsonSchema: message 변환", () => {
   test("enum 필드 → type: string, enum 배열", () => {
     const types = new Map<string, ParsedDescribe>([
       ["pkg.Status", { kind: "enum", values: ["UNKNOWN", "ACTIVE"] }],
-      ["pkg.Msg", {
-        kind: "message",
-        fields: [{ name: "status", typeName: "pkg.Status", repeated: false, isMap: false }],
-      }],
+      [
+        "pkg.Msg",
+        {
+          kind: "message",
+          fields: [{ name: "status", typeName: "pkg.Status", repeated: false, isMap: false }],
+        },
+      ],
     ]);
     const schema = buildJsonSchema("pkg.Msg", types);
     const props = (schema as { properties: Record<string, unknown> }).properties;
@@ -286,13 +292,16 @@ describe("buildJsonSchema: message 변환", () => {
 
   test("순환 참조 방지", () => {
     const types = new Map<string, ParsedDescribe>([
-      ["pkg.Node", {
-        kind: "message",
-        fields: [
-          { name: "value", typeName: "string", repeated: false, isMap: false },
-          { name: "child", typeName: "pkg.Node", repeated: false, isMap: false },
-        ],
-      }],
+      [
+        "pkg.Node",
+        {
+          kind: "message",
+          fields: [
+            { name: "value", typeName: "string", repeated: false, isMap: false },
+            { name: "child", typeName: "pkg.Node", repeated: false, isMap: false },
+          ],
+        },
+      ],
     ]);
     const schema = buildJsonSchema("pkg.Node", types);
     const props = (schema as { properties: Record<string, unknown> }).properties;
@@ -301,13 +310,16 @@ describe("buildJsonSchema: message 변환", () => {
 
   test("oneof 필드에 description 추가", () => {
     const types = new Map<string, ParsedDescribe>([
-      ["pkg.Msg", {
-        kind: "message",
-        fields: [
-          { name: "text", typeName: "string", repeated: false, isMap: false, oneofGroup: "payload" },
-          { name: "data", typeName: "bytes", repeated: false, isMap: false, oneofGroup: "payload" },
-        ],
-      }],
+      [
+        "pkg.Msg",
+        {
+          kind: "message",
+          fields: [
+            { name: "text", typeName: "string", repeated: false, isMap: false, oneofGroup: "payload" },
+            { name: "data", typeName: "bytes", repeated: false, isMap: false, oneofGroup: "payload" },
+          ],
+        },
+      ],
     ]);
     const schema = buildJsonSchema("pkg.Msg", types);
     const props = (schema as { properties: Record<string, unknown> }).properties;

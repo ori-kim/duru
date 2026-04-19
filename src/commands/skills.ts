@@ -1,8 +1,8 @@
 import { lstatSync, mkdirSync, readlinkSync, rmSync, symlinkSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import { die } from "./errors.ts";
-import { loadConfig } from "./config.ts";
+import { loadConfig } from "../config.ts";
+import { die } from "../utils/errors.ts";
 
 const HOME = homedir();
 const MARKER_START = "<!-- clip:start -->";
@@ -10,19 +10,19 @@ const MARKER_END = "<!-- clip:end -->";
 
 // --- 경로 상수 ---
 
-const CLAUDE_HOOKS_DIR  = join(HOME, ".clip", "hooks");
+const CLAUDE_HOOKS_DIR = join(HOME, ".clip", "hooks");
 const CLAUDE_HOOK_SCRIPT = join(CLAUDE_HOOKS_DIR, "check-clip.sh");
-const CLAUDE_SETTINGS   = join(HOME, ".claude", "settings.json");
-const CLAUDE_MD         = join(HOME, ".claude", "CLAUDE.md");
-const AGENTS_SKILL_DIR  = join(HOME, ".agents", "skills", "clip");  // canonical
+const CLAUDE_SETTINGS = join(HOME, ".claude", "settings.json");
+const CLAUDE_MD = join(HOME, ".claude", "CLAUDE.md");
+const AGENTS_SKILL_DIR = join(HOME, ".agents", "skills", "clip"); // canonical
 
-const CODEX_SKILL_LINK  = join(HOME, ".codex", "skills", "clip");
+const CODEX_SKILL_LINK = join(HOME, ".codex", "skills", "clip");
 
-const GEMINI_MD         = join(HOME, ".gemini", "GEMINI.md");
+const GEMINI_MD = join(HOME, ".gemini", "GEMINI.md");
 const GEMINI_SKILL_LINK = join(HOME, ".gemini", "skills", "clip");
 
-const PI_AGENTS_MD      = join(HOME, ".pi", "agent", "AGENTS.md");
-const PI_SKILL_LINK     = join(HOME, ".pi", "agent", "skills", "clip");
+const PI_AGENTS_MD = join(HOME, ".pi", "agent", "AGENTS.md");
+const PI_SKILL_LINK = join(HOME, ".pi", "agent", "skills", "clip");
 
 // --- 공통 빌더 ---
 
@@ -105,7 +105,9 @@ function linkAgentSkill(linkPath: string): void {
     const stat = lstatSync(linkPath);
     exists = true;
     isSymlink = stat.isSymbolicLink();
-  } catch { /* not found */ }
+  } catch {
+    /* not found */
+  }
 
   if (exists) {
     if (isSymlink && readlinkSync(linkPath) === AGENTS_SKILL_DIR) return;
@@ -195,9 +197,9 @@ async function installPi(targetNames: string[]): Promise<void> {
 
 const INTEGRATIONS = {
   "claude-code": installClaudeCode,
-  "codex": installCodex,
-  "gemini": installGemini,
-  "pi": installPi,
+  codex: installCodex,
+  gemini: installGemini,
+  pi: installPi,
 } as const;
 
 type Integration = keyof typeof INTEGRATIONS;
@@ -217,7 +219,13 @@ export async function runSkillsCmd(args: string[]): Promise<void> {
   }
 
   const config = await loadConfig();
-  const targetNames = [...Object.keys(config.cli), ...Object.keys(config.mcp), ...Object.keys(config.api), ...Object.keys(config.grpc), ...Object.keys(config.graphql)];
+  const targetNames = [
+    ...Object.keys(config.cli),
+    ...Object.keys(config.mcp),
+    ...Object.keys(config.api),
+    ...Object.keys(config.grpc),
+    ...Object.keys(config.graphql),
+  ];
   if (targetNames.length === 0) {
     console.log("warning: no targets registered yet. Run `clip add <name> <command>` first.\n");
   }
