@@ -75,6 +75,83 @@ headers:
 
 `deny` always takes precedence over `allow`.
 
+## Profiles
+
+Register multiple variants (profiles) on a single target. Each profile overrides a subset of the target's fields — `args`, `url`, `env`, `headers`, etc.
+
+### Setup and Usage
+
+```sh
+# Register base target
+clip add mygh gh --allow "get,describe,logs,top"
+
+# Add profiles
+clip profile add mygh prod-kr --args "exec,example/prod/kr,--,gh"
+clip profile add mygh alpha-kr --args "exec,example/alpha/kr,--,gh"
+
+# Set active default
+clip profile use mygh prod-kr
+
+# Run with active profile
+clip mygh get pods -n default
+
+# One-shot override
+clip mygh@alpha-kr get pods -n default
+
+# List profiles
+clip profile list mygh
+
+# Clear active
+clip profile unset mygh
+
+# Remove a profile
+clip profile remove mygh alpha-kr
+```
+
+### Profile Commands
+
+| Command | Description |
+|---------|-------------|
+| `clip profile add <target> <profile> [opts]` | Create or update a profile |
+| `clip profile remove <target> <profile>` | Delete a profile |
+| `clip profile list <target>` | List profiles with active marker |
+| `clip profile use <target> <profile>` | Set active profile |
+| `clip profile unset <target>` | Clear active profile |
+| `clip <target>@<profile> <args>` | One-shot profile override |
+
+### `profile add` Flags
+
+| Flag | Applies to | Description |
+|------|-----------|-------------|
+| `--args a,b,c` | CLI, STDIO MCP | Replace prepend args |
+| `--command <cmd>` | CLI, STDIO MCP | Replace base command |
+| `--env KEY=VAL` | CLI, STDIO MCP | Add env var (repeatable) |
+| `--url <url>` | MCP HTTP/SSE | Replace endpoint URL |
+| `--endpoint <url>` | GraphQL | Replace endpoint |
+| `--address <host:port>` | gRPC | Replace address |
+| `--base-url <url>` | API | Replace baseUrl |
+| `--header KEY:VAL` | MCP/API/gRPC/GraphQL | Add header (repeatable) |
+| `--metadata KEY=VAL` | gRPC | Add metadata (repeatable) |
+
+### Merge Rules
+
+- Scalar/array fields (`args`, `url`, `command`, `address`, …): profile value **replaces** target value
+- Map fields (`env`, `headers`, `metadata`): profile entries are **merged** on top of target values (profile wins)
+- ACL fields (`allow`, `deny`, `acl`): managed on the target only — profiles cannot bypass ACL
+
+### config.yml structure
+
+```yaml
+command: gh
+allow: [get, describe, logs, top]
+profiles:
+  prod-kr:
+    args: [exec, example/prod/kr, --, gh]
+  alpha-kr:
+    args: [exec, example/alpha/kr, --, gh]
+active: prod-kr
+```
+
 ## Global Flags
 
 These flags can be placed anywhere in a command:

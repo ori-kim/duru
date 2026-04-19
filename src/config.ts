@@ -20,6 +20,24 @@ const aclFields = {
   acl: aclTreeSchema.optional(),
 };
 
+export const profileOverrideSchema = z.object({
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string()).optional(),
+  command: z.string().optional(),
+  url: z.string().url().optional(),
+  endpoint: z.string().url().optional(),
+  address: z.string().optional(),
+  baseUrl: z.string().url().optional(),
+  openapiUrl: z.string().url().optional(),
+  headers: z.record(z.string()).optional(),
+  metadata: z.record(z.string()).optional(),
+});
+
+const profileFields = {
+  profiles: z.record(profileOverrideSchema).optional(),
+  active: z.string().optional(),
+};
+
 // HTTP MCP (기본값, 기존 설정 호환 — transport 미지정 시 "http"로 처리)
 const mcpHttpTargetSchema = z.object({
   transport: z.literal("http").optional().default("http"),
@@ -27,6 +45,7 @@ const mcpHttpTargetSchema = z.object({
   headers: z.record(z.string()).optional(),
   auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
   ...aclFields,
+  ...profileFields,
 });
 
 // STDIO MCP (transport: "stdio" 명시 필수)
@@ -36,6 +55,7 @@ const mcpStdioTargetSchema = z.object({
   args: z.array(z.string()).optional(),
   env: z.record(z.string()).optional(),
   ...aclFields,
+  ...profileFields,
 });
 
 // SSE MCP (transport: "sse" — legacy MCP SSE transport)
@@ -45,6 +65,7 @@ const mcpSseTargetSchema = z.object({
   headers: z.record(z.string()).optional(),
   auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
   ...aclFields,
+  ...profileFields,
 });
 
 // stdio/sse를 먼저 체크하여 기존 설정(transport 없음)은 http로 폴백
@@ -57,6 +78,7 @@ const cliTargetSchema = z.object({
   allow: z.array(z.string()).optional(),
   deny: z.array(z.string()).optional(),
   acl: aclTreeSchema.optional(),
+  ...profileFields,
 });
 
 const apiTargetSchema = z.object({
@@ -65,6 +87,7 @@ const apiTargetSchema = z.object({
   headers: z.record(z.string()).optional(),
   auth: z.union([z.literal("oauth"), z.literal("apikey"), z.literal(false)]).optional().default(false),
   ...aclFields,
+  ...profileFields,
 });
 
 const graphqlTargetSchema = z.object({
@@ -73,6 +96,7 @@ const graphqlTargetSchema = z.object({
   headers: z.record(z.string()).optional(),
   oauth: z.boolean().optional(),
   ...aclFields,
+  ...profileFields,
 });
 
 const grpcTargetSchema = z.object({
@@ -87,6 +111,7 @@ const grpcTargetSchema = z.object({
   allowUnknownFields: z.boolean().optional(),
   oauth: z.boolean().optional(),
   ...aclFields,
+  ...profileFields,
 });
 
 const TARGET_SCHEMAS = {
@@ -99,6 +124,7 @@ const TARGET_SCHEMAS = {
 
 // --- Types ---
 
+export type ProfileOverride = z.infer<typeof profileOverrideSchema>;
 export type AclNode = z.infer<typeof aclNodeSchema>;
 export type AclTree = z.infer<typeof aclTreeSchema>;
 export type McpHttpTarget = z.infer<typeof mcpHttpTargetSchema>;
@@ -247,6 +273,21 @@ export async function addTarget(
   const dir = join(TARGET_DIR, type, name);
   await Bun.spawn(["mkdir", "-p", dir]).exited;
   await Bun.write(join(dir, "config.yml"), YAML.stringify(target));
+}
+
+export async function updateTarget(
+  name: string,
+  updater: (raw: Record<string, unknown>) => Record<string, unknown>,
+): Promise<void> {
+  for (const type of TARGET_TYPES) {
+    const configPath = join(TARGET_DIR, type, name, "config.yml");
+    const file = Bun.file(configPath);
+    if (!(await file.exists())) continue;
+    const raw = YAML.parse(await file.text()) as Record<string, unknown>;
+    await Bun.write(configPath, YAML.stringify(updater(raw)));
+    return;
+  }
+  die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }
 
 export async function removeTarget(name: string): Promise<void> {

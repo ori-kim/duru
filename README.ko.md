@@ -202,6 +202,12 @@ openapiUrl: https://api.example.com/openapi.json
 | `clip <target> describe <Service.Method>` | gRPC 메서드 시그니처 확인 |
 | `clip <target> describe <type>` | GraphQL 타입 정의 확인 |
 | `clip <target> types` | gRPC 메시지 타입 또는 GraphQL 타입 목록 |
+| `clip profile add <name> <profile> [opts]` | profile 생성/업데이트 |
+| `clip profile use <name> <profile>` | active profile 설정 |
+| `clip profile list <name>` | profile 목록 확인 |
+| `clip profile remove <name> <profile>` | profile 삭제 |
+| `clip profile unset <name>` | active 해제 |
+| `clip <name>@<profile> <args>` | 1회성 profile override |
 | `clip bind <target>` | 네이티브 명령어 심 생성 |
 | `clip unbind <target>` | 네이티브 명령어 심 삭제 |
 | `clip binds` | 현재 바인드된 대상 목록 |

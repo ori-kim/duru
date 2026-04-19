@@ -66,6 +66,21 @@ clip petstore getPetById --petId 1
 clip petstore getPetById --petId 1 --dry-run   # preview curl
 ```
 
+## Profiles
+
+A target can have multiple profiles — variants that override `args`, `url`, `env`, `headers`, etc. Useful when the same tool is used against multiple environments.
+
+```sh
+# One-shot override with @profile syntax
+clip mygh@alpha-kr get pods -n default
+
+# Set active default
+clip profile use mygh prod-kr
+
+# Inspect
+clip profile list mygh
+```
+
 ## Management commands
 
 ```sh
@@ -79,6 +94,10 @@ clip refresh <target>                     # re-fetch OpenAPI spec
 clip login <target> / clip logout <target>
 clip bind <target>    # native shim: "gh" routes through clip without prefix
 clip binds            # list bound targets
+clip profile add <target> <profile> [--args a,b,c] [--url ...] [--env K=V]
+clip profile use <target> <profile>       # set active profile
+clip profile list <target>               # list profiles
+clip profile unset <target>              # clear active
 ```
 
 ## ACL

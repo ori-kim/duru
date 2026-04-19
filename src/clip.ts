@@ -14,6 +14,7 @@ import { executeMcp } from "./mcp-target.ts";
 import { forceLogin, getAuthStatus, removeTokens } from "./oauth.ts";
 import { formatOutput } from "./output.ts";
 import { runCompletionCmd } from "./completion.ts";
+import { runProfileCmd, resolveProfile } from "./profile.ts";
 import { runSkillsCmd } from "./skills.ts";
 
 const VERSION = "0.1.0";
@@ -31,6 +32,12 @@ Usage:
   clip refresh <target>
   clip login <target>
   clip logout <target>
+  clip profile add <target> <profile> [--args a,b,c] [--url ...] [--env K=V]
+  clip profile use <target> <profile>   Set active profile
+  clip profile list <target>            List profiles
+  clip profile remove <target> <profile>
+  clip profile unset <target>           Remove active profile
+  clip <target>@<profile> <args>        One-shot profile override
   clip bind <target>       Bind target as a native command (no "clip" prefix needed)
   clip unbind <target>     Remove native binding
   clip bind --all          Bind all registered targets
@@ -184,12 +191,14 @@ async function runList(): Promise<void> {
   console.log("Targets:");
   for (const [name, b] of [...cliEntries].sort(([a], [b]) => a.localeCompare(b))) {
     const bindTag = bound.has(name) ? " [bind]" : "";
-    console.log(`  ${name.padEnd(16)} [cli]${bindTag} ${b.command}${formatAcl(b)}`);
+    const profileTag = b.active ? ` @${b.active}` : "";
+    console.log(`  ${name.padEnd(16)} [cli]${bindTag} ${b.command}${profileTag}${formatAcl(b)}`);
   }
   for (const [name, b] of [...mcpEntries].sort(([a], [b]) => a.localeCompare(b))) {
     const bindTag = bound.has(name) ? " [bind]" : "";
     if (b.transport === "stdio") {
-      console.log(`  ${name.padEnd(16)} [mcp]${bindTag} ${b.command}${formatAcl(b)}`);
+      const profileTag = b.active ? ` @${b.active}` : "";
+      console.log(`  ${name.padEnd(16)} [mcp]${bindTag} ${b.command}${profileTag}${formatAcl(b)}`);
     } else {
       const authStatus = await getAuthStatus(name);
       const statusTag = authStatus
@@ -200,7 +209,8 @@ async function runList(): Promise<void> {
             ? "  [api key]"
             : "  [no auth]";
       const transportLabel = b.transport === "sse" ? "SSE: " : "";
-      console.log(`  ${name.padEnd(16)} [mcp]${bindTag} ${transportLabel}${b.url}${formatAcl(b)}${statusTag}`);
+      const profileTag = b.active ? ` @${b.active}` : "";
+      console.log(`  ${name.padEnd(16)} [mcp]${bindTag} ${transportLabel}${b.url}${profileTag}${formatAcl(b)}${statusTag}`);
     }
   }
   for (const [name, b] of [...apiEntries].sort(([a], [b]) => a.localeCompare(b))) {
@@ -213,7 +223,8 @@ async function runList(): Promise<void> {
         : b.auth === "apikey"
           ? "  [api key]"
           : "  [no auth]";
-    console.log(`  ${name.padEnd(16)} [api]${bindTag} ${b.baseUrl ?? b.openapiUrl ?? ""}${formatAcl(b)}${statusTag}`);
+    const profileTagApi = b.active ? ` @${b.active}` : "";
+    console.log(`  ${name.padEnd(16)} [api]${bindTag} ${b.baseUrl ?? b.openapiUrl ?? ""}${profileTagApi}${formatAcl(b)}${statusTag}`);
   }
   for (const [name, b] of [...grpcEntries].sort(([a], [b]) => a.localeCompare(b))) {
     const bindTag = bound.has(name) ? " [bind]" : "";
@@ -225,7 +236,8 @@ async function runList(): Promise<void> {
         : b.metadata?.["authorization"]
           ? "  [api key]"
           : "  [no auth]";
-    console.log(`  ${name.padEnd(16)} [grpc]${bindTag} ${b.address}${formatAcl(b)}${statusTag}`);
+    const profileTagGrpc = b.active ? ` @${b.active}` : "";
+    console.log(`  ${name.padEnd(16)} [grpc]${bindTag} ${b.address}${profileTagGrpc}${formatAcl(b)}${statusTag}`);
   }
   for (const [name, b] of [...graphqlEntries].sort(([a], [b]) => a.localeCompare(b))) {
     const bindTag = bound.has(name) ? " [bind]" : "";
@@ -237,7 +249,8 @@ async function runList(): Promise<void> {
         : b.headers?.["authorization"]
           ? "  [api key]"
           : "  [no auth]";
-    console.log(`  ${name.padEnd(16)} [gql]${bindTag} ${b.endpoint}${formatAcl(b)}${statusTag}`);
+    const profileTagGql = b.active ? ` @${b.active}` : "";
+    console.log(`  ${name.padEnd(16)} [gql]${bindTag} ${b.endpoint}${profileTagGql}${formatAcl(b)}${statusTag}`);
   }
 }
 
@@ -544,6 +557,7 @@ async function main(): Promise<void> {
   if (targetName === "unbind") { await runUnbind(rest.slice(1)); return; }
   if (targetName === "binds") { await runBinds(); return; }
   if (targetName === "completion") { await runCompletionCmd(rest.slice(1)); return; }
+  if (targetName === "profile") { await runProfileCmd(rest.slice(1)); return; }
 
   if (targetName === "refresh") {
     const name = rest[1];
@@ -607,13 +621,20 @@ async function main(): Promise<void> {
     return;
   }
 
+  // <target>@<profile> 파싱
+  const atIdx = targetName.indexOf("@");
+  const baseName = atIdx >= 0 ? targetName.slice(0, atIdx) : targetName;
+  const explicitProfile = atIdx >= 0 ? targetName.slice(atIdx + 1) : undefined;
+
   const config = await loadConfig();
-  const resolved = getTarget(config, targetName);
-  const { type, target } = resolved;
+  const resolved = getTarget(config, baseName);
+  const { merged: mergedTarget } = resolveProfile(resolved.target, explicitProfile);
+  const { type } = resolved;
+  const target = mergedTarget;
 
   const subcommand = rest[1];
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
-    await printTargetHelp(targetName, type, target);
+    await printTargetHelp(baseName, type, target);
     process.exit(0);
   }
 

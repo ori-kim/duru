@@ -204,6 +204,12 @@ openapiUrl: https://api.example.com/openapi.json
 | `clip <target> describe <Service.Method>` | Show gRPC method signature |
 | `clip <target> describe <type>` | Show GraphQL type definition |
 | `clip <target> types` | List all gRPC message types or GraphQL types |
+| `clip profile add <name> <profile> [opts]` | Create or update a profile |
+| `clip profile use <name> <profile>` | Set active profile |
+| `clip profile list <name>` | List profiles for a target |
+| `clip profile remove <name> <profile>` | Delete a profile |
+| `clip profile unset <name>` | Clear active profile |
+| `clip <name>@<profile> <args>` | One-shot profile override |
 | `clip bind <target>` | Create a native command shim |
 | `clip unbind <target>` | Remove native command shim |
 | `clip binds` | List currently bound targets |
