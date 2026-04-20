@@ -418,6 +418,22 @@ describe("Registry / onError", () => {
     expect(receivedAclDenied).toBe(true);
   });
 
+  test("{ rethrow } 반환 시 해당 값이 반환됨", async () => {
+    const reg = new Registry();
+    const wrappedError = new Error("wrapped");
+
+    reg.register({
+      name: "ext",
+      init(api) {
+        api.registerErrorHandler(async () => ({ rethrow: wrappedError }));
+      },
+    });
+    await reg.initAll();
+
+    const ret = await reg.runErrorHandlers(makeErrorCtx());
+    expect(ret).toEqual({ rethrow: wrappedError });
+  });
+
   test("핸들러가 void 반환 시 다음 핸들러로 계속", async () => {
     const reg = new Registry();
     const called: number[] = [];
@@ -518,6 +534,27 @@ describe("Registry / lifecycle", () => {
     reg.register({ name: "no-dispose", init() {} });
     await reg.initAll();
     await expect(reg.disposeAll()).resolves.toBeUndefined();
+  });
+});
+
+// --- initAll 멱등성 ---
+
+describe("Registry / initAll 멱등성", () => {
+  test("두 번 호출해도 init은 한 번만 실행", async () => {
+    const reg = new Registry();
+    let count = 0;
+
+    reg.register({
+      name: "ext",
+      init() {
+        count++;
+      },
+    });
+
+    await reg.initAll();
+    await reg.initAll();
+
+    expect(count).toBe(1);
   });
 });
 
@@ -656,6 +693,24 @@ describe("Registry / hooks 결과 머지", () => {
     await reg.initAll();
 
     expect(await reg.runHooks("beforeExecute", makeCtx())).toBeNull();
+  });
+
+  test("afterExecute 낮은 priority 훅이 나중에 실행되어 같은 키를 덮어씀", async () => {
+    const reg = new Registry();
+
+    reg.register({
+      name: "ext",
+      init(api) {
+        // priority 20 → 역순이므로 먼저 실행
+        api.registerHook("afterExecute", async () => ({ result: { stdout: "high-prio" } }), { priority: 20 });
+        // priority 10 → 나중에 실행 → 동일 키는 이 값이 승리
+        api.registerHook("afterExecute", async () => ({ result: { stdout: "low-prio" } }), { priority: 10 });
+      },
+    });
+    await reg.initAll();
+
+    const ret = await reg.runHooks("afterExecute", makeCtx({ phase: "afterExecute" }));
+    expect(ret).toEqual({ result: { stdout: "low-prio" } });
   });
 
   test("훅들이 모두 void 반환하면 null 반환", async () => {

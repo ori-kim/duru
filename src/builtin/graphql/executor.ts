@@ -340,8 +340,8 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
   return executeQuery(target, targetName, query, variables, opName, ctxHeaders);
 }
 
-export async function describeGraphqlTools(target: GraphqlTarget, targetName: string): Promise<Tool[]> {
-  const spec = await loadSchema(target, targetName);
+export async function describeGraphqlTools(target: GraphqlTarget, targetName: string, extraHeaders: Record<string, string> = {}): Promise<Tool[]> {
+  const spec = await loadSchema(target, targetName, false, extraHeaders);
   return spec.tools.map((t) => ({
     name: t.name,
     description: t.description ?? "",

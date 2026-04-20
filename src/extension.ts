@@ -61,7 +61,7 @@ export type TargetTypeDef<T = unknown> = {
   type: string;
   schema: AnySchema<T>;
   executor: (target: T, ctx: ExecutorContext) => Promise<TargetResult>;
-  describeTools?: (target: T, ctx: { targetName: string }) => Promise<Tool[] | null>;
+  describeTools?: (target: T, ctx: { targetName: string; headers?: Record<string, string> }) => Promise<Tool[] | null>;
 };
 
 export type HookOpts = {

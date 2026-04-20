@@ -9,7 +9,7 @@ export const extension: ClipExtension = {
       type: "grpc",
       schema: grpcTargetSchema,
       executor: executeGrpc,
-      describeTools: (target, { targetName }) => describeGrpcTools(target, targetName),
+      describeTools: (target, { targetName, headers }) => describeGrpcTools(target, targetName, headers),
     });
   },
 };

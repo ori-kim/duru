@@ -9,7 +9,7 @@ export const extension: ClipExtension = {
       type: "graphql",
       schema: graphqlTargetSchema,
       executor: executeGraphql,
-      describeTools: (target, { targetName }) => describeGraphqlTools(target, targetName),
+      describeTools: (target, { targetName, headers }) => describeGraphqlTools(target, targetName, headers),
     });
   },
 };

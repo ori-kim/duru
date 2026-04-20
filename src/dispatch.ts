@@ -1,12 +1,10 @@
 import { checkAcl } from "./acl.ts";
 import { createDefaultRegistry } from "./builtin-loader.ts";
 import { type HasAliases, resolveAlias } from "./commands/alias.ts";
-import type { Config, ResolvedTarget } from "./config.ts";
 import { TARGET_TYPES } from "./config.ts";
+import type { Config, ResolvedTarget } from "./config.ts";
 import type { ErrorCtx, ExecutorContext, TargetResult } from "./extension.ts";
 import type { HookCtx, Registry } from "./extension.ts";
-
-const BUILTIN_TYPES = new Set(TARGET_TYPES as readonly string[]);
 
 export type DispatchInput = {
   targetName: string;
@@ -20,6 +18,8 @@ export type DispatchInput = {
   env: Record<string, string>;
 };
 
+const BUILTIN_TYPES = new Set(TARGET_TYPES as readonly string[]);
+
 // lazy default registry: builtin들의 init은 동기적이므로 첫 dispatch에서 초기화
 let _defaultRegistry: Registry | undefined;
 
@@ -32,8 +32,7 @@ async function resolveRegistry(override?: Registry): Promise<Registry> {
   return _defaultRegistry;
 }
 
-function shouldCheckAcl(type: string, subcommand: string, args: string[]): boolean {
-  if (args.includes("--help") || args.includes("-h")) return false;
+function shouldCheckAcl(type: string, subcommand: string): boolean {
   if (subcommand === "tools" && type !== "cli") return false;
   if ((type === "graphql" || type === "grpc") && (subcommand === "describe" || subcommand === "types")) return false;
   return true;
@@ -77,7 +76,7 @@ export async function dispatch(_cfg: Config, input: DispatchInput, registry?: Re
     await reg.runHooks("toolcall", baseCtx);
 
     // ACL 검사
-    if (shouldCheckAcl(type, subcommand, args)) {
+    if (shouldCheckAcl(type, subcommand)) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         checkAcl(target as any, subcommand, args[0], input.targetName);

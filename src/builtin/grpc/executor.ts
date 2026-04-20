@@ -429,10 +429,10 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
   };
 }
 
-export async function describeGrpcTools(target: GrpcTarget, targetName: string): Promise<Tool[]> {
+export async function describeGrpcTools(target: GrpcTarget, targetName: string, authHeaders: Record<string, string> = {}): Promise<Tool[]> {
   await ensureGrpcurl();
   validateTls(target);
-  const schema = await loadSchema(target, targetName);
+  const schema = await loadSchema(target, targetName, false, authHeaders);
   const visible = schema.services.filter((s) => !HIDDEN_SERVICES.has(s.name));
   const multiService = visible.length > 1;
   return visible.flatMap((svc) =>

@@ -1,26 +1,52 @@
 #!/usr/bin/env bun
+import { checkAcl } from "./acl.ts";
 import { createDefaultRegistry } from "./builtin-loader.ts";
 import { runAdd } from "./cli/add.ts";
 import { runConfigCmd } from "./cli/config-cmd.ts";
-import { HELP, printTargetHelp } from "./cli/help.ts";
+import { HELP, VERSION, printTargetHelp } from "./cli/help.ts";
 import { runList } from "./cli/list.ts";
 import { runLogin, runLogout } from "./cli/login.ts";
-import { parseGlobalFlags } from "./cli/parser.ts";
 import { runRefresh } from "./cli/refresh.ts";
 import { runRemove } from "./cli/remove.ts";
 import { type HasAliases, runAliasCmd } from "./commands/alias.ts";
 import { runBind, runBinds, runUnbind } from "./commands/bind.ts";
 import { runCompletionCmd } from "./commands/completion.ts";
-import { resolveProfile, runProfileCmd } from "./commands/profile.ts";
+import { runProfileCmd } from "./commands/profile.ts";
 import { runSkillsCmd } from "./commands/skills.ts";
-import { getTarget, loadConfig } from "./config.ts";
+import { loadConfig } from "./config.ts";
 import { dispatch } from "./dispatch.ts";
 import { loadUserExtensions } from "./extension-loader.ts";
+import { createRawInvocation } from "./pipeline/01-raw.ts";
+import { parseInvocation } from "./pipeline/02-parse.ts";
+import { matchCommand } from "./pipeline/03-match-command.ts";
+import { bindTarget } from "./pipeline/04-bind-target.ts";
+import { resolveProfileStage } from "./pipeline/05-resolve-profile.ts";
+import type { InternalVerb, MatchedCommand, TargetInvocationHandle } from "./pipeline/types.ts";
 import { printAndExit } from "./utils/errors.ts";
 import { formatOutput } from "./utils/output.ts";
 import { formatToolHelp } from "./utils/tool-args.ts";
 
 const registry = createDefaultRegistry();
+
+async function runInternal(verb: InternalVerb, rest: readonly string[], reg: typeof registry): Promise<number> {
+  const args = rest as string[];
+  switch (verb) {
+    case "config": await runConfigCmd(args); return 0;
+    case "list": await runList(); return 0;
+    case "add": await runAdd(args); return 0;
+    case "remove": await runRemove(args); return 0;
+    case "skills": await runSkillsCmd(args); return 0;
+    case "bind": await runBind(args); return 0;
+    case "unbind": await runUnbind(args); return 0;
+    case "binds": await runBinds(); return 0;
+    case "completion": await runCompletionCmd(args); return 0;
+    case "profile": await runProfileCmd(args); return 0;
+    case "alias": await runAliasCmd(args); return 0;
+    case "refresh": await runRefresh(args, reg); return 0;
+    case "login": await runLogin(args); return 0;
+    case "logout": await runLogout(args); return 0;
+  }
+}
 
 async function main(): Promise<number> {
   await loadUserExtensions(registry);
@@ -33,110 +59,54 @@ async function main(): Promise<number> {
   });
 
   const argv = Bun.argv.slice(2);
-  const { jsonMode, pipeMode, dryRun, rest } = parseGlobalFlags(argv);
+  const raw = createRawInvocation(argv, process.env);
+  const parsed = parseInvocation(raw);
 
-  if (rest.length === 0) {
+  if ((parsed as unknown as { internalVerb: string | undefined }).internalVerb === "version") {
+    console.log(`clip ${VERSION}`);
+    return 0;
+  }
+
+  const matched: MatchedCommand = matchCommand(parsed);
+
+  if (matched.kind === "help") {
     console.log(HELP);
     return 0;
   }
 
-  const targetName = rest[0]!;
-
-  if (targetName === "config") {
-    await runConfigCmd(rest.slice(1));
-    return 0;
-  }
-  if (targetName === "list") {
-    await runList();
-    return 0;
-  }
-  if (targetName === "add") {
-    await runAdd(rest.slice(1));
-    return 0;
-  }
-  if (targetName === "remove") {
-    await runRemove(rest.slice(1));
-    return 0;
-  }
-  if (targetName === "skills") {
-    await runSkillsCmd(rest.slice(1));
-    return 0;
-  }
-  if (targetName === "bind") {
-    await runBind(rest.slice(1));
-    return 0;
-  }
-  if (targetName === "unbind") {
-    await runUnbind(rest.slice(1));
-    return 0;
-  }
-  if (targetName === "binds") {
-    await runBinds();
-    return 0;
-  }
-  if (targetName === "completion") {
-    await runCompletionCmd(rest.slice(1));
-    return 0;
-  }
-  if (targetName === "profile") {
-    await runProfileCmd(rest.slice(1));
-    return 0;
-  }
-  if (targetName === "alias") {
-    await runAliasCmd(rest.slice(1));
-    return 0;
-  }
-  if (targetName === "refresh") {
-    await runRefresh(rest.slice(1), registry);
-    return 0;
-  }
-  if (targetName === "login") {
-    await runLogin(rest.slice(1));
-    return 0;
-  }
-  if (targetName === "logout") {
-    await runLogout(rest.slice(1));
-    return 0;
+  if (matched.kind === "internal") {
+    return runInternal(matched.verb, matched.rest, registry);
   }
 
-  // <target>@<profile> 파싱
-  const atIdx = targetName.indexOf("@");
-  const baseName = atIdx >= 0 ? targetName.slice(0, atIdx) : targetName;
-  const explicitProfile = atIdx >= 0 ? targetName.slice(atIdx + 1) : undefined;
+  // kind === "target" (completion은 internal verb로 처리되므로 여기 도달하지 않음)
+  if (matched.kind !== "target") return 0;
+  const { invocation } = matched;
+  const { baseName, subcommand: rawSubcommand, targetArgs } = invocation;
+  const { jsonMode, pipeMode, dryRun } = invocation.lateFlags;
 
   const config = await loadConfig();
-  const resolved = getTarget(config, baseName);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { merged: mergedTarget } = resolveProfile(resolved.target as any, explicitProfile);
-  const { type } = resolved;
-  const target = mergedTarget;
-
-  let rawSubcommand = rest[1];
-  let rawTargetArgsBase = rest.slice(2);
-
-  // clip <target> --help <tool> → treat --help as a flag, use next positional as subcommand
-  if ((rawSubcommand === "--help" || rawSubcommand === "-h") && rest[2] && !rest[2].startsWith("-")) {
-    rawSubcommand = rest[2];
-    rawTargetArgsBase = ["--help", ...rest.slice(3)];
-  }
+  const bound = bindTarget(invocation, config, registry);
+  const mergedResult = resolveProfileStage(bound, registry);
+  const { type, target } = mergedResult as unknown as { type: string; target: unknown; invocation: TargetInvocationHandle };
 
   if (!rawSubcommand || rawSubcommand === "--help" || rawSubcommand === "-h") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await printTargetHelp(baseName, type as any, target);
+    await printTargetHelp(baseName, type as any, target as any);
     return 0;
   }
 
-  const rawTargetArgs = rawTargetArgsBase;
-  const LATE_FLAGS = new Set(["--dry-run", "--json", "--pipe", "--debug"]);
-  const effectiveDryRun = dryRun || rawTargetArgs.includes("--dry-run");
-  if (rawTargetArgs.includes("--debug")) process.env["CLIP_EXT_TRACE"] = "1";
-  const effectiveJsonMode = jsonMode || rawTargetArgs.includes("--json");
-  const effectivePipeMode = pipeMode || rawTargetArgs.includes("--pipe");
+  const lateFiltered = [...targetArgs] as string[];
+  const effectiveDryRun = dryRun;
+  const effectiveJsonMode = jsonMode;
+  const effectivePipeMode = pipeMode;
   const effectivePassthrough = !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode;
-  const lateFiltered = rawTargetArgs.filter((a) => !LATE_FLAGS.has(a));
 
   const hasHelpFlag = lateFiltered.includes("--help") || lateFiltered.includes("-h");
   if (hasHelpFlag && rawSubcommand !== "tools") {
+    // ACL은 help 여부와 무관하게 항상 적용
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    checkAcl(target as any, rawSubcommand, undefined, baseName);
+
     const aliasDef = (target as HasAliases).aliases?.[rawSubcommand];
     if (aliasDef) {
       const lines = [`Alias: ${rawSubcommand}  →  ${aliasDef.subcommand}`];
@@ -149,7 +119,26 @@ async function main(): Promise<number> {
 
     const def = registry.getTargetType(type);
     if (def?.describeTools) {
-      const tools = await def.describeTools(target, { targetName: baseName });
+      // beforeExecute 훅을 실행해 auth 헤더 등을 주입받은 뒤 describeTools에 전달
+      const helpHookCtx = {
+        phase: "beforeExecute" as const,
+        targetName: baseName,
+        targetType: type,
+        target: Object.freeze(target),
+        subcommand: rawSubcommand,
+        args: lateFiltered.filter((a) => a !== "--help" && a !== "-h"),
+        headers: config.headers ?? {},
+        dryRun: effectiveDryRun,
+        jsonMode: effectiveJsonMode,
+        passthrough: false,
+      };
+      const beforeResult = await registry.runHooks("beforeExecute", helpHookCtx);
+      const helpHeaders =
+        beforeResult && "headers" in beforeResult && beforeResult.headers
+          ? { ...(config.headers ?? {}), ...beforeResult.headers }
+          : (config.headers ?? {});
+
+      const tools = await def.describeTools(target, { targetName: baseName, headers: helpHeaders });
       if (tools !== null) {
         const tool = tools.find((t) => t.name === rawSubcommand);
         if (tool) {
@@ -168,7 +157,7 @@ async function main(): Promise<number> {
   const result = await dispatch(
     config,
     {
-      targetName,
+      targetName: invocation.token,
       resolvedTarget: { type, target } as import("./config.ts").ResolvedTarget,
       subcommand: rawSubcommand,
       args: lateFiltered,

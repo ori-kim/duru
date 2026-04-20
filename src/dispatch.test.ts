@@ -200,6 +200,102 @@ describe("dispatch / mcp executor 호출", () => {
   });
 });
 
+// --- alias → ACL 차단 ---
+
+describe("dispatch / alias → ACL 차단", () => {
+  test("alias가 deny 목록 subcommand로 확장되면 executor 미호출", async () => {
+    let called = false;
+    const reg = await makeRegistry(async () => {
+      called = true;
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+
+    const target = {
+      command: "echo",
+      aliases: { del: { subcommand: "delete" } },
+      deny: ["delete"],
+    } as never;
+
+    await dispatch(
+      emptyCfg,
+      baseInput({
+        resolvedTarget: { type: "cli", target } as ResolvedTarget,
+        subcommand: "del",
+      }),
+      reg,
+    ).catch(() => {});
+
+    expect(called).toBe(false);
+  });
+});
+
+// --- error handler 복구 ---
+
+describe("dispatch / error handler 복구", () => {
+  test("executor 에러를 error handler가 { result }로 복구", async () => {
+    const reg = await makeRegistry(async () => {
+      throw new Error("exec-failed");
+    });
+
+    reg.register({
+      name: "recover",
+      init(api) {
+        api.registerErrorHandler(async (ctx) => {
+          if (!ctx.aclDenied) return { result: { exitCode: 1, stdout: "recovered", stderr: "" } };
+        });
+      },
+    });
+    await reg.initAll();
+
+    const result = await dispatch(emptyCfg, baseInput(), reg);
+    expect(result.stdout).toBe("recovered");
+    expect(result.exitCode).toBe(1);
+  });
+
+  test("error handler { rethrow }가 다른 에러로 전파됨", async () => {
+    const reg = await makeRegistry(async () => {
+      throw new Error("original");
+    });
+
+    const wrappedError = new Error("wrapped");
+    reg.register({
+      name: "rethrow",
+      init(api) {
+        api.registerErrorHandler(async () => ({ rethrow: wrappedError }));
+      },
+    });
+    await reg.initAll();
+
+    await expect(dispatch(emptyCfg, baseInput(), reg)).rejects.toBe(wrappedError);
+  });
+});
+
+// --- afterExecute ctx.result ---
+
+describe("dispatch / afterExecute ctx.result", () => {
+  test("afterExecute 훅이 executor 결과를 ctx.result로 수신", async () => {
+    let capturedResult: TargetResult | undefined;
+    const reg = await makeRegistry(async () => ({
+      exitCode: 0,
+      stdout: "executor-output",
+      stderr: "",
+    }));
+
+    reg.register({
+      name: "after-spy",
+      init(api) {
+        api.registerHook("afterExecute", async (ctx) => {
+          capturedResult = ctx.result;
+        });
+      },
+    });
+    await reg.initAll();
+
+    await dispatch(emptyCfg, baseInput(), reg);
+    expect(capturedResult?.stdout).toBe("executor-output");
+  });
+});
+
 // --- Registry 훅 통합 ---
 
 describe("dispatch / registry 훅 통합", () => {
