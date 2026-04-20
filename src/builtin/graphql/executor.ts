@@ -1,10 +1,10 @@
 import { mkdirSync } from "fs";
-import { homedir } from "os";
 import { join } from "path";
 import { buildAliasSection } from "../../commands/alias.ts";
 import { handleOAuth401 } from "../../commands/oauth.ts";
 import type { TargetResult, Tool } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
+import { CONFIG_DIR, findTargetConfigDir } from "../../config.ts";
 import {
   INTROSPECTION_QUERY,
   buildOperation,
@@ -20,11 +20,11 @@ import { die } from "../../utils/errors.ts";
 import { formatToolHelp, parseToolArgs } from "../../utils/tool-args.ts";
 import type { GraphqlTarget } from "./schema.ts";
 
-const GRAPHQL_DIR = join(homedir(), ".clip", "target", "graphql");
 const BUILTIN_SCALARS = new Set(["Boolean", "String", "Int", "Float", "ID"]);
 
 function schemaCachePath(targetName: string): string {
-  return join(GRAPHQL_DIR, targetName, "schema.json");
+  const dir = findTargetConfigDir(targetName, "graphql") ?? join(CONFIG_DIR, "target", "graphql", targetName);
+  return join(dir, "schema.json");
 }
 
 function buildHeaders(target: GraphqlTarget, extraHeaders: Record<string, string> = {}): Record<string, string> {
@@ -113,7 +113,7 @@ async function loadSchema(
   }
 
   const schemaObj = { __schema: data["__schema"] };
-  const dir = join(GRAPHQL_DIR, targetName);
+  const dir = findTargetConfigDir(targetName, "graphql") ?? join(CONFIG_DIR, "target", "graphql", targetName);
   mkdirSync(dir, { recursive: true });
   await Bun.write(cachePath, JSON.stringify(schemaObj, null, 2));
 

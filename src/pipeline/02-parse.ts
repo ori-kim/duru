@@ -30,6 +30,7 @@ const INTERNAL_VERBS = new Set<InternalVerb>([
   "login",
   "logout",
   "config",
+  "workspace",
 ]);
 
 const LATE_FLAG_SET = new Set(["--dry-run", "--json", "--pipe", "--debug"]);

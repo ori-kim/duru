@@ -1,15 +1,13 @@
-import { homedir } from "os";
 import { join } from "path";
+import { CONFIG_DIR, findTargetConfigDir } from "../config.ts";
 import { die } from "../utils/errors.ts";
 
 // --- 경로 ---
 
-const CLIP_DIR = join(homedir(), ".clip");
-
 type AuthKind = "mcp" | "api" | "grpc" | "graphql";
 
 function authDirOf(targetName: string, kind: AuthKind = "mcp"): string {
-  return join(CLIP_DIR, "target", kind, targetName);
+  return findTargetConfigDir(targetName, kind) ?? join(CONFIG_DIR, "target", kind, targetName);
 }
 
 function authPath(targetName: string, kind: AuthKind = "mcp"): string {

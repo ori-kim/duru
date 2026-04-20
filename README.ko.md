@@ -104,10 +104,15 @@ clip gql query --query '{ users { id name } }'
 | `clip <target> tools` | 도구·오퍼레이션 목록 |
 | `clip <target> describe <op>` | 메서드/타입 상세 확인 |
 | `clip <target> types` | 전체 타입 목록 (gRPC/GraphQL) |
+| `clip add <name> ... --global` | 글로벌에 등록 (활성 워크스페이스 무시) |
 | `clip profile add/use/list/remove/unset` | profile 관리 |
 | `clip <target>@<profile> <args>` | 1회성 profile override |
 | `clip bind / unbind <target>` | 네이티브 명령어 심 |
 | `clip binds` | 바인드된 대상 목록 |
+| `clip workspace new <name>` | 워크스페이스 생성 |
+| `clip workspace use <name> \| -` | 워크스페이스 전환 (또는 해제) |
+| `clip workspace list` | 워크스페이스 목록 |
+| `clip workspace remove <name>` | 워크스페이스 삭제 |
 | `npx skills add ori-kim/cli-proxy` | skills.sh로 에이전트 스킬 설치 |
 | `clip completion zsh` | zsh 자동완성 스크립트 출력 |
 
@@ -124,6 +129,7 @@ clip gql query --query '{ users { id name } }'
 - [gRPC target](docs/ko/05-grpc.md) — protobuf 서비스, 스키마 갱신, dry run
 - [GraphQL target](docs/ko/06-graphql.md) — introspection, 쿼리, mutation, 인증
 - [Aliases & Scripts](docs/ko/07-aliases.md) — 단축 매크로와 스크립트 번들
+- [워크스페이스](docs/ko/09-workspaces.md) — 프로젝트별 target 격리
 
 ## 개발
 

@@ -33,11 +33,14 @@ clip add my-api localhost:50051 --grpc ./api.proto
 clip add gql https://api.example.com/graphql --graphql
 clip add my-scripts --script
 
-# 목록 확인
+# 목록 확인 (워크스페이스 활성 시 [workspace] 태그 표시)
 clip list
 
 # 삭제
 clip remove gh
+
+# 글로벌 강제 등록 (활성 워크스페이스 무시)
+clip add gh gh --global
 ```
 
 ## Config 파일 위치

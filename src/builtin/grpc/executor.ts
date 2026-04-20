@@ -1,17 +1,15 @@
 import { mkdirSync } from "fs";
-import { homedir } from "os";
 import { join } from "path";
 import { buildAliasSection } from "../../commands/alias.ts";
 import { getStoredAuthHeaders, refreshIfExpiring } from "../../commands/oauth.ts";
 import type { TargetResult, Tool } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
+import { CONFIG_DIR, findTargetConfigDir } from "../../config.ts";
 import { buildJsonSchema, isWellKnownOrScalar, parseMessageDescribe, parseServiceDescribe } from "../../schema/grpc.ts";
 import type { ParsedDescribe } from "../../schema/grpc.ts";
 import { die } from "../../utils/errors.ts";
 import { formatToolHelp, parseToolArgs } from "../../utils/tool-args.ts";
 import type { GrpcTarget } from "./schema.ts";
-
-const GRPC_DIR = join(homedir(), ".clip", "target", "grpc");
 
 const HIDDEN_SERVICES = new Set(["grpc.reflection.v1.ServerReflection", "grpc.reflection.v1alpha.ServerReflection"]);
 
@@ -34,7 +32,8 @@ type GrpcSchemaCache = {
 };
 
 function schemaCachePath(targetName: string): string {
-  return join(GRPC_DIR, targetName, "schema.json");
+  const dir = findTargetConfigDir(targetName, "grpc") ?? join(CONFIG_DIR, "target", "grpc", targetName);
+  return join(dir, "schema.json");
 }
 
 async function ensureGrpcurl(): Promise<void> {
@@ -210,7 +209,7 @@ async function loadSchema(
   }
 
   const cache: GrpcSchemaCache = { services };
-  const dir = join(GRPC_DIR, targetName);
+  const dir = findTargetConfigDir(targetName, "grpc") ?? join(CONFIG_DIR, "target", "grpc", targetName);
   mkdirSync(dir, { recursive: true });
   await Bun.write(cachePath, JSON.stringify(cache, null, 2));
   return cache;
@@ -415,7 +414,7 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
         "  Option 1: Add to config.yml:",
         "    metadata:",
         '      authorization: "Bearer <token>"',
-        "  Option 2: Store token in ~/.clip/target/grpc/" + targetName + "/auth.json",
+        "  Option 2: Store token in " + (findTargetConfigDir(targetName, "grpc") ?? join(CONFIG_DIR, "target", "grpc", targetName)) + "/auth.json",
         "",
         result.stderr,
       ].join("\n"),

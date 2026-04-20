@@ -13,6 +13,7 @@ import { runBind, runBinds, runUnbind } from "./commands/bind.ts";
 import { runCompletionCmd } from "./commands/completion.ts";
 import { runProfileCmd } from "./commands/profile.ts";
 import { runSkillsCmd } from "./commands/skills.ts";
+import { runWorkspaceCmd } from "./commands/workspace.ts";
 import { loadConfig } from "./config.ts";
 import { dispatch } from "./dispatch.ts";
 import { loadUserExtensions } from "./extension-loader.ts";
@@ -45,6 +46,7 @@ async function runInternal(verb: InternalVerb, rest: readonly string[], reg: typ
     case "refresh": await runRefresh(args, reg); return 0;
     case "login": await runLogin(args); return 0;
     case "logout": await runLogout(args); return 0;
+    case "workspace": await runWorkspaceCmd(args); return 0;
   }
 }
 

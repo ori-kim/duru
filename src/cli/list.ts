@@ -1,7 +1,7 @@
 import { listBound } from "../commands/bind.ts";
 import { getAuthStatus } from "../commands/oauth.ts";
 import type { ApiTarget, CliTarget, GraphqlTarget, GrpcTarget, McpTarget, ScriptTarget } from "../config.ts";
-import { loadConfig } from "../config.ts";
+import { getActiveWorkspace, loadConfig } from "../config.ts";
 
 export function formatAcl(
   target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget | ScriptTarget,
@@ -45,8 +45,14 @@ export async function runList(): Promise<void> {
   }
 
   const bound = new Set(await listBound());
+  const activeWs = getActiveWorkspace();
   const tty = process.stdout.isTTY;
   const c = (code: string, text: string) => (tty ? `\x1b[${code}m${text}\x1b[0m` : text);
+  const wsTag = (name: string) => {
+    if (!activeWs) return "";
+    const src = config._sources?.[name];
+    return src !== undefined ? c("2", src ? ` [${src}]` : " [global]") : "";
+  };
 
   const COLORS = {
     cli: "32",
@@ -71,7 +77,7 @@ export async function runList(): Promise<void> {
     printHeader("cli");
     for (const [name, b] of [...cliEntries].sort(([a], [b]) => a.localeCompare(b))) {
       const profileTag = b.active ? ` @${b.active}` : "";
-      console.log(`  ${nm("cli", name)} ${b.command}${profileTag}${formatAcl(b)}${bind(name)}`);
+      console.log(`  ${nm("cli", name)} ${b.command}${profileTag}${formatAcl(b)}${bind(name)}${wsTag(name)}`);
     }
   }
 
@@ -80,7 +86,7 @@ export async function runList(): Promise<void> {
     for (const [name, b] of [...mcpEntries].sort(([a], [b]) => a.localeCompare(b))) {
       if (b.transport === "stdio") {
         const profileTag = b.active ? ` @${b.active}` : "";
-        console.log(`  ${nm("mcp", name)} stdio: ${b.command}${profileTag}${formatAcl(b)}${bind(name)}`);
+        console.log(`  ${nm("mcp", name)} stdio: ${b.command}${profileTag}${formatAcl(b)}${bind(name)}${wsTag(name)}`);
       } else {
         const authStatus = await getAuthStatus(name);
         const statusTag = authStatus
@@ -93,7 +99,7 @@ export async function runList(): Promise<void> {
         const transportLabel = b.transport === "sse" ? "sse: " : "";
         const profileTag = b.active ? ` @${b.active}` : "";
         console.log(
-          `  ${nm("mcp", name)} ${transportLabel}${b.url}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}`,
+          `  ${nm("mcp", name)} ${transportLabel}${b.url}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`,
         );
       }
     }
@@ -112,7 +118,7 @@ export async function runList(): Promise<void> {
             : c("2", "  [no auth]");
       const profileTag = b.active ? ` @${b.active}` : "";
       console.log(
-        `  ${nm("api", name)} ${b.baseUrl ?? b.openapiUrl ?? ""}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}`,
+        `  ${nm("api", name)} ${b.baseUrl ?? b.openapiUrl ?? ""}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`,
       );
     }
   }
@@ -129,7 +135,7 @@ export async function runList(): Promise<void> {
             ? c("2", "  [api key]")
             : c("2", "  [no auth]");
       const profileTag = b.active ? ` @${b.active}` : "";
-      console.log(`  ${nm("grpc", name)} ${b.address}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}`);
+      console.log(`  ${nm("grpc", name)} ${b.address}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`);
     }
   }
 
@@ -145,7 +151,7 @@ export async function runList(): Promise<void> {
             ? c("2", "  [api key]")
             : c("2", "  [no auth]");
       const profileTag = b.active ? ` @${b.active}` : "";
-      console.log(`  ${nm("graphql", name)} ${b.endpoint}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}`);
+      console.log(`  ${nm("graphql", name)} ${b.endpoint}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`);
     }
   }
 
@@ -154,7 +160,7 @@ export async function runList(): Promise<void> {
     for (const [name, b] of [...scriptEntries].sort(([a], [b]) => a.localeCompare(b))) {
       const cmdCount = Object.keys(b.commands ?? {}).length;
       const desc = b.description ? ` — ${b.description}` : "";
-      console.log(`  ${nm("script", name)} ${cmdCount} command(s)${desc}${formatAcl(b)}${bind(name)}`);
+      console.log(`  ${nm("script", name)} ${cmdCount} command(s)${desc}${formatAcl(b)}${bind(name)}${wsTag(name)}`);
     }
   }
 

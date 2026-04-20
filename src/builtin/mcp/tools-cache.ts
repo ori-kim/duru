@@ -1,11 +1,10 @@
-import { homedir } from "os";
 import { join } from "path";
+import { CONFIG_DIR, findTargetConfigDir } from "../../config.ts";
 import type { Tool } from "../../extension.ts";
 
-const MCP_DIR = join(homedir(), ".clip", "target", "mcp");
-
 function toolsCachePath(targetName: string): string {
-  return join(MCP_DIR, targetName, "tools.json");
+  const dir = findTargetConfigDir(targetName, "mcp") ?? join(CONFIG_DIR, "target", "mcp", targetName);
+  return join(dir, "tools.json");
 }
 
 export async function readToolsCache(targetName: string): Promise<Tool[] | null> {
@@ -21,7 +20,8 @@ export async function readToolsCache(targetName: string): Promise<Tool[] | null>
 }
 
 export async function writeToolsCache(targetName: string, tools: Tool[]): Promise<void> {
-  const dir = join(MCP_DIR, targetName);
+  const cachePath = toolsCachePath(targetName);
+  const dir = join(cachePath, "..");
   await Bun.spawn(["mkdir", "-p", dir]).exited;
-  await Bun.write(toolsCachePath(targetName), JSON.stringify({ tools }, null, 2));
+  await Bun.write(cachePath, JSON.stringify({ tools }, null, 2));
 }

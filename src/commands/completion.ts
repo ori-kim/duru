@@ -36,7 +36,12 @@ _clip_cache_policy() {
 }
 
 _clip() {
-  local tdir="$HOME/.clip/target"
+  local gtdir="$HOME/.clip/target"
+  local wstdir=""
+  local wsfile="$HOME/.clip/.workspace"
+  if [[ -f "$wsfile" && -s "$wsfile" ]]; then
+    wstdir="$HOME/.clip/workspace/$(cat "$wsfile")/target"
+  fi
 
   if (( CURRENT == 2 )); then
     local -a builtins=(
@@ -46,6 +51,7 @@ _clip() {
       'refresh:re-fetch OpenAPI spec for an API target'
       'login:OAuth login for an MCP / API target'
       'logout:remove stored OAuth tokens'
+      'workspace:manage workspaces'
       'bind:create a native command shim for a target'
       'unbind:remove a native command shim'
       'binds:list currently bound targets'
@@ -53,36 +59,52 @@ _clip() {
       'completion:generate shell completion script'
     )
     local -a cli_targets=() mcp_targets=() api_targets=() grpc_targets=() graphql_targets=() script_targets=()
-    local t name detail
-    for t in "$tdir"/cli/*(N/); do
-      name="\${t:t}"
-      detail=$(awk '/^command:/{print $2; exit}' "$t/config.yml" 2>/dev/null)
-      cli_targets+=("$name:$detail")
-    done
-    for t in "$tdir"/mcp/*(N/); do
-      name="\${t:t}"
-      detail=$(awk '/^transport:/{t=$2} /^url:/{print (t=="sse"?"sse: ":"")$2; exit} /^command:/{print "stdio: "$2; exit}' "$t/config.yml" 2>/dev/null)
-      mcp_targets+=("$name:$detail")
-    done
-    for t in "$tdir"/api/*(N/); do
-      name="\${t:t}"
-      detail=$(awk '/^baseUrl:/{b=$2} /^openapiUrl:/{u=$2} END{print (b?b:u)}' "$t/config.yml" 2>/dev/null)
-      api_targets+=("$name:$detail")
-    done
-    for t in "$tdir"/grpc/*(N/); do
-      name="\${t:t}"
-      detail=$(awk '/^address:/{print $2; exit}' "$t/config.yml" 2>/dev/null)
-      grpc_targets+=("$name:$detail")
-    done
-    for t in "$tdir"/graphql/*(N/); do
-      name="\${t:t}"
-      detail=$(awk '/^endpoint:/{print $2; exit}' "$t/config.yml" 2>/dev/null)
-      graphql_targets+=("$name:$detail")
-    done
-    for t in "$tdir"/script/*(N/); do
-      name="\${t:t}"
-      detail=$(awk '/^description:/{sub(/^description: */, ""); print; exit}' "$t/config.yml" 2>/dev/null)
-      script_targets+=("$name:$detail")
+    typeset -A _seen_cli _seen_mcp _seen_api _seen_grpc _seen_graphql _seen_script
+    local t name detail _base
+    for _base in "$wstdir" "$gtdir"; do
+      [[ -z "$_base" ]] && continue
+      for t in "$_base/cli/"*(N/); do
+        name="\${t:t}"
+        [[ -n "\${_seen_cli[$name]}" ]] && continue
+        _seen_cli[$name]=1
+        detail=$(awk '/^command:/{print $2; exit}' "$t/config.yml" 2>/dev/null)
+        cli_targets+=("$name:$detail")
+      done
+      for t in "$_base/mcp/"*(N/); do
+        name="\${t:t}"
+        [[ -n "\${_seen_mcp[$name]}" ]] && continue
+        _seen_mcp[$name]=1
+        detail=$(awk '/^transport:/{t=$2} /^url:/{print (t=="sse"?"sse: ":"")$2; exit} /^command:/{print "stdio: "$2; exit}' "$t/config.yml" 2>/dev/null)
+        mcp_targets+=("$name:$detail")
+      done
+      for t in "$_base/api/"*(N/); do
+        name="\${t:t}"
+        [[ -n "\${_seen_api[$name]}" ]] && continue
+        _seen_api[$name]=1
+        detail=$(awk '/^baseUrl:/{b=$2} /^openapiUrl:/{u=$2} END{print (b?b:u)}' "$t/config.yml" 2>/dev/null)
+        api_targets+=("$name:$detail")
+      done
+      for t in "$_base/grpc/"*(N/); do
+        name="\${t:t}"
+        [[ -n "\${_seen_grpc[$name]}" ]] && continue
+        _seen_grpc[$name]=1
+        detail=$(awk '/^address:/{print $2; exit}' "$t/config.yml" 2>/dev/null)
+        grpc_targets+=("$name:$detail")
+      done
+      for t in "$_base/graphql/"*(N/); do
+        name="\${t:t}"
+        [[ -n "\${_seen_graphql[$name]}" ]] && continue
+        _seen_graphql[$name]=1
+        detail=$(awk '/^endpoint:/{print $2; exit}' "$t/config.yml" 2>/dev/null)
+        graphql_targets+=("$name:$detail")
+      done
+      for t in "$_base/script/"*(N/); do
+        name="\${t:t}"
+        [[ -n "\${_seen_script[$name]}" ]] && continue
+        _seen_script[$name]=1
+        detail=$(awk '/^description:/{sub(/^description: */, ""); print; exit}' "$t/config.yml" 2>/dev/null)
+        script_targets+=("$name:$detail")
+      done
     done
     # targets first, built-ins last
     (( \${#cli_targets} ))     && _describe -t cli-targets     'cli'     cli_targets
@@ -98,6 +120,10 @@ _clip() {
   local target="\${words[2]}"
 
   # cli: delegate to the original command's completion
+  local tdir="$gtdir"
+  if [[ -n "$wstdir" && -f "$wstdir/cli/$target/config.yml" ]]; then
+    tdir="$wstdir"
+  fi
   if [[ -f "$tdir/cli/$target/config.yml" ]]; then
     local orig_cmd
     orig_cmd=$(awk '/^command:/{print $2; exit}' "$tdir/cli/$target/config.yml")
@@ -111,7 +137,9 @@ _clip() {
   # api / mcp: complete tool names at position 3 (cached, with spinner)
   if (( CURRENT == 3 )); then
     local -a tools
-    local cache_id="clip-tools-v2-$target"
+    local ws_name=""
+    [[ -n "$wstdir" ]] && ws_name=$(cat "$wsfile" 2>/dev/null)
+    local cache_id="clip-tools-v2-$target-$ws_name"
     if _cache_invalid "$cache_id" || ! _retrieve_cache "$cache_id"; then
       local tmpf
       tmpf=$(mktemp /tmp/clip-tools-XXXXXX)
