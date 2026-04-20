@@ -107,6 +107,24 @@ function subRecord(
   );
 }
 
+function subProfiles<P extends { headers?: Record<string, string>; metadata?: Record<string, string> }>(
+  profiles: Record<string, P> | undefined,
+  env: Record<string, string>,
+  fields: ReadonlyArray<"headers" | "metadata">,
+): Record<string, P> | undefined {
+  if (!profiles) return profiles;
+  return Object.fromEntries(
+    Object.entries(profiles).map(([name, p]) => {
+      const next = { ...p };
+      for (const f of fields) {
+        const r = next[f];
+        if (r) (next as Record<string, unknown>)[f] = subRecord(r, env);
+      }
+      return [name, next];
+    }),
+  );
+}
+
 function resolveScriptPath(file: string, baseDir: string): string {
   if (file.startsWith("~/") || file === "~") {
     return join(homedir(), file.slice(1));
@@ -162,20 +180,28 @@ export async function loadConfig(): Promise<Config> {
         cli[name] = result.data as CliTarget;
       } else if (type === "mcp") {
         const t = result.data as McpTarget;
-        mcp[name] = t.transport === "stdio" ? t : { ...t, headers: subRecord(t.headers, env) };
+        mcp[name] =
+          t.transport === "stdio"
+            ? t
+            : { ...t, headers: subRecord(t.headers, env), profiles: subProfiles(t.profiles, env, ["headers"]) };
       } else if (type === "api") {
         const t = result.data as ApiTarget;
-        api[name] = { ...t, headers: subRecord(t.headers, env) };
+        api[name] = { ...t, headers: subRecord(t.headers, env), profiles: subProfiles(t.profiles, env, ["headers"]) };
       } else if (type === "grpc") {
         const t = result.data as GrpcTarget;
         grpc[name] = {
           ...t,
           metadata: subRecord(t.metadata, env),
           reflectMetadata: subRecord(t.reflectMetadata, env),
+          profiles: subProfiles(t.profiles, env, ["metadata"]),
         };
       } else if (type === "graphql") {
         const t = result.data as GraphqlTarget;
-        graphql[name] = { ...t, headers: subRecord(t.headers, env) };
+        graphql[name] = {
+          ...t,
+          headers: subRecord(t.headers, env),
+          profiles: subProfiles(t.profiles, env, ["headers"]),
+        };
       } else if (type === "script") {
         const t = result.data as ScriptTarget;
         const configDir = dirname(configPath);
