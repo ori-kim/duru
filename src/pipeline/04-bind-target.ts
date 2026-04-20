@@ -1,5 +1,5 @@
 import { join } from "path";
-import { type Config, TARGET_DIR, getTarget } from "../config.ts";
+import { CONFIG_DIR, type Config, getTarget } from "../config.ts";
 import type { Registry } from "../extension.ts";
 import type { BoundTarget, TargetInvocationHandle } from "./types.ts";
 
@@ -21,8 +21,7 @@ export function bindTarget(invocation: TargetInvocationHandle, config: Config, r
   const def = registry.getTargetType(type);
   if (!def) throw new Error(`Unknown target type: "${type}"`);
 
-  // configDir: ~/.clip/target/<type>/<baseName>/
-  const configDir = join(TARGET_DIR, type, baseName);
+  const configDir = config._configDirs?.[baseName] ?? join(CONFIG_DIR, "target", type, baseName);
 
   const data: BoundData = {
     invocation,

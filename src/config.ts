@@ -1,4 +1,4 @@
-import { readdirSync } from "fs";
+import { existsSync, readFileSync, readdirSync } from "fs";
 import { homedir } from "os";
 import { dirname, isAbsolute, join, resolve } from "path";
 import YAML from "yaml";
@@ -67,6 +67,8 @@ export type Config = {
   graphql: Record<string, GraphqlTarget>;
   script: Record<string, ScriptTarget>;
   _ext: Record<string, Record<string, unknown>>; // extension 타겟: type -> name -> raw config
+  _sources?: Record<string, string | null>; // name -> workspace name (null = global)
+  _configDirs?: Record<string, string>; // name -> absolute configDir path
 };
 
 export type ResolvedTarget =
@@ -81,7 +83,54 @@ export type ResolvedTarget =
 // --- Paths ---
 
 export const CONFIG_DIR = join(homedir(), ".clip");
-export const TARGET_DIR = join(CONFIG_DIR, "target");
+export const WORKSPACE_ROOT = join(CONFIG_DIR, "workspace");
+export const WORKSPACE_FILE = join(CONFIG_DIR, ".workspace");
+export const RESERVED_WORKSPACE_NAMES = new Set(["target", "bin", "extensions", "hooks"]);
+
+// --- Workspace helpers ---
+
+export function getActiveWorkspace(): string | null {
+  try {
+    const content = readFileSync(WORKSPACE_FILE, "utf8").trim();
+    return content || null;
+  } catch {
+    return null;
+  }
+}
+
+export function getWorkspaceDir(name: string): string {
+  return join(WORKSPACE_ROOT, name);
+}
+
+export function listWorkspaces(): string[] {
+  try {
+    return readdirSync(WORKSPACE_ROOT, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return [];
+  }
+}
+
+// Returns target dirs in load-order: global first (lower priority), workspace last (overrides).
+export function getTargetDirs(): { dir: string; workspace: string | null }[] {
+  const ws = getActiveWorkspace();
+  const dirs: { dir: string; workspace: string | null }[] = [
+    { dir: join(CONFIG_DIR, "target"), workspace: null },
+  ];
+  if (ws) dirs.push({ dir: join(WORKSPACE_ROOT, ws, "target"), workspace: ws });
+  return dirs;
+}
+
+// Find the directory where a specific named target's config.yml lives (workspace-first).
+export function findTargetConfigDir(name: string, type: string): string | null {
+  const dirs = [...getTargetDirs()].reverse(); // workspace first for lookup
+  for (const { dir } of dirs) {
+    const targetDir = join(dir, type, name);
+    if (existsSync(join(targetDir, "config.yml"))) return targetDir;
+  }
+  return null;
+}
 
 // --- Helpers ---
 
@@ -137,6 +186,10 @@ function resolveScriptPath(file: string, baseDir: string): string {
 
 export async function loadConfig(): Promise<Config> {
   const globalEnv = await loadDotEnv(join(CONFIG_DIR, ".env"));
+  const ws = getActiveWorkspace();
+  const wsEnv = ws ? await loadDotEnv(join(getWorkspaceDir(ws), ".env")) : {};
+  const baseEnv = { ...globalEnv, ...wsEnv };
+
   const cli: Record<string, CliTarget> = {};
   const mcp: Record<string, McpTarget> = {};
   const api: Record<string, ApiTarget> = {};
@@ -144,126 +197,141 @@ export async function loadConfig(): Promise<Config> {
   const graphql: Record<string, GraphqlTarget> = {};
   const script: Record<string, ScriptTarget> = {};
   const _ext: Record<string, Record<string, unknown>> = {};
+  const _sources: Record<string, string | null> = {};
+  const _configDirs: Record<string, string> = {};
 
-  for (const type of TARGET_TYPES) {
-    const typeDir = join(TARGET_DIR, type);
-    let names: string[];
-    try {
-      names = readdirSync(typeDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
-    } catch {
-      continue;
-    }
-
-    for (const name of names) {
-      const configPath = join(typeDir, name, "config.yml");
-      const file = Bun.file(configPath);
-      if (!(await file.exists())) continue;
-
-      let parsed: unknown;
+  // Process each target dir: global first, workspace last (workspace overrides global on same name).
+  for (const { dir: targetDirBase, workspace: srcWorkspace } of getTargetDirs()) {
+    for (const type of TARGET_TYPES) {
+      const typeDir = join(targetDirBase, type);
+      let names: string[];
       try {
-        parsed = YAML.parse(await file.text());
-      } catch (e) {
-        die(`Failed to parse config at ${configPath}: ${e}`);
+        names = readdirSync(typeDir, { withFileTypes: true })
+          .filter((d) => d.isDirectory())
+          .map((d) => d.name);
+      } catch {
+        continue;
       }
 
-      const result = TARGET_SCHEMAS[type].safeParse(parsed);
-      if (!result.success) {
-        die(`Invalid config at ${configPath}:\n${result.error.message}`);
-      }
+      for (const name of names) {
+        const configPath = join(typeDir, name, "config.yml");
+        const file = Bun.file(configPath);
+        if (!(await file.exists())) continue;
 
-      const targetEnv = await loadDotEnv(join(typeDir, name, ".env"));
-      const env = { ...globalEnv, ...targetEnv };
-
-      if (type === "cli") {
-        cli[name] = result.data as CliTarget;
-      } else if (type === "mcp") {
-        const t = result.data as McpTarget;
-        mcp[name] =
-          t.transport === "stdio"
-            ? t
-            : { ...t, headers: subRecord(t.headers, env), profiles: subProfiles(t.profiles, env, ["headers"]) };
-      } else if (type === "api") {
-        const t = result.data as ApiTarget;
-        api[name] = { ...t, headers: subRecord(t.headers, env), profiles: subProfiles(t.profiles, env, ["headers"]) };
-      } else if (type === "grpc") {
-        const t = result.data as GrpcTarget;
-        grpc[name] = {
-          ...t,
-          metadata: subRecord(t.metadata, env),
-          reflectMetadata: subRecord(t.reflectMetadata, env),
-          profiles: subProfiles(t.profiles, env, ["metadata"]),
-        };
-      } else if (type === "graphql") {
-        const t = result.data as GraphqlTarget;
-        graphql[name] = {
-          ...t,
-          headers: subRecord(t.headers, env),
-          profiles: subProfiles(t.profiles, env, ["headers"]),
-        };
-      } else if (type === "script") {
-        const t = result.data as ScriptTarget;
-        const configDir = dirname(configPath);
-        const resolvedCommands: ScriptTarget["commands"] = {};
-        for (const [cmd, def] of Object.entries(t.commands)) {
-          resolvedCommands[cmd] = def.file ? { ...def, file: resolveScriptPath(def.file, configDir) } : def;
+        let parsed: unknown;
+        try {
+          parsed = YAML.parse(await file.text());
+        } catch (e) {
+          die(`Failed to parse config at ${configPath}: ${e}`);
         }
-        script[name] = { ...t, commands: resolvedCommands };
+
+        const result = TARGET_SCHEMAS[type].safeParse(parsed);
+        if (!result.success) {
+          die(`Invalid config at ${configPath}:\n${result.error.message}`);
+        }
+
+        const targetEnv = await loadDotEnv(join(typeDir, name, ".env"));
+        const base = srcWorkspace ? baseEnv : globalEnv;
+        const env = { ...base, ...targetEnv };
+
+        _sources[name] = srcWorkspace;
+        _configDirs[name] = join(typeDir, name);
+
+        if (type === "cli") {
+          cli[name] = result.data as CliTarget;
+        } else if (type === "mcp") {
+          const t = result.data as McpTarget;
+          mcp[name] =
+            t.transport === "stdio"
+              ? t
+              : { ...t, headers: subRecord(t.headers, env), profiles: subProfiles(t.profiles, env, ["headers"]) };
+        } else if (type === "api") {
+          const t = result.data as ApiTarget;
+          api[name] = { ...t, headers: subRecord(t.headers, env), profiles: subProfiles(t.profiles, env, ["headers"]) };
+        } else if (type === "grpc") {
+          const t = result.data as GrpcTarget;
+          grpc[name] = {
+            ...t,
+            metadata: subRecord(t.metadata, env),
+            reflectMetadata: subRecord(t.reflectMetadata, env),
+            profiles: subProfiles(t.profiles, env, ["metadata"]),
+          };
+        } else if (type === "graphql") {
+          const t = result.data as GraphqlTarget;
+          graphql[name] = {
+            ...t,
+            headers: subRecord(t.headers, env),
+            profiles: subProfiles(t.profiles, env, ["headers"]),
+          };
+        } else if (type === "script") {
+          const t = result.data as ScriptTarget;
+          const configDir = dirname(configPath);
+          const resolvedCommands: ScriptTarget["commands"] = {};
+          for (const [cmd, def] of Object.entries(t.commands)) {
+            resolvedCommands[cmd] = def.file ? { ...def, file: resolveScriptPath(def.file, configDir) } : def;
+          }
+          script[name] = { ...t, commands: resolvedCommands };
+        }
       }
     }
-  }
 
-  // extension 타겟 타입: TARGET_DIR 아래 빌트인 외 타입 폴더의 raw config를 저장
-  const builtinSet = new Set<string>(TARGET_TYPES);
-  let extTypeDirs: string[];
-  try {
-    extTypeDirs = readdirSync(TARGET_DIR, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && !builtinSet.has(d.name))
-      .map((d) => d.name);
-  } catch {
-    extTypeDirs = [];
-  }
-
-  for (const extType of extTypeDirs) {
-    const typeDir = join(TARGET_DIR, extType);
-    let names: string[];
+    // Extension target types for this dir
+    const builtinSet = new Set<string>(TARGET_TYPES);
+    let extTypeDirs: string[];
     try {
-      names = readdirSync(typeDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
+      extTypeDirs = readdirSync(targetDirBase, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && !builtinSet.has(d.name))
         .map((d) => d.name);
     } catch {
-      continue;
+      extTypeDirs = [];
     }
-    _ext[extType] = {};
-    for (const name of names) {
-      const configPath = join(typeDir, name, "config.yml");
-      const file = Bun.file(configPath);
-      if (!(await file.exists())) continue;
+
+    for (const extType of extTypeDirs) {
+      const typeDir = join(targetDirBase, extType);
+      let names: string[];
       try {
-        _ext[extType]![name] = YAML.parse(await file.text()) as unknown;
-      } catch (e) {
-        process.stderr.write(`clip: warning: failed to parse ${configPath}: ${e}\n`);
+        names = readdirSync(typeDir, { withFileTypes: true })
+          .filter((d) => d.isDirectory())
+          .map((d) => d.name);
+      } catch {
+        continue;
+      }
+      if (!_ext[extType]) _ext[extType] = {};
+      for (const name of names) {
+        const configPath = join(typeDir, name, "config.yml");
+        const file = Bun.file(configPath);
+        if (!(await file.exists())) continue;
+        try {
+          _ext[extType]![name] = YAML.parse(await file.text()) as unknown;
+          _sources[name] = srcWorkspace;
+        } catch (e) {
+          process.stderr.write(`clip: warning: failed to parse ${configPath}: ${e}\n`);
+        }
       }
     }
   }
 
-  return { cli, mcp, api, grpc, graphql, script, _ext };
+  return { cli, mcp, api, grpc, graphql, script, _ext, _sources, _configDirs };
 }
 
 // --- Management helpers ---
 
-export async function addTarget(name: string, type: "cli", target: CliTarget): Promise<void>;
-export async function addTarget(name: string, type: "mcp", target: McpTarget): Promise<void>;
-export async function addTarget(name: string, type: "api", target: ApiTarget): Promise<void>;
-export async function addTarget(name: string, type: "grpc", target: GrpcTarget): Promise<void>;
-export async function addTarget(name: string, type: "graphql", target: GraphqlTarget): Promise<void>;
-export async function addTarget(name: string, type: "script", target: ScriptTarget): Promise<void>;
+export async function addTarget(name: string, type: "cli", target: CliTarget, opts?: { global?: boolean; workspace?: string }): Promise<void>;
+export async function addTarget(name: string, type: "mcp", target: McpTarget, opts?: { global?: boolean; workspace?: string }): Promise<void>;
+export async function addTarget(name: string, type: "api", target: ApiTarget, opts?: { global?: boolean; workspace?: string }): Promise<void>;
+export async function addTarget(name: string, type: "grpc", target: GrpcTarget, opts?: { global?: boolean; workspace?: string }): Promise<void>;
+export async function addTarget(name: string, type: "graphql", target: GraphqlTarget, opts?: { global?: boolean; workspace?: string }): Promise<void>;
+export async function addTarget(name: string, type: "script", target: ScriptTarget, opts?: { global?: boolean; workspace?: string }): Promise<void>;
 export async function addTarget(
   name: string,
   type: TargetType,
   target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget | ScriptTarget,
+  opts?: { global?: boolean; workspace?: string },
 ): Promise<void> {
+  const ws = opts?.global ? null : (opts?.workspace ?? getActiveWorkspace());
+  if (ws && !existsSync(getWorkspaceDir(ws))) die(`Workspace "${ws}" does not exist.`);
+  const targetDirBase = ws ? join(getWorkspaceDir(ws), "target") : join(CONFIG_DIR, "target");
+
   const config = await loadConfig();
   const allNames = new Set([
     ...Object.keys(config.cli),
@@ -278,7 +346,7 @@ export async function addTarget(
     die(`Target name "${name}" is already used by another type. Choose a different name.`);
   }
 
-  const dir = join(TARGET_DIR, type, name);
+  const dir = join(targetDirBase, type, name);
   await Bun.spawn(["mkdir", "-p", dir]).exited;
   await Bun.write(join(dir, "config.yml"), YAML.stringify(target));
 }
@@ -287,39 +355,64 @@ export async function updateTarget(
   name: string,
   updater: (raw: Record<string, unknown>) => Record<string, unknown>,
 ): Promise<void> {
-  for (const type of TARGET_TYPES) {
-    const configPath = join(TARGET_DIR, type, name, "config.yml");
-    const file = Bun.file(configPath);
-    if (!(await file.exists())) continue;
-    const raw = YAML.parse(await file.text()) as Record<string, unknown>;
-    await Bun.write(configPath, YAML.stringify(updater(raw)));
-    return;
+  const dirs = [...getTargetDirs()].reverse(); // workspace first
+  for (const { dir: targetDirBase } of dirs) {
+    for (const type of TARGET_TYPES) {
+      const configPath = join(targetDirBase, type, name, "config.yml");
+      const file = Bun.file(configPath);
+      if (!(await file.exists())) continue;
+      const raw = YAML.parse(await file.text()) as Record<string, unknown>;
+      await Bun.write(configPath, YAML.stringify(updater(raw)));
+      return;
+    }
   }
   die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }
 
-export async function removeTarget(name: string): Promise<void> {
-  for (const type of TARGET_TYPES) {
-    const dir = join(TARGET_DIR, type, name);
-    if (await Bun.file(join(dir, "config.yml")).exists()) {
-      await Bun.spawn(["rm", "-rf", dir]).exited;
-      return;
-    }
-  }
-  const builtinSet = new Set<string>(TARGET_TYPES);
-  let extTypeDirs: string[];
+function hasGlobalTarget(name: string): boolean {
+  if (TARGET_TYPES.some((t) => existsSync(join(CONFIG_DIR, "target", t, name, "config.yml")))) return true;
   try {
-    extTypeDirs = readdirSync(TARGET_DIR, { withFileTypes: true })
+    const builtinSet = new Set<string>(TARGET_TYPES);
+    return readdirSync(join(CONFIG_DIR, "target"), { withFileTypes: true })
       .filter((d) => d.isDirectory() && !builtinSet.has(d.name))
-      .map((d) => d.name);
+      .some((d) => existsSync(join(CONFIG_DIR, "target", d.name, name, "config.yml")));
   } catch {
-    extTypeDirs = [];
+    return false;
   }
-  for (const extType of extTypeDirs) {
-    const dir = join(TARGET_DIR, extType, name);
-    if (await Bun.file(join(dir, "config.yml")).exists()) {
-      await Bun.spawn(["rm", "-rf", dir]).exited;
-      return;
+}
+
+export async function removeTarget(name: string): Promise<void> {
+  const dirs = [...getTargetDirs()].reverse(); // workspace first
+  const builtinSet = new Set<string>(TARGET_TYPES);
+
+  for (const { dir: targetDirBase, workspace } of dirs) {
+    for (const type of TARGET_TYPES) {
+      const dir = join(targetDirBase, type, name);
+      if (await Bun.file(join(dir, "config.yml")).exists()) {
+        await Bun.spawn(["rm", "-rf", dir]).exited;
+        if (workspace !== null && hasGlobalTarget(name)) {
+          console.warn(`warning: removed workspace copy of "${name}"; the global target is now active.`);
+        }
+        return;
+      }
+    }
+    let extTypeDirs: string[];
+    try {
+      extTypeDirs = readdirSync(targetDirBase, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && !builtinSet.has(d.name))
+        .map((d) => d.name);
+    } catch {
+      extTypeDirs = [];
+    }
+    for (const extType of extTypeDirs) {
+      const dir = join(targetDirBase, extType, name);
+      if (await Bun.file(join(dir, "config.yml")).exists()) {
+        await Bun.spawn(["rm", "-rf", dir]).exited;
+        if (workspace !== null && hasGlobalTarget(name)) {
+          console.warn(`warning: removed workspace copy of "${name}"; the global target is now active.`);
+        }
+        return;
+      }
     }
   }
   die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);

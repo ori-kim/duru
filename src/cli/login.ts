@@ -1,6 +1,7 @@
+import { join } from "path";
 import { forceLogin, removeTokens } from "../commands/oauth.ts";
 import type { ApiTarget, GraphqlTarget, McpHttpTarget, McpSseTarget, McpTarget } from "../config.ts";
-import { getTarget, loadConfig } from "../config.ts";
+import { CONFIG_DIR, findTargetConfigDir, getTarget, loadConfig } from "../config.ts";
 import { die } from "../utils/errors.ts";
 
 export async function runLogin(args: string[]): Promise<void> {
@@ -14,10 +15,12 @@ export async function runLogin(args: string[]): Promise<void> {
     await forceLogin(name, apiUrl, "api");
     return;
   }
-  if (type === "grpc")
+  if (type === "grpc") {
+    const authDir = findTargetConfigDir(name, "grpc") ?? join(CONFIG_DIR, "target", "grpc", name);
     die(
-      `"${name}" is a gRPC target. gRPC v1 doesn't support automatic OAuth.\nStore static bearer token in ~/.clip/target/grpc/${name}/auth.json\nor use 'metadata: {authorization: "Bearer <token>"}' in config.yml.`,
+      `"${name}" is a gRPC target. gRPC v1 doesn't support automatic OAuth.\nStore static bearer token in ${authDir}/auth.json\nor use 'metadata: {authorization: "Bearer <token>"}' in config.yml.`,
     );
+  }
   if (type === "graphql") {
     await forceLogin(name, (target as GraphqlTarget).endpoint, "graphql");
     return;

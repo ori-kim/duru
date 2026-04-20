@@ -21,7 +21,8 @@ export type InternalVerb =
   | "refresh"
   | "login"
   | "logout"
-  | "config";
+  | "config"
+  | "workspace";
 
 // --- Late Flags ---
 

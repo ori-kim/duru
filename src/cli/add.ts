@@ -1,15 +1,23 @@
 import { addTarget } from "../config.ts";
 import { die } from "../utils/errors.ts";
 
+const RESERVED_NAMES = new Set([
+  "config", "list", "add", "remove", "skills", "bind", "unbind", "binds",
+  "completion", "profile", "alias", "refresh", "workspace", "login", "logout",
+]);
+
 export async function runAdd(args: string[]): Promise<void> {
   const name = args[0];
   if (!name || name.startsWith("--")) {
     die("Usage: clip add <name> <command-or-url> [--allow x,y] [--deny z]");
   }
+  if (RESERVED_NAMES.has(name)) {
+    die(`"${name}" is a reserved command name and cannot be used as a target.`);
+  }
 
   const positionals: string[] = [];
   const flags: Record<string, string> = {};
-  const BOOL_FLAGS = new Set(["stdio", "sse", "api", "grpc", "graphql", "plaintext", "script"]);
+  const BOOL_FLAGS = new Set(["stdio", "sse", "api", "grpc", "graphql", "plaintext", "script", "global"]);
   for (let i = 1; i < args.length; i++) {
     const a = args[i] ?? "";
     if (a.startsWith("--")) {
@@ -17,12 +25,12 @@ export async function runAdd(args: string[]): Promise<void> {
       if (BOOL_FLAGS.has(key)) {
         flags[key] = "true";
       } else {
-        const val = args[i + 1] ?? "";
-        if (val && !val.startsWith("--")) {
+        const val = args[i + 1];
+        if (val !== undefined && !val.startsWith("--")) {
           flags[key] = val;
           i++;
         } else {
-          flags[key] = "true";
+          die(`--${key} requires a value`);
         }
       }
     } else {
@@ -32,6 +40,7 @@ export async function runAdd(args: string[]): Promise<void> {
 
   const allow = flags["allow"] ? flags["allow"].split(",").map((s) => s.trim()) : undefined;
   const deny = flags["deny"] ? flags["deny"].split(",").map((s) => s.trim()) : undefined;
+  const addOpts = flags["global"] ? { global: true } : undefined;
 
   let type = flags["type"] as "mcp" | "cli" | "api" | "grpc" | "graphql" | "script" | undefined;
   if (!type && flags["graphql"]) type = "graphql";
@@ -64,8 +73,8 @@ export async function runAdd(args: string[]): Promise<void> {
       commands: {},
       allow,
       deny,
-    });
-    console.log(`Added script target "${name}". Edit config: ~/.clip/target/script/${name}/config.yml`);
+    }, addOpts);
+    console.log(`Added script target "${name}".`);
     return;
   }
 
@@ -73,7 +82,7 @@ export async function runAdd(args: string[]): Promise<void> {
     const endpoint = flags["endpoint"] ?? positionals[0];
     if (!endpoint)
       die("GraphQL target requires an endpoint URL (e.g. clip add gh https://api.github.com/graphql --graphql)");
-    await addTarget(name, "graphql", { endpoint, allow, deny });
+    await addTarget(name, "graphql", { endpoint, allow, deny }, addOpts);
     console.log(`Added GraphQL target "${name}" → ${endpoint}`);
     return;
   }
@@ -89,7 +98,7 @@ export async function runAdd(args: string[]): Promise<void> {
       ...(plaintext ? { plaintext } : {}),
       allow,
       deny,
-    });
+    }, addOpts);
     console.log(`Added gRPC target "${name}" → ${address}`);
     return;
   }
@@ -98,7 +107,7 @@ export async function runAdd(args: string[]): Promise<void> {
     const baseUrl = flags["base-url"] ?? flags["baseUrl"] ?? positionals[0];
     if (!baseUrl) die("API target requires a base URL (e.g. clip add petstore https://api.example.com)");
     const openapiUrl = flags["openapi-url"] ?? flags["openapiUrl"];
-    await addTarget(name, "api", { auth: false, baseUrl, ...(openapiUrl ? { openapiUrl } : {}), allow, deny });
+    await addTarget(name, "api", { auth: false, baseUrl, ...(openapiUrl ? { openapiUrl } : {}), allow, deny }, addOpts);
     console.log(`Added API target "${name}" → ${baseUrl}`);
     try {
       const resp = await fetch(openapiUrl ?? baseUrl);
@@ -138,24 +147,24 @@ export async function runAdd(args: string[]): Promise<void> {
         : positionals.slice(1).length > 0
           ? positionals.slice(1)
           : undefined;
-      await addTarget(name, "mcp", { transport: "stdio", command, args: prependArgs, allow, deny });
+      await addTarget(name, "mcp", { transport: "stdio", command, args: prependArgs, allow, deny }, addOpts);
       console.log(`Added STDIO MCP target "${name}" → ${command}${prependArgs ? " " + prependArgs.join(" ") : ""}`);
     } else if (flags["sse"]) {
       const url = flags["url"] ?? positionals[0];
       if (!url) die("SSE MCP target requires a URL (e.g. clip add myserver --sse https://example.com/sse)");
-      await addTarget(name, "mcp", { transport: "sse", url, auth: false, allow, deny });
+      await addTarget(name, "mcp", { transport: "sse", url, auth: false, allow, deny }, addOpts);
       console.log(`Added SSE MCP target "${name}" → ${url}`);
     } else {
       const url = flags["url"] ?? positionals[0];
       if (!url) die("MCP target requires a URL (e.g. clip add myserver https://...mcp)");
-      await addTarget(name, "mcp", { transport: "http", url, auth: false, allow, deny });
+      await addTarget(name, "mcp", { transport: "http", url, auth: false, allow, deny }, addOpts);
       console.log(`Added MCP target "${name}" → ${url}`);
     }
   } else {
     const command = flags["command"] ?? positionals[0];
     if (!command) die("CLI target requires a command (e.g. clip add gh gh)");
     const prependArgs = flags["args"] ? flags["args"].split(",").map((s) => s.trim()) : undefined;
-    await addTarget(name, "cli", { command, args: prependArgs, allow, deny });
+    await addTarget(name, "cli", { command, args: prependArgs, allow, deny }, addOpts);
     console.log(`Added CLI target "${name}" → ${command}`);
   }
 }

@@ -1,19 +1,18 @@
-import { homedir } from "os";
 import { join } from "path";
 import YAML from "yaml";
 import { buildAliasSection } from "../../commands/alias.ts";
 import { handleOAuth401 } from "../../commands/oauth.ts";
 import type { TargetResult, Tool } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
+import { CONFIG_DIR, findTargetConfigDir } from "../../config.ts";
 import { parseOpenApi } from "../../schema/openapi.ts";
 import { die } from "../../utils/errors.ts";
 import { formatToolHelp, parseToolArgs } from "../../utils/tool-args.ts";
 import type { ApiTarget } from "./schema.ts";
 
-const API_DIR = join(homedir(), ".clip", "target", "api");
-
 function specCachePath(targetName: string): string {
-  return join(API_DIR, targetName, "spec.json");
+  const dir = findTargetConfigDir(targetName, "api") ?? join(CONFIG_DIR, "target", "api", targetName);
+  return join(dir, "spec.json");
 }
 
 async function loadSpec(targetName: string, specUrl: string | undefined, forceRefresh = false): Promise<unknown> {
@@ -65,14 +64,16 @@ async function loadSpec(targetName: string, specUrl: string | undefined, forceRe
     }
   }
 
-  const dir = join(API_DIR, targetName);
+  const dir = findTargetConfigDir(targetName, "api") ?? join(CONFIG_DIR, "target", "api", targetName);
   await Bun.spawn(["mkdir", "-p", dir]).exited;
   await Bun.write(cachePath, JSON.stringify(parsed, null, 2));
 
   return parsed;
 }
 
-function buildCurlCommand(
+const sq = (s: string) => s.replace(/'/g, "'\\''");
+
+export function buildCurlCommand(
   method: string,
   url: string,
   headers: Record<string, string>,
@@ -80,12 +81,13 @@ function buildCurlCommand(
 ): string {
   const parts = [`curl -X ${method.toUpperCase()} '${url}'`];
   for (const [k, v] of Object.entries(headers)) {
-    parts.push(`  -H '${k}: ${v}'`);
+    parts.push(`  -H '${sq(k)}: ${sq(v)}'`);
   }
   if (body instanceof URLSearchParams) {
-    parts.push(`  --data-urlencode '${body.toString()}'`);
+    // URLSearchParams.toString() is already URL-encoded; --data-urlencode would double-encode
+    parts.push(`  --data-raw '${body.toString()}'`);
   } else if (body) {
-    parts.push(`  -d '${body.replace(/'/g, "'\\''")}'`);
+    parts.push(`  -d '${sq(body)}'`);
   }
   return `${parts.join(" \\\n")}\n`;
 }

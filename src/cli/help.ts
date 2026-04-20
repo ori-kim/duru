@@ -10,7 +10,7 @@ clip — CLI proxy for MCP servers and CLI tools
 
 Usage:
   clip [--json] [--pipe] <target> <subcommand> [...args]
-  clip add <name> <command-or-url> [--allow x,y] [--deny z]
+  clip add <name> <command-or-url> [--allow x,y] [--deny z] [--global]
   clip add <name> <https://...openapi.json> [--api]
   clip add <name> <https://...> --sse
   clip remove <name>
@@ -28,6 +28,10 @@ Usage:
   clip alias remove <target> <name>
   clip alias list <target>
   clip alias show <target> <name>
+  clip workspace new <name>       Create a new workspace
+  clip workspace use <name>       Switch active workspace (use "-" to clear)
+  clip workspace list             List all workspaces
+  clip workspace remove <name>    Delete workspace (--force required)
   clip bind <target>       Bind target as a native command (no "clip" prefix needed)
   clip unbind <target>     Remove native binding
   clip bind --all          Bind all registered targets
