@@ -113,6 +113,11 @@ clip gql query --query '{ users { id name } }'
 | `clip workspace use <name> \| -` | 워크스페이스 전환 (또는 해제) |
 | `clip workspace list` | 워크스페이스 목록 |
 | `clip workspace remove <name>` | 워크스페이스 삭제 |
+| `clip skills add <name>` | 프롬프트 템플릿 스킬 생성 |
+| `clip skills list` | 스킬 목록 (설치된 에이전트 표시) |
+| `clip skills get <name> [--input k=v ...]` | inputs 치환 후 렌더링 |
+| `clip skills install <name> --to <agent>` | 에이전트에 스킬 설치 |
+| `clip skills uninstall <name>` | 에이전트에서 스킬 제거 |
 | `npx skills add ori-kim/cli-proxy` | skills.sh로 에이전트 스킬 설치 |
 | `clip completion zsh` | zsh 자동완성 스크립트 출력 |
 
@@ -129,7 +134,9 @@ clip gql query --query '{ users { id name } }'
 - [gRPC target](docs/ko/05-grpc.md) — protobuf 서비스, 스키마 갱신, dry run
 - [GraphQL target](docs/ko/06-graphql.md) — introspection, 쿼리, mutation, 인증
 - [Aliases & Scripts](docs/ko/07-aliases.md) — 단축 매크로와 스크립트 번들
+- [Extensions](docs/ko/08-extensions.md) — hooks, 신규 target 타입, 에러 핸들러
 - [워크스페이스](docs/ko/09-workspaces.md) — 프로젝트별 target 격리
+- [Skills](docs/ko/10-skills.md) — inputs 지원 재사용 프롬프트 템플릿, 에이전트 설치
 
 ## 개발
 

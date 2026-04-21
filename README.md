@@ -114,6 +114,11 @@ clip gql query --query '{ users { id name } }'
 | `clip workspace use <name> \| -` | Switch workspace (or clear) |
 | `clip workspace list` | List workspaces |
 | `clip workspace remove <name>` | Delete workspace |
+| `clip skills add <name>` | Create a prompt-template skill |
+| `clip skills list` | List skills (shows installed agents) |
+| `clip skills get <name> [--input k=v ...]` | Render skill with inputs |
+| `clip skills install <name> --to <agent>` | Install skill to agent |
+| `clip skills uninstall <name>` | Remove skill from agent |
 | `npx skills add ori-kim/cli-proxy` | Install agent skill via skills.sh |
 | `clip completion zsh` | Print zsh completion |
 
@@ -150,6 +155,7 @@ See [docs/en/08-extensions.md](docs/en/08-extensions.md) for the full API: hook 
 - [Aliases & Scripts](docs/en/07-aliases.md) — shortcut macros and script bundles
 - [Extensions](docs/en/08-extensions.md) — hooks, new target types, error handlers
 - [Workspaces](docs/en/09-workspaces.md) — per-project target isolation
+- [Skills](docs/en/10-skills.md) — reusable prompt templates with inputs, agent install
 
 ## Development
 
