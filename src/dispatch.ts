@@ -1,5 +1,4 @@
 import { checkAcl } from "./acl.ts";
-import { createDefaultRegistry } from "./builtin-loader.ts";
 import { type HasAliases, resolveAlias } from "./commands/alias.ts";
 import type { Config, ResolvedTarget } from "./config.ts";
 import type { ErrorCtx, ExecutorContext, TargetResult } from "./extension.ts";
@@ -17,26 +16,14 @@ export type DispatchInput = {
   env: Record<string, string>;
 };
 
-// lazy default registry: builtin들의 init은 동기적이므로 첫 dispatch에서 초기화
-let _defaultRegistry: Registry | undefined;
-
-async function resolveRegistry(override?: Registry): Promise<Registry> {
-  if (override) return override;
-  if (!_defaultRegistry) {
-    _defaultRegistry = createDefaultRegistry();
-    await _defaultRegistry.initAll();
-  }
-  return _defaultRegistry;
-}
-
 function shouldCheckAcl(skipSubcommands: string[] | undefined, type: string, subcommand: string): boolean {
   if (subcommand === "tools" && type !== "cli") return false;
   if (skipSubcommands && skipSubcommands.includes(subcommand)) return false;
   return true;
 }
 
-export async function dispatch(cfg: Config, input: DispatchInput, registry?: Registry): Promise<TargetResult> {
-  const reg = await resolveRegistry(registry);
+export async function dispatch(cfg: Config, input: DispatchInput, registry: Registry): Promise<TargetResult> {
+  const reg = registry;
   const { type, target } = input.resolvedTarget;
 
   // alias 확장

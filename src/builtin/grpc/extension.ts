@@ -1,4 +1,4 @@
-import { getAuthStatus } from "../../commands/oauth.ts";
+import { resolveAuthDir, getAuthStatus } from "../../commands/oauth.ts";
 import { addTarget } from "../../config.ts";
 import type { AddArgs, ClipExtension, ListOpts, NormalizeCtx } from "../../extension.ts";
 import { die } from "../../utils/errors.ts";
@@ -38,7 +38,8 @@ export const extension: ClipExtension = {
         const t = target as GrpcTarget;
         const { color, wsTag, bind } = opts;
         const nm = color("1;34", name.padEnd(16));
-        const authStatus = t.oauth ? await getAuthStatus(name, "grpc") : null;
+        const configDir = resolveAuthDir(name, "grpc");
+        const authStatus = t.oauth ? await getAuthStatus(configDir) : null;
         const metadata = t.metadata as Record<string, string> | undefined;
         const statusTag = authStatus
           ? color("2", `  [${authStatus}]`)

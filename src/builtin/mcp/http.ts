@@ -1,7 +1,7 @@
 import { buildAliasSection } from "../../commands/alias.ts";
-import { handleOAuth401, refreshIfExpiring } from "../../commands/oauth.ts";
 import type { TargetResult } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
+import { AuthenticatedClient } from "../../../packages/auth/src/client.ts";
 import { die } from "../../utils/errors.ts";
 import { formatToolHelp, parseToolArgs } from "../../utils/tool-args.ts";
 import type { McpHttpTarget } from "./schema.ts";
@@ -79,50 +79,37 @@ type McpSession = {
   headers: Record<string, string>;
   sessionId: string | null;
   nextId: number;
-  targetName: string;
-  oauthEnabled: boolean;
+  client: AuthenticatedClient;
 };
 
-async function mcpPost(session: McpSession, body: JsonRpcRequest, isRetry = false): Promise<unknown> {
-  // 만료 임박 토큰 사전 갱신 (retry에서는 skip — 이미 처리됨)
-  if (session.oauthEnabled && !isRetry) {
-    const refreshed = await refreshIfExpiring(session.targetName);
-    if (refreshed) Object.assign(session.headers, refreshed);
-  }
-
+async function mcpPost(session: McpSession, body: JsonRpcRequest): Promise<unknown> {
   const reqHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
     ...session.headers,
+    // 최신 auth 헤더를 client에서 가져와 주입
+    ...(await session.client.getAuthHeaders()),
   };
   if (session.sessionId) {
     reqHeaders["Mcp-Session-Id"] = session.sessionId;
   }
 
-  const resp = await fetch(session.url, {
+  const resp = await session.client.fetch(session.url, {
     method: "POST",
     headers: reqHeaders,
     body: JSON.stringify(body),
-  }).catch((e: unknown) => {
-    die(`Failed to connect to MCP server at ${session.url}: ${e}`);
   });
 
   // 세션 ID 캡처
   const sid = resp.headers.get("Mcp-Session-Id");
   if (sid) session.sessionId = sid;
 
-  // 401: OAuth 플로우 트리거 (1회만)
-  if (resp.status === 401 && session.oauthEnabled && !isRetry) {
-    const authHeaders = await handleOAuth401(session.targetName, session.url, resp);
-    Object.assign(session.headers, authHeaders);
-    return mcpPost(session, body, true);
+  if (!resp.ok && resp.status !== 202) {
+    const text = await resp.text();
+    die(`MCP server returned HTTP ${resp.status}: ${text}`);
   }
 
   const text = await resp.text();
-
-  if (!resp.ok && resp.status !== 202) {
-    die(`MCP server returned HTTP ${resp.status}: ${text}`);
-  }
 
   // notification은 응답 바디 없음(204/202)
   if (!text.trim()) return null;
@@ -189,13 +176,19 @@ export async function executeMcp(target: McpHttpTarget, ctx: ExecutorContext): P
     return { exitCode: 0, stdout: buildMcpCurlCommand(target.url, headers, body), stderr: "" };
   }
 
+  const client = new AuthenticatedClient({
+    targetName,
+    targetType: "mcp",
+    serverUrl: target.url,
+    oauthEnabled,
+  });
+
   const session: McpSession = {
     url: target.url,
     headers: { ...(target.headers ?? {}), ...(globalHeaders ?? {}) },
     sessionId: null,
     nextId: 1,
-    targetName,
-    oauthEnabled,
+    client,
   };
 
   // 1. Initialize

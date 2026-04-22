@@ -1,4 +1,4 @@
-import { getAuthStatus } from "../../commands/oauth.ts";
+import { resolveAuthDir, getAuthStatus } from "../../commands/oauth.ts";
 import { addTarget } from "../../config.ts";
 import type { AddArgs, ClipExtension, ListOpts, NormalizeCtx } from "../../extension.ts";
 import { die } from "../../utils/errors.ts";
@@ -36,7 +36,8 @@ export const extension: ClipExtension = {
         const t = target as ApiTarget;
         const { color, wsTag, bind } = opts;
         const nm = color("36", name.padEnd(16));
-        const authStatus = await getAuthStatus(name, "api");
+        const configDir = resolveAuthDir(name, "api");
+        const authStatus = await getAuthStatus(configDir);
         const auth = t.auth;
         const statusTag = authStatus
           ? color("2", `  [${authStatus}]`)
@@ -86,10 +87,10 @@ export const extension: ClipExtension = {
         return `API: ${t.baseUrl ?? t.openapiUrl ?? ""}`;
       },
       loginHandler: async (name, target) => {
-        const { forceLogin } = await import("../../commands/oauth.ts");
+        const { forceLogin, resolveAuthDir: resolveDir } = await import("../../commands/oauth.ts");
         const t = target as ApiTarget;
         if (!t.baseUrl) throw new Error(`"${name}" has no baseUrl configured. OAuth requires a baseUrl.`);
-        await forceLogin(name, t.baseUrl, "api");
+        await forceLogin(name, t.baseUrl, resolveDir(name, "api"));
       },
     });
   },

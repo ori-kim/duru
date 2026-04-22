@@ -1,0 +1,6 @@
+{
+  "name": "@clip/protocol-graphql",
+  "version": "0.8.0",
+  "type": "module",
+  "private": true
+}

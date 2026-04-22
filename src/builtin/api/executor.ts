@@ -1,7 +1,7 @@
 import { join } from "path";
 import YAML from "yaml";
 import { buildAliasSection } from "../../commands/alias.ts";
-import { handleOAuth401 } from "../../commands/oauth.ts";
+import { AuthenticatedClient } from "../../../packages/auth/src/client.ts";
 import type { TargetResult, Tool } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
 import { CONFIG_DIR, findTargetConfigDir } from "../../config.ts";
@@ -15,7 +15,8 @@ function specCachePath(targetName: string): string {
   return join(dir, "spec.json");
 }
 
-async function loadSpec(targetName: string, specUrl: string | undefined, forceRefresh = false): Promise<unknown> {
+async function loadSpec(targetName: string, target: ApiTarget, forceRefresh = false): Promise<unknown> {
+  const specUrl = target.openapiUrl;
   const cachePath = specCachePath(targetName);
   const cacheFile = Bun.file(cachePath);
 
@@ -41,9 +42,22 @@ async function loadSpec(targetName: string, specUrl: string | undefined, forceRe
     }
   }
 
-  const resp = await fetch(specUrl).catch((e: unknown) => {
-    die(`Failed to fetch OpenAPI spec from ${specUrl}: ${e}`);
-  });
+  let resp: Response;
+  if (target.auth === "oauth") {
+    const client = new AuthenticatedClient({
+      targetName,
+      targetType: "api",
+      serverUrl: specUrl,
+      oauthEnabled: true,
+    });
+    resp = await client.fetch(specUrl).catch((e: unknown) => {
+      die(`Failed to fetch OpenAPI spec from ${specUrl}: ${e}`);
+    });
+  } else {
+    resp = await fetch(specUrl).catch((e: unknown) => {
+      die(`Failed to fetch OpenAPI spec from ${specUrl}: ${e}`);
+    });
+  }
   if (!resp.ok) {
     die(`Failed to fetch OpenAPI spec: HTTP ${resp.status} from ${specUrl}`);
   }
@@ -95,7 +109,7 @@ export function buildCurlCommand(
 export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promise<TargetResult> {
   const { headers: globalHeaders, subcommand, args: rawArgs, targetName, dryRun } = ctx;
   const forceRefresh = subcommand === "refresh";
-  const raw = await loadSpec(targetName, target.openapiUrl, forceRefresh);
+  const raw = await loadSpec(targetName, target, forceRefresh);
   const spec = parseOpenApi(raw);
 
   if (subcommand === "refresh") {
@@ -210,22 +224,24 @@ export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promi
     return { exitCode: 0, stdout: buildCurlCommand(tool.method, fullUrl, mergedHeaders, body), stderr: "" };
   }
 
-  const doFetch = (headers: Record<string, string>) =>
-    fetch(fullUrl, {
-      method: tool.method,
-      headers,
-      body,
-    }).catch((e: unknown) => {
-      die(`Failed to connect to ${fullUrl}: ${e}`);
-    });
+  const client = new AuthenticatedClient({
+    targetName,
+    targetType: "api",
+    serverUrl: target.baseUrl ?? fullUrl,
+    oauthEnabled: target.auth === "oauth",
+  });
 
-  let resp = await doFetch(mergedHeaders);
+  // 사전 auth 헤더 주입 (client.fetch 내부에서도 401 재시도를 처리함)
+  const authHeaders = await client.getAuthHeaders();
+  Object.assign(mergedHeaders, authHeaders);
 
-  if (resp.status === 401 && target.auth === "oauth" && target.baseUrl) {
-    const authHeaders = await handleOAuth401(targetName, target.baseUrl, resp, "api");
-    Object.assign(mergedHeaders, authHeaders);
-    resp = await doFetch(mergedHeaders);
-  }
+  const resp = await client.fetch(fullUrl, {
+    method: tool.method,
+    headers: mergedHeaders,
+    body,
+  }).catch((e: unknown) => {
+    die(`Failed to connect to ${fullUrl}: ${e}`);
+  });
 
   const respCt = resp.headers.get("Content-Type") ?? "";
   const respText = await resp.text();
@@ -268,6 +284,6 @@ export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promi
 }
 
 export async function describeApiTools(target: ApiTarget, targetName: string): Promise<Tool[]> {
-  const raw = await loadSpec(targetName, target.openapiUrl);
+  const raw = await loadSpec(targetName, target);
   return parseOpenApi(raw).tools;
 }

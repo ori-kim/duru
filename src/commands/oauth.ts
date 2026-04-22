@@ -4,14 +4,13 @@ import { die } from "../utils/errors.ts";
 
 // --- 경로 ---
 
-type AuthKind = "mcp" | "api" | "grpc" | "graphql";
-
-function authDirOf(targetName: string, kind: AuthKind = "mcp"): string {
-  return findTargetConfigDir(targetName, kind) ?? join(CONFIG_DIR, "target", kind, targetName);
+/** configDir를 직접 받거나, targetName + type으로 계산한다. */
+export function resolveAuthDir(targetName: string, type: string): string {
+  return findTargetConfigDir(targetName, type) ?? join(CONFIG_DIR, "target", type, targetName);
 }
 
-function authPath(targetName: string, kind: AuthKind = "mcp"): string {
-  return join(authDirOf(targetName, kind), "auth.json");
+function authPath(configDir: string): string {
+  return join(configDir, "auth.json");
 }
 
 // --- 타입 ---
@@ -60,8 +59,8 @@ type TokenResponse = {
 
 // --- 토큰 저장/로드 ---
 
-async function loadAuth(targetName: string, kind: AuthKind = "mcp"): Promise<StoredAuth | null> {
-  const path = authPath(targetName, kind);
+async function loadAuth(configDir: string): Promise<StoredAuth | null> {
+  const path = authPath(configDir);
   const file = Bun.file(path);
   if (!(await file.exists())) return null;
   try {
@@ -72,16 +71,15 @@ async function loadAuth(targetName: string, kind: AuthKind = "mcp"): Promise<Sto
   }
 }
 
-async function saveAuth(targetName: string, auth: StoredAuth, kind: AuthKind = "mcp"): Promise<void> {
-  const dir = authDirOf(targetName, kind);
-  await Bun.spawn(["mkdir", "-p", dir]).exited;
-  const path = authPath(targetName, kind);
+async function saveAuth(configDir: string, auth: StoredAuth): Promise<void> {
+  await Bun.spawn(["mkdir", "-p", configDir]).exited;
+  const path = authPath(configDir);
   await Bun.write(path, JSON.stringify(auth, null, 2));
   await Bun.spawn(["chmod", "600", path]).exited;
 }
 
-async function deleteAuth(targetName: string, kind: AuthKind = "mcp"): Promise<void> {
-  const path = authPath(targetName, kind);
+async function deleteAuth(configDir: string): Promise<void> {
+  const path = authPath(configDir);
   await Bun.spawn(["rm", "-f", path]).exited;
 }
 
@@ -288,8 +286,8 @@ async function doRefresh(stored: StoredAuth): Promise<TokenResponse | null> {
 async function runFullOAuthFlow(
   targetName: string,
   serverUrl: string,
+  configDir: string,
   resp401?: Response,
-  kind: AuthKind = "mcp",
 ): Promise<StoredAuth> {
   // 1. Protected Resource Metadata 조회
   const hintUrl = resp401 ? parseResourceMetadataUrl(resp401) : undefined;
@@ -315,7 +313,7 @@ async function runFullOAuthFlow(
   let clientId: string;
   let clientSecret: string | undefined;
 
-  const existing = await loadAuth(targetName, kind);
+  const existing = await loadAuth(configDir);
   if (existing?.client_id && existing.authorization_server === authServerUrl) {
     clientId = existing.client_id;
     clientSecret = existing.client_secret;
@@ -378,7 +376,7 @@ async function runFullOAuthFlow(
   };
 
   // 9. 저장
-  await saveAuth(targetName, auth, kind);
+  await saveAuth(configDir, auth);
   process.stderr.write(`\x1b[0mclip: 로그인 완료.\n\x1b[0m`);
 
   return auth;
@@ -388,10 +386,9 @@ async function runFullOAuthFlow(
 
 /** 저장된 토큰으로 Authorization 헤더 반환. 없거나 만료되면 null. */
 export async function getStoredAuthHeaders(
-  targetName: string,
-  kind: AuthKind = "mcp",
+  configDir: string,
 ): Promise<Record<string, string> | null> {
-  const auth = await loadAuth(targetName, kind);
+  const auth = await loadAuth(configDir);
   if (!auth) return null;
   // 만료된 토큰은 null 반환 (호출부에서 401로 처리)
   if (Date.now() >= auth.expires_at) return null;
@@ -400,10 +397,9 @@ export async function getStoredAuthHeaders(
 
 /** 만료 5분 전이면 refresh 시도. 새 헤더 반환 또는 null. */
 export async function refreshIfExpiring(
-  targetName: string,
-  kind: AuthKind = "mcp",
+  configDir: string,
 ): Promise<Record<string, string> | null> {
-  const auth = await loadAuth(targetName, kind);
+  const auth = await loadAuth(configDir);
   if (!auth) return null;
 
   const FIVE_MINUTES = 5 * 60 * 1000;
@@ -419,7 +415,7 @@ export async function refreshIfExpiring(
     expires_at: tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : Date.now() + 3600_000,
     scope: tokens.scope ?? auth.scope,
   };
-  await saveAuth(targetName, updated, kind);
+  await saveAuth(configDir, updated);
   return { Authorization: `Bearer ${updated.access_token}` };
 }
 
@@ -431,10 +427,10 @@ export async function handleOAuth401(
   targetName: string,
   serverUrl: string,
   resp: Response,
-  kind: AuthKind = "mcp",
+  configDir: string,
 ): Promise<Record<string, string>> {
   // refresh_token으로 갱신 먼저 시도
-  const stored = await loadAuth(targetName, kind);
+  const stored = await loadAuth(configDir);
   if (stored?.refresh_token) {
     const tokens = await doRefresh(stored);
     if (tokens) {
@@ -445,32 +441,32 @@ export async function handleOAuth401(
         expires_at: tokens.expires_in ? Date.now() + tokens.expires_in * 1000 : Date.now() + 3600_000,
         scope: tokens.scope ?? stored.scope,
       };
-      await saveAuth(targetName, updated, kind);
+      await saveAuth(configDir, updated);
       return { Authorization: `Bearer ${updated.access_token}` };
     }
     // refresh 실패 → 저장 토큰 삭제 후 재인증
-    await deleteAuth(targetName, kind);
+    await deleteAuth(configDir);
   }
 
   // 전체 OAuth 플로우
-  const auth = await runFullOAuthFlow(targetName, serverUrl, resp, kind);
+  const auth = await runFullOAuthFlow(targetName, serverUrl, configDir, resp);
   return { Authorization: `Bearer ${auth.access_token}` };
 }
 
 /** login 명령용: 전체 OAuth 플로우 강제 실행 */
-export async function forceLogin(targetName: string, serverUrl: string, kind: AuthKind = "mcp"): Promise<void> {
-  await deleteAuth(targetName, kind); // 기존 토큰 삭제 후 새로 인증
-  await runFullOAuthFlow(targetName, serverUrl, undefined, kind);
+export async function forceLogin(targetName: string, serverUrl: string, configDir: string): Promise<void> {
+  await deleteAuth(configDir); // 기존 토큰 삭제 후 새로 인증
+  await runFullOAuthFlow(targetName, serverUrl, configDir);
 }
 
 /** logout 명령용: 토큰 파일 삭제 */
-export async function removeTokens(targetName: string, kind: AuthKind = "mcp"): Promise<void> {
-  await deleteAuth(targetName, kind);
+export async function removeTokens(configDir: string): Promise<void> {
+  await deleteAuth(configDir);
 }
 
 /** list 출력용: 토큰 존재 여부와 만료 상태 반환 */
-export async function getAuthStatus(targetName: string, kind: AuthKind = "mcp"): Promise<string | null> {
-  const auth = await loadAuth(targetName, kind);
+export async function getAuthStatus(configDir: string): Promise<string | null> {
+  const auth = await loadAuth(configDir);
   if (!auth) return null;
 
   const now = Date.now();
@@ -482,5 +478,3 @@ export async function getAuthStatus(targetName: string, kind: AuthKind = "mcp"):
   const hours = Math.floor(mins / 60);
   return `authenticated, expires in ${hours}h`;
 }
-
-export type { AuthKind };

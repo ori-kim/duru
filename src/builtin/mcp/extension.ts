@@ -1,4 +1,4 @@
-import { getAuthStatus } from "../../commands/oauth.ts";
+import { getAuthStatus, resolveAuthDir } from "../../commands/oauth.ts";
 import { addTarget } from "../../config.ts";
 import type { AddArgs, ClipExtension, ListOpts, NormalizeCtx } from "../../extension.ts";
 import type { ExecutorContext, TargetResult } from "../../extension.ts";
@@ -60,7 +60,7 @@ export const extension: ClipExtension = {
           return `  ${nm} stdio: ${(t as McpStdioTarget).command}${profileTag}${aclStr}${bind(name)}${wsTag(name)}`;
         }
         const http = t as McpHttpTarget | McpSseTarget;
-        const authStatus = await getAuthStatus(name);
+        const authStatus = await getAuthStatus(resolveAuthDir(name, "mcp"));
         const auth = (t as Record<string, unknown>).auth;
         const statusTag = authStatus
           ? color("2", `  [${authStatus}]`)
@@ -108,10 +108,11 @@ export const extension: ClipExtension = {
         return `MCP server: ${(t as McpHttpTarget).url}`;
       },
       loginHandler: async (name, target) => {
-        const { forceLogin } = await import("../../commands/oauth.ts");
+        const { forceLogin, resolveAuthDir: resolveDir } = await import("../../commands/oauth.ts");
         const t = target as McpTarget;
         if (t.transport === "stdio") throw new Error(`"${name}" is a STDIO MCP target. OAuth only applies to HTTP/SSE MCP targets.`);
-        await forceLogin(name, (t as McpHttpTarget | McpSseTarget).url);
+        const url = (t as McpHttpTarget | McpSseTarget).url;
+        await forceLogin(name, url, resolveDir(name, "mcp"));
       },
     });
   },

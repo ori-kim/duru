@@ -1,4 +1,4 @@
-import { getAuthStatus } from "../../commands/oauth.ts";
+import { resolveAuthDir, getAuthStatus } from "../../commands/oauth.ts";
 import { addTarget } from "../../config.ts";
 import type { AddArgs, ClipExtension, ListOpts, NormalizeCtx } from "../../extension.ts";
 import { die } from "../../utils/errors.ts";
@@ -37,7 +37,8 @@ export const extension: ClipExtension = {
         const t = target as GraphqlTarget;
         const { color, wsTag, bind } = opts;
         const nm = color("38;5;205", name.padEnd(16));
-        const authStatus = t.oauth ? await getAuthStatus(name, "graphql") : null;
+        const configDir = resolveAuthDir(name, "graphql");
+        const authStatus = t.oauth ? await getAuthStatus(configDir) : null;
         const headers = t.headers as Record<string, string> | undefined;
         const statusTag = authStatus
           ? color("2", `  [${authStatus}]`)
@@ -61,9 +62,9 @@ export const extension: ClipExtension = {
         return `GraphQL: ${t.endpoint}`;
       },
       loginHandler: async (name, target) => {
-        const { forceLogin } = await import("../../commands/oauth.ts");
+        const { forceLogin, resolveAuthDir: resolveDir } = await import("../../commands/oauth.ts");
         const t = target as GraphqlTarget;
-        await forceLogin(name, t.endpoint, "graphql");
+        await forceLogin(name, t.endpoint, resolveDir(name, "graphql"));
       },
     });
   },

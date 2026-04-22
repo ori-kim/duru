@@ -1,7 +1,7 @@
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { buildAliasSection } from "../../commands/alias.ts";
-import { handleOAuth401 } from "../../commands/oauth.ts";
+import { AuthenticatedClient } from "../../../packages/auth/src/client.ts";
 import type { TargetResult, Tool } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
 import { CONFIG_DIR, findTargetConfigDir } from "../../config.ts";
@@ -51,22 +51,22 @@ async function postGraphql(
   body: Record<string, unknown>,
   existingHeaders?: Record<string, string>,
 ): Promise<{ resp: Response; json: Record<string, unknown> }> {
-  const headers = existingHeaders ?? buildHeaders(target);
-  const resp = await fetch(target.endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
+  const client = new AuthenticatedClient({
+    targetName,
+    targetType: "graphql",
+    serverUrl: target.endpoint,
+    oauthEnabled: !!target.oauth,
   });
 
-  if (resp.status === 401 && target.oauth) {
-    const newHeaders = await handleOAuth401(targetName, target.endpoint, resp, "graphql");
-    const retry = await fetch(target.endpoint, {
-      method: "POST",
-      headers: { ...headers, ...newHeaders },
-      body: JSON.stringify(body),
-    });
-    return { resp: retry, json: await safeJson(retry) };
-  }
+  const headers = existingHeaders ?? buildHeaders(target);
+  const authHeaders = await client.getAuthHeaders();
+  const mergedHeaders = { ...headers, ...authHeaders };
+
+  const resp = await client.fetch(target.endpoint, {
+    method: "POST",
+    headers: mergedHeaders,
+    body: JSON.stringify(body),
+  });
 
   return { resp, json: await safeJson(resp) };
 }

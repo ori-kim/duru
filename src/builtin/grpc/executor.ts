@@ -1,7 +1,7 @@
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { buildAliasSection } from "../../commands/alias.ts";
-import { getStoredAuthHeaders, refreshIfExpiring } from "../../commands/oauth.ts";
+import { AuthenticatedClient } from "../../../packages/auth/src/client.ts";
 import type { TargetResult, Tool } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
 import { CONFIG_DIR, findTargetConfigDir } from "../../config.ts";
@@ -109,11 +109,14 @@ function tokenFromHeaders(headers: Record<string, string>): string | undefined {
   return val?.replace(/^Bearer\s+/i, "");
 }
 
-async function getAuthToken(targetName: string): Promise<string | undefined> {
-  const refreshed = await refreshIfExpiring(targetName, "grpc");
-  if (refreshed?.["Authorization"]) return refreshed["Authorization"].replace(/^Bearer\s+/i, "");
-  const stored = await getStoredAuthHeaders(targetName, "grpc");
-  return stored?.["Authorization"]?.replace(/^Bearer\s+/i, "");
+async function getAuthToken(target: GrpcTarget, targetName: string): Promise<string | undefined> {
+  const client = new AuthenticatedClient({
+    targetName,
+    targetType: "grpc",
+    serverUrl: "",
+    oauthEnabled: !!target.oauth,
+  });
+  return client.getToken();
 }
 
 async function loadSchema(
@@ -136,7 +139,7 @@ async function loadSchema(
   warnMetadata(target.metadata);
   warnMetadata(target.reflectMetadata);
 
-  const token = tokenFromHeaders(authHeaders) ?? (await getAuthToken(targetName));
+  const token = tokenFromHeaders(authHeaders) ?? (await getAuthToken(target, targetName));
   const baseFlags = makeBaseFlags(target);
   const reflectFlags = makeReflectFlags(target, token);
 
@@ -386,7 +389,7 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
   const grpcCode = codeMatch?.[1]?.toUpperCase();
 
   if (grpcCode === "UNAUTHENTICATED" && target.oauth) {
-    const newToken = await getAuthToken(targetName);
+    const newToken = await getAuthToken(target, targetName);
     if (newToken) {
       const retry = await spawnGrpcurl([
         ...baseFlags,

@@ -1,4 +1,4 @@
-import { removeTokens } from "../commands/oauth.ts";
+import { removeTokens, resolveAuthDir } from "../commands/oauth.ts";
 import { findTargetConfigDir, getTarget, loadConfig } from "../config.ts";
 import type { Registry } from "../extension.ts";
 import { die } from "../utils/errors.ts";
@@ -34,14 +34,7 @@ export async function runLogout(args: string[]): Promise<void> {
   if (!name) die("Usage: clip logout <target>");
   const cfg = await loadConfig();
   const { type } = getTarget(cfg, name);
-  if (type === "api") {
-    await removeTokens(name, "api");
-  } else if (type === "grpc") {
-    await removeTokens(name, "grpc");
-  } else if (type === "graphql") {
-    await removeTokens(name, "graphql");
-  } else {
-    await removeTokens(name);
-  }
+  const configDir = resolveAuthDir(name, type);
+  await removeTokens(configDir);
   console.log(`Logged out of "${name}".`);
 }

@@ -1,0 +1,6 @@
+{
+  "name": "@clip/protocol-cli",
+  "version": "0.8.0",
+  "type": "module",
+  "private": true
+}

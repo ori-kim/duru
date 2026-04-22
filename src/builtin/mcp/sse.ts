@@ -1,5 +1,5 @@
 import { buildAliasSection } from "../../commands/alias.ts";
-import { handleOAuth401 } from "../../commands/oauth.ts";
+import { AuthenticatedClient } from "../../../packages/auth/src/client.ts";
 import type { TargetResult } from "../../extension.ts";
 import type { ExecutorContext } from "../../extension.ts";
 import { die } from "../../utils/errors.ts";
@@ -74,22 +74,26 @@ async function openSseSession(
   targetName: string,
   externalHeaders: Record<string, string> = {},
 ): Promise<SseSession> {
+  const oauthEnabled = target.auth === "oauth";
+  const client = new AuthenticatedClient({
+    targetName,
+    targetType: "mcp",
+    serverUrl: target.url,
+    oauthEnabled,
+  });
+
+  const authHeaders = await client.getAuthHeaders();
   const connectHeaders: Record<string, string> = {
     Accept: "text/event-stream",
     "Cache-Control": "no-cache",
     ...(target.headers ?? {}),
     ...externalHeaders,
+    ...authHeaders,
   };
 
-  const sseResp = await fetch(target.url, { headers: connectHeaders }).catch((e: unknown) => {
+  const sseResp = await client.fetch(target.url, { headers: connectHeaders }).catch((e: unknown) => {
     die(`Failed to connect to SSE endpoint at ${target.url}: ${e}`);
   });
-
-  if (sseResp.status === 401 && target.auth === "oauth") {
-    const refreshed = await handleOAuth401(targetName, target.url, sseResp);
-    Object.assign(connectHeaders, refreshed);
-    return openSseSession({ ...target, headers: connectHeaders }, targetName);
-  }
 
   if (!sseResp.ok) die(`SSE endpoint returned HTTP ${sseResp.status}`);
   if (!sseResp.body) die("SSE endpoint returned no body");
@@ -149,7 +153,7 @@ async function openSseSession(
   const messageUrl = await endpointPromise;
   clearTimeout(timeoutId);
 
-  const postHeaders: Record<string, string> = {
+  const postBaseHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     ...(target.headers ?? {}),
     ...externalHeaders,
@@ -168,9 +172,9 @@ async function openSseSession(
       }, 30_000);
     });
 
-    const postResp = await fetch(messageUrl, {
+    const postResp = await client.fetch(messageUrl, {
       method: "POST",
-      headers: postHeaders,
+      headers: postBaseHeaders,
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
     }).catch((e: unknown) => die(`SSE POST failed: ${e}`));
 
@@ -184,9 +188,9 @@ async function openSseSession(
   };
 
   const notify = async (method: string, params?: unknown): Promise<void> => {
-    await fetch(messageUrl, {
+    await client.fetch(messageUrl, {
       method: "POST",
-      headers: postHeaders,
+      headers: postBaseHeaders,
       body: JSON.stringify({ jsonrpc: "2.0", method, params }),
     });
   };

@@ -2,6 +2,7 @@
   "name": "clip",
   "version": "0.8.0",
   "type": "module",
+  "workspaces": ["apps/*", "packages/*", "extensions/*"],
   "bin": {
     "clip": "./clip"
   },
