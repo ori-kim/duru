@@ -6,9 +6,8 @@
  *   clip ext disable <name>  — manifest entry enabled: false
  *   clip ext reload <name>   — import 캐시 무효화 (개발 편의)
  */
-import { die, type Registry } from "@clip/core";
+import { die, CONFIG_DIR, type Registry } from "@clip/core";
 import { existsSync, readFileSync } from "fs";
-import { homedir } from "os";
 import { join } from "path";
 import { parse as yamlParse } from "yaml";
 import {
@@ -22,10 +21,7 @@ import { deriveBuiltinEntries } from "../builtin-loader.ts";
 // ---------------------------------------------------------------------------
 
 function getManifestPath(): string {
-  return (
-    process.env["CLIP_EXT_MANIFEST"] ??
-    join(homedir(), ".clip", "extensions", "extensions.yml")
-  );
+  return process.env["CLIP_EXT_MANIFEST"] ?? join(CONFIG_DIR, "extensions", "extensions.yml");
 }
 
 function readUserEntries(): ExtensionEntry[] {

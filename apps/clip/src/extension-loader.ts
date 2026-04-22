@@ -15,10 +15,10 @@
  *   CLIP_EXT_TRACE      — "1" 이면 stderr 로그
  */
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { homedir } from "os";
 import { dirname, isAbsolute, join, resolve } from "path";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 import type { ClipExtension, ExtensionApi, Registry, TargetTypeManifestSpec } from "@clip/core";
+import { CONFIG_DIR } from "@clip/core";
 
 // ---------------------------------------------------------------------------
 // manifest 스키마 타입
@@ -63,10 +63,7 @@ function warn(msg: string): void {
 }
 
 function getManifestPath(): string {
-  return (
-    process.env["CLIP_EXT_MANIFEST"] ??
-    join(homedir(), ".clip", "extensions", "extensions.yml")
-  );
+  return process.env["CLIP_EXT_MANIFEST"] ?? join(CONFIG_DIR, "extensions", "extensions.yml");
 }
 
 // ---------------------------------------------------------------------------

@@ -8,6 +8,7 @@
  * skills 커맨드는 내장에서 제거됨 — ~/.clip/extensions/extensions.yml manifest에
  * skills entry를 선언해야 `clip skills` 동작.
  */
+import "./virtual-modules.ts";
 import { checkAcl, dispatch, loadConfig, getTarget, outputRegistry, printAndExit, formatToolHelp } from "@clip/core";
 import type { ClipExtension, HasAliases, ResolvedTarget } from "@clip/core";
 import { Registry } from "@clip/core";
