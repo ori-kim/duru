@@ -60,7 +60,7 @@ export type AnySchema<T = unknown> = {
 export type NormalizeCtx = {
   /** configDir: target의 config.yml이 있는 디렉터리 절대 경로 */
   configDir: string;
-  /** env: 이 target에 적용된 환경 변수 (global + workspace + target .env 병합 결과) */
+  /** env: 이 target에 적용된 환경 변수 (global + target .env 병합 결과) */
   env: Record<string, string>;
 };
 
@@ -86,10 +86,8 @@ export type TargetTypeDef<T = unknown> = {
 
 export type ListOpts = {
   bound: Set<string>;
-  activeWorkspace: string | null;
   tty: boolean;
   color: (code: string, text: string) => string;
-  wsTag: (name: string) => string;
   bind: (name: string) => string;
 };
 
@@ -99,7 +97,6 @@ export type AddArgs = {
   flags: Record<string, string>;
   allow: string[] | undefined;
   deny: string[] | undefined;
-  addOpts: { global: boolean } | undefined;
 };
 
 /**

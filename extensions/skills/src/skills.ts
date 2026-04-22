@@ -1,17 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, copyFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { getActiveWorkspace } from "@clip/core";
 import { die } from "@clip/core";
 import { renderPrompt, parseSkillFile } from "./frontmatter.ts";
 import {
   RESERVED_SKILL_NAMES,
   findSkillDir,
-  getSkillDirs,
+  getSkillsDir,
   loadAllSkillsSafe,
   removeSkill,
   writeSkill,
-  type SkillScope,
 } from "./registry.ts";
 
 const NAME_RE = /^[a-zA-Z0-9_-]+$/;
@@ -45,19 +43,15 @@ description: ${JSON.stringify(description)}${tagLine}
 
 async function cmdAdd(args: string[]): Promise<void> {
   const name = args[0];
-  if (!name) die("Usage: clip skills add <name> [--description <d>] [--tag a,b] [--workspace]");
+  if (!name) die("Usage: clip skills add <name> [--description <d>] [--tag a,b]");
   validateSkillName(name);
 
   let description = "";
   let tags: string[] = [];
-  let scope: SkillScope = "global";
 
   for (let i = 1; i < args.length; i++) {
-    // i < args.length guarantees presence; assertion safe
     const a = args[i]!;
-    if (a === "--workspace") {
-      scope = "workspace";
-    } else if (a === "--description" || a === "-d") {
+    if (a === "--description" || a === "-d") {
       description = args[++i] ?? die("--description requires a value");
     } else if (a.startsWith("--description=")) {
       description = a.slice("--description=".length);
@@ -70,20 +64,13 @@ async function cmdAdd(args: string[]): Promise<void> {
     }
   }
 
-  if (scope === "workspace" && !getActiveWorkspace()) {
-    die("No active workspace. Run: clip workspace use <name>");
-  }
-
-  const dirs = getSkillDirs();
-  const targetDir = scope === "workspace" ? dirs[dirs.length - 1] : dirs[0];
-  if (!targetDir) die("No skill directory found");
-
-  const skillDir = join(targetDir.dir, name);
-  if (existsSync(skillDir)) die(`Skill "${name}" already exists in ${scope} scope`);
+  const skillsDir = getSkillsDir();
+  const skillDir = join(skillsDir, name);
+  if (existsSync(skillDir)) die(`Skill "${name}" already exists at ${skillDir}`);
 
   if (!description) description = `${name} skill`;
 
-  await writeSkill(name, scope, buildScaffold(name, description, tags));
+  await writeSkill(name, buildScaffold(name, description, tags));
   const skillFile = join(skillDir, "SKILL.md");
   console.log(`Created: ${skillFile}`);
   console.log(`\nEdit the skill: $EDITOR "${skillFile}"`);
@@ -119,9 +106,8 @@ function cmdList(args: string[]): void {
   if (json) {
     console.log(
       JSON.stringify(
-        withAgents.map(({ name, scope, fm, agents }) => ({
+        withAgents.map(({ name, fm, agents }) => ({
           name,
-          scope,
           description: fm.description,
           tags: fm.tags,
           inputs: fm.inputs,
@@ -171,29 +157,28 @@ function cmdList(args: string[]): void {
   const padD = (s: string, w: number) => s + " ".repeat(Math.max(0, w - displayW(s)));
 
   const nameW     = Math.max(4, ...entries.map((e) => e.name.length));
-  const scopeW    = 9; // "workspace"
   const agentColW = Math.max(6, ...withAgents.map(({ agents }) => Math.max(0, agents.length * 2 - 1)));
   const toolsW    = Math.max(5, ...withAgents.map(({ fm }) => (fm.tags ?? []).join(", ").length));
   const cols      = process.stdout.columns || 120;
-  const fixedW    = nameW + scopeW + agentColW + toolsW + 8; // 4 × "  " separators
+  const fixedW    = nameW + agentColW + toolsW + 6; // 3 × "  " separators
   const DESC_MAX  = Math.max(11, Math.min(80, cols - fixedW));
   const descW     = Math.max(11, ...withAgents.map(({ fm }) => Math.min(displayW(fm.description), DESC_MAX)));
 
   const sep = (w: number) => "─".repeat(w);
-  const divider = `${sep(nameW)}  ${sep(scopeW)}  ${sep(agentColW)}  ${sep(descW)}  ${sep(toolsW)}`;
+  const divider = `${sep(nameW)}  ${sep(agentColW)}  ${sep(descW)}  ${sep(toolsW)}`;
 
   console.log(
-    `${bold("NAME".padEnd(nameW))}  ${"SCOPE".padEnd(scopeW)}  ${"AGENTS".padEnd(agentColW)}  ${"DESCRIPTION".padEnd(descW)}  TOOLS`,
+    `${bold("NAME".padEnd(nameW))}  ${"AGENTS".padEnd(agentColW)}  ${"DESCRIPTION".padEnd(descW)}  TOOLS`,
   );
   console.log(dim(divider));
 
-  for (const { name, scope, fm, agents } of withAgents) {
+  for (const { name, fm, agents } of withAgents) {
     const rawLen = Math.max(0, agents.length * 2 - 1);
     const colored = agents.map((a) => agentColored(a, tty)).join(" ");
     const agentPadded = colored + " ".repeat(Math.max(0, agentColW - rawLen));
     const desc  = padD(trunc(fm.description, DESC_MAX), descW);
     const tools = dim((fm.tags ?? []).join(", "));
-    console.log(`${name.padEnd(nameW)}  ${scope.padEnd(scopeW)}  ${agentPadded}  ${desc}  ${tools}`);
+    console.log(`${name.padEnd(nameW)}  ${agentPadded}  ${desc}  ${tools}`);
   }
 }
 
@@ -204,7 +189,7 @@ function cmdShow(args: string[]): void {
   const found = findSkillDir(name);
   if (!found) die(`Skill "${name}" not found.\nRun: clip skills list`);
 
-  const skillFile = join(found.dir, "SKILL.md");
+  const skillFile = join(found, "SKILL.md");
   const raw = readFileSync(skillFile, "utf8");
   process.stdout.write(raw);
   if (!raw.endsWith("\n")) process.stdout.write("\n");
@@ -239,7 +224,7 @@ function cmdGet(args: string[]): void {
     }
   }
 
-  const skillFile = join(found.dir, "SKILL.md");
+  const skillFile = join(found, "SKILL.md");
   const rawSync = readFileSync(skillFile, "utf8");
   const { fm, body } = parseSkillFile(rawSync, skillFile);
 
@@ -268,47 +253,13 @@ function cmdGet(args: string[]): void {
 
 function cmdRm(args: string[]): void {
   const name = args[0];
-  if (!name) die("Usage: clip skills rm <name> [--global]");
+  if (!name) die("Usage: clip skills rm <name>");
 
-  let forceGlobal = false;
-  for (let i = 1; i < args.length; i++) {
-    if (args[i] === "--global") forceGlobal = true;
-  }
+  const found = findSkillDir(name);
+  if (!found) die(`Skill "${name}" not found.\nRun: clip skills list`);
 
-  const dirs = [...getSkillDirs()].reverse(); // workspace-first
-  const target = forceGlobal ? dirs.find((d) => d.scope === "global") : dirs[0];
-  if (!target) die("No scope to search");
-
-  const skillDir = join(target.dir, name);
-  if (!existsSync(join(skillDir, "SKILL.md"))) {
-    // fallback to global if workspace had nothing
-    if (!forceGlobal && target.scope === "workspace") {
-      const globalDir = dirs.find((d) => d.scope === "global");
-      if (globalDir) {
-        const gSkillDir = join(globalDir.dir, name);
-        if (existsSync(join(gSkillDir, "SKILL.md"))) {
-          removeSkill(gSkillDir);
-          console.log(`Removed (global): ${gSkillDir}`);
-          return;
-        }
-      }
-    }
-    die(`Skill "${name}" not found.\nRun: clip skills list`);
-  }
-
-  removeSkill(skillDir);
-  console.log(`Removed (${target.scope}): ${skillDir}`);
-
-  // warn if same name still exists in global
-  if (target.scope === "workspace") {
-    const globalDir = dirs.find((d) => d.scope === "global");
-    if (globalDir) {
-      const gSkillDir = join(globalDir.dir, name);
-      if (existsSync(join(gSkillDir, "SKILL.md"))) {
-        console.log(`Note: global version of "${name}" still exists at ${gSkillDir}`);
-      }
-    }
-  }
+  removeSkill(found);
+  console.log(`Removed: ${found}`);
 }
 
 // --- install / uninstall / installed ---
@@ -452,7 +403,7 @@ async function cmdInstall(args: string[]): Promise<void> {
   for (const preset of targets) {
     const agentSkillsDir = AGENT_PRESETS[preset];
     if (!agentSkillsDir) die(`Unknown agent preset: "${preset}"\nAvailable: ${Object.keys(AGENT_PRESETS).join(", ")}`);
-    installToAgent(name, found.dir, agentSkillsDir, mode, force);
+    installToAgent(name, found, agentSkillsDir, mode, force);
     console.log(`  ✓ ${preset} (${mode}): ${join(agentSkillsDir, name)}`);
   }
 }

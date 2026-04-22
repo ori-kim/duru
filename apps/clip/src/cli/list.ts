@@ -1,21 +1,15 @@
 import { listBound } from "../commands/bind.ts";
 import type { Registry } from "@clip/core";
-import { getActiveWorkspace, loadConfig } from "@clip/core";
+import { loadConfig } from "@clip/core";
 
 export async function runList(registry: Registry): Promise<void> {
   const config = await loadConfig();
   const bound = new Set(await listBound());
-  const activeWs = getActiveWorkspace();
   const tty = process.stdout.isTTY;
   const c = (code: string, text: string) => (tty ? `\x1b[${code}m${text}\x1b[0m` : text);
-  const wsTag = (name: string) => {
-    if (!activeWs) return "";
-    const src = config._sources?.[name];
-    return src !== undefined ? c("2", src ? ` [${src}]` : " [global]") : "";
-  };
   const bind = (name: string) => (bound.has(name) ? c("2", " [bind]") : "");
 
-  const opts = { bound, activeWorkspace: activeWs, tty, color: c, wsTag, bind };
+  const opts = { bound, tty, color: c, bind };
 
   // contribution이 등록된 타입들을 순서대로 렌더링
   const contributions = registry.listContributions();

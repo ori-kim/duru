@@ -105,15 +105,10 @@ clip gql query --query '{ users { id name } }'
 | `clip <target> tools` | List available tools/operations |
 | `clip <target> describe <op>` | Show method/type details |
 | `clip <target> types` | List all types (gRPC/GraphQL) |
-| `clip add <name> ... --global` | Register to global config (ignore active workspace) |
 | `clip profile add/use/list/remove/unset` | Manage profiles |
 | `clip <target>@<profile> <args>` | One-shot profile override |
 | `clip bind / unbind <target>` | Native command shim |
 | `clip binds` | List bound targets |
-| `clip workspace new <name>` | Create a workspace |
-| `clip workspace use <name> \| -` | Switch workspace (or clear) |
-| `clip workspace list` | List workspaces |
-| `clip workspace remove <name>` | Delete workspace |
 | `clip skills add <name>` | Create a prompt-template skill |
 | `clip skills list` | List skills (shows installed agents) |
 | `clip skills get <name> [--input k=v ...]` | Render skill with inputs |
@@ -154,7 +149,6 @@ See [docs/en/08-extensions.md](docs/en/08-extensions.md) for the full API: hook 
 - [GraphQL target](docs/en/06-graphql.md) — introspection, queries, mutations, auth
 - [Aliases & Scripts](docs/en/07-aliases.md) — shortcut macros and script bundles
 - [Extensions](docs/en/08-extensions.md) — hooks, new target types, error handlers
-- [Workspaces](docs/en/09-workspaces.md) — per-project target isolation
 - [Skills](docs/en/10-skills.md) — reusable prompt templates with inputs, agent install
 
 ## Development

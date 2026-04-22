@@ -32,7 +32,7 @@ export const extension: ClipExtension = {
       type: "api",
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as ApiTarget;
-        const { color, wsTag, bind } = opts;
+        const { color, bind } = opts;
         const nm = color("36", name.padEnd(16));
         const configDir = resolveAuthDir(name, "api");
         const authStatus = await getAuthStatus(configDir);
@@ -45,18 +45,18 @@ export const extension: ClipExtension = {
         const profileTag = (t as Record<string, unknown>).active ? ` @${(t as Record<string, unknown>).active}` : "";
         const url = (t.baseUrl ?? t.openapiUrl ?? "") as string;
         const aclStr = formatAcl(t as Record<string, unknown>);
-        return `  ${nm} ${url}${profileTag}${aclStr}${statusTag}${bind(name)}${wsTag(name)}`;
+        return `  ${nm} ${url}${profileTag}${aclStr}${statusTag}${bind(name)}`;
       },
       urlHeuristic: (url) => {
         const lower = url.toLowerCase().split("?")[0]!.split("#")[0]!;
         return /\/(openapi|swagger)\.(json|ya?ml)$/.test(lower) || /\/openapi\.json$/.test(lower);
       },
       addHandler: async (args: AddArgs) => {
-        const { name, positionals, flags, allow, deny, addOpts } = args;
+        const { name, positionals, flags, allow, deny } = args;
         const baseUrl = flags["base-url"] ?? flags["baseUrl"] ?? positionals[0];
         if (!baseUrl) die("API target requires a base URL (e.g. clip add petstore https://api.example.com)");
         const openapiUrl = flags["openapi-url"] ?? flags["openapiUrl"];
-        await addTarget(name, "api", { auth: false, baseUrl, ...(openapiUrl ? { openapiUrl } : {}), allow, deny }, addOpts);
+        await addTarget(name, "api", { auth: false, baseUrl, ...(openapiUrl ? { openapiUrl } : {}), allow, deny });
         console.log(`Added API target "${name}" → ${baseUrl}`);
         try {
           const resp = await fetch(openapiUrl ?? baseUrl);

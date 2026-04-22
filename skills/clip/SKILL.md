@@ -108,27 +108,6 @@ Targets can define shortcut subcommands that expand into real operations:
 clip notion sprint    # → clip notion search_pages --query "sprint retro"
 ```
 
-## Workspaces
-
-Workspaces let you maintain separate sets of targets per project or environment. Targets in the active workspace override same-named global targets.
-
-```sh
-clip workspace                    # show active workspace
-clip workspace new <name>         # create a new workspace
-clip workspace use <name>         # switch to workspace
-clip workspace use -              # clear active (revert to global)
-clip workspace list               # list all workspaces
-clip workspace remove <name> [--force]  # delete workspace
-```
-
-`clip list` shows a dim `[workspace-name]` or `[global]` tag next to each target when a workspace is active.
-
-Targets are stored at `~/.clip/workspace/<name>/target/`. When a workspace is active, `clip add` registers into it by default; use `--global` to force global registration:
-
-```sh
-clip add gh gh --global   # always goes to ~/.clip/target/
-```
-
 ## Management commands
 
 ```sh
@@ -140,13 +119,11 @@ clip add <name> <https://.../openapi.json>       # register API target
 clip add <name> <host:port> --grpc [proto]       # register gRPC target
 clip add <name> <https://.../graphql> --graphql  # register GraphQL target
 clip add <name> --script                         # register script target
-clip add <name> ... --global                     # force global (ignore active workspace)
 clip remove <name>                               # unregister
 clip refresh <target>                            # re-fetch spec/schema
 clip login <target> / clip logout <target>       # OAuth
 clip bind <target>    # native shim: "gh" routes through clip without prefix
 clip binds            # list bound targets
-clip workspace new/use/list/remove               # manage workspaces
 clip profile add <target> <profile> [--args a,b,c] [--url ...] [--env K=V]
 clip profile use <target> <profile>              # set active profile
 clip profile list <target>                       # list profiles

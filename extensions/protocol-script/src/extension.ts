@@ -40,24 +40,24 @@ export const extension: ClipExtension = {
       type: "script",
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as ScriptTarget;
-        const { color, wsTag, bind } = opts;
+        const { color, bind } = opts;
         const nm = color("38;5;245", name.padEnd(16));
         const commands = t.commands as Record<string, unknown> | undefined;
         const cmdCount = Object.keys(commands ?? {}).length;
         const desc = t.description ? ` — ${t.description}` : "";
         const aclStr = formatAcl(t as Record<string, unknown>);
-        return `  ${nm} ${cmdCount} command(s)${desc}${aclStr}${bind(name)}${wsTag(name)}`;
+        return `  ${nm} ${cmdCount} command(s)${desc}${aclStr}${bind(name)}`;
       },
       urlHeuristic: () => false,
       addHandler: async (args: AddArgs) => {
-        const { name, flags, allow, deny, addOpts } = args;
+        const { name, flags, allow, deny } = args;
         const description = flags["description"];
         await addTarget(name, "script", {
           ...(description ? { description } : {}),
           commands: {},
           allow,
           deny,
-        }, addOpts);
+        });
         console.log(`Added script target "${name}".`);
       },
       helpRenderer: async (_name, target) => {

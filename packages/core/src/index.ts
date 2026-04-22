@@ -45,20 +45,13 @@ export type {
 
 // Config
 export type { Config, ResolvedTarget } from "./config.ts";
-export { loadConfig, CONFIG_DIR, findTargetConfigDir, addTarget } from "./config.ts";
+export { loadConfig, CONFIG_DIR, TARGET_DIR, findTargetConfigDir, addTarget } from "./config.ts";
 export {
   getTarget,
   updateTarget,
   removeTarget,
   getAllTargetNames,
-  getActiveWorkspace,
-  getWorkspaceDir,
-  listWorkspaces,
-  getTargetDirs,
   mergeHeaders,
-  WORKSPACE_ROOT,
-  WORKSPACE_FILE,
-  RESERVED_WORKSPACE_NAMES,
   profileOverrideSchema,
 } from "./config.ts";
 

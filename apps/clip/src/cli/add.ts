@@ -15,7 +15,7 @@ export async function runAdd(args: string[], registry: Registry): Promise<void> 
 
   const positionals: string[] = [];
   const flags: Record<string, string> = {};
-  const BOOL_FLAGS = new Set(["stdio", "sse", "api", "grpc", "graphql", "plaintext", "script", "global"]);
+  const BOOL_FLAGS = new Set(["stdio", "sse", "api", "grpc", "graphql", "plaintext", "script"]);
   for (let i = 1; i < args.length; i++) {
     const a = args[i] ?? "";
     if (a.startsWith("--")) {
@@ -38,9 +38,8 @@ export async function runAdd(args: string[], registry: Registry): Promise<void> 
 
   const allow = flags["allow"] ? flags["allow"].split(",").map((s) => s.trim()) : undefined;
   const deny = flags["deny"] ? flags["deny"].split(",").map((s) => s.trim()) : undefined;
-  const addOpts = flags["global"] ? { global: true } : undefined;
 
-  const addArgs = { name, positionals, flags, allow, deny, addOpts };
+  const addArgs = { name, positionals, flags, allow, deny };
 
   // --type 플래그가 명시된 경우: 해당 contribution의 addHandler를 직접 호출
   const explicitType = flags["type"];

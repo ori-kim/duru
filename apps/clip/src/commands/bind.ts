@@ -1,5 +1,5 @@
 import { basename, join } from "path";
-import { CONFIG_DIR, getAllTargetNames, getActiveWorkspace, getTarget, loadConfig } from "@clip/core";
+import { CONFIG_DIR, getAllTargetNames, getTarget, loadConfig } from "@clip/core";
 import { die } from "@clip/core";
 
 export const BIND_DIR = join(CONFIG_DIR, "bin");
@@ -15,13 +15,6 @@ function getClipBinPath(): string {
 
 export async function bindTarget(name: string): Promise<void> {
   if (name === "clip") die('Cannot bind "clip" — would cause infinite recursion.');
-
-  const ws = getActiveWorkspace();
-  if (ws) {
-    process.stderr.write(
-      `note: bind uses global ${BIND_DIR} — the shim will resolve "${name}" against the active workspace at runtime.\n`,
-    );
-  }
 
   const clipBin = getClipBinPath();
   await Bun.spawn(["mkdir", "-p", BIND_DIR]).exited;

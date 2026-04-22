@@ -33,14 +33,11 @@ clip add my-api localhost:50051 --grpc ./api.proto
 clip add gql https://api.example.com/graphql --graphql
 clip add my-scripts --script
 
-# List all targets (shows [workspace] tag when a workspace is active)
+# List all targets
 clip list
 
 # Remove
 clip remove gh
-
-# Force global registration (ignore active workspace)
-clip add gh gh --global
 ```
 
 ## Config File Locations

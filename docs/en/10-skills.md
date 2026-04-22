@@ -63,7 +63,7 @@ Reference inputs in the body with `{{ inputs.key }}`.
 
 | Command | Description |
 |---------|-------------|
-| `clip skills add <name> [--description <d>] [--tag a,b] [--workspace]` | Create scaffold |
+| `clip skills add <name> [--description <d>] [--tag a,b]` | Create scaffold |
 | `clip skills list [--json]` | List all skills |
 | `clip skills show <name>` | Print raw SKILL.md |
 | `clip skills get <name> [--input k=v ...]` | Render with inputs |
@@ -79,17 +79,6 @@ Reference inputs in the body with `{{ inputs.key }}`.
     <name>/
       SKILL.md
 ```
-
-When a workspace is active, workspace skills overlay global ones — a workspace skill with the same name takes precedence:
-
-```
-~/.clip/workspace/<ws>/
-  skills/
-    <name>/
-      SKILL.md
-```
-
-Use `--workspace` with `clip skills add` to create the skill in the active workspace instead of global.
 
 ## Agent install
 

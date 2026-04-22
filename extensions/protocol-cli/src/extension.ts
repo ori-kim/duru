@@ -17,19 +17,19 @@ export const extension: ClipExtension = {
       type: "cli",
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as CliTarget;
-        const { color, wsTag, bind } = opts;
+        const { color, bind } = opts;
         const nm = color("32", name.padEnd(16));
         const profileTag = t.active ? ` @${t.active}` : "";
         const aclStr = formatAcl(t as Record<string, unknown>);
-        return `  ${nm} ${t.command}${profileTag}${aclStr}${bind(name)}${wsTag(name)}`;
+        return `  ${nm} ${t.command}${profileTag}${aclStr}${bind(name)}`;
       },
       urlHeuristic: (url) => !url.startsWith("http://") && !url.startsWith("https://"),
       addHandler: async (args: AddArgs) => {
-        const { name, positionals, flags, allow, deny, addOpts } = args;
+        const { name, positionals, flags, allow, deny } = args;
         const command = flags["command"] ?? positionals[0];
         if (!command) die("CLI target requires a command (e.g. clip add gh gh)");
         const prependArgs = flags["args"] ? flags["args"].split(",").map((s) => s.trim()) : undefined;
-        await addTarget(name, "cli", { command, args: prependArgs, allow, deny }, addOpts);
+        await addTarget(name, "cli", { command, args: prependArgs, allow, deny });
         console.log(`Added CLI target "${name}" → ${command}`);
       },
       helpRenderer: async (_name, target) => {

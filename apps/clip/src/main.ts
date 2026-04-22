@@ -24,7 +24,6 @@ import { runBind, runBinds, runUnbind } from "./commands/bind.ts";
 import { runCompletionCmd } from "./commands/completion.ts";
 import { runExtCmd } from "./commands/ext.ts";
 import { runProfileCmd } from "./commands/profile.ts";
-import { runWorkspaceCmd } from "./commands/workspace.ts";
 import { loadUserExtensions, type ExtensionLoader } from "./extension-loader.ts";
 import { createRawInvocation } from "./pipeline/01-raw.ts";
 import { parseInvocation, setInternalVerbSet } from "./pipeline/02-parse.ts";
@@ -55,7 +54,6 @@ function registerInternalCommands(reg: Registry): void {
       api.registerInternalCommand("refresh",    async ({ args }) => { await runRefresh(args, reg); });
       api.registerInternalCommand("login",      async ({ args }) => { await runLogin(args, reg); });
       api.registerInternalCommand("logout",     async ({ args }) => { await runLogout(args); });
-      api.registerInternalCommand("workspace",  async ({ args }) => { await runWorkspaceCmd(args); });
       api.registerInternalCommand("ext",        async ({ args }) => { await runExtCmd(args); });
     },
   };

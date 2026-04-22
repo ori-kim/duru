@@ -21,7 +21,7 @@ type ParsedData = {
 const DEFAULT_INTERNAL_VERBS = new Set([
   "add", "list", "remove", "bind", "unbind", "binds",
   "completion", "profile", "alias", "refresh", "login", "logout",
-  "config", "workspace", "ext",
+  "config", "ext",
 ]);
 
 let _internalVerbSet: Set<string> = DEFAULT_INTERNAL_VERBS;

@@ -1,110 +1,85 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "fs";
 import { join } from "path";
-import { CONFIG_DIR, WORKSPACE_ROOT, getActiveWorkspace } from "@clip/core";
+import { CONFIG_DIR } from "@clip/core";
 import { parseSkillFile } from "./frontmatter.ts";
 import type { SkillFrontmatter } from "./frontmatter.ts";
 
-const SKILLS_SUBDIR = "skills";
+const SKILLS_DIR = join(CONFIG_DIR, "skills");
 
 export const RESERVED_SKILL_NAMES = new Set(["add", "list", "show", "get", "rm"]);
-
-export type SkillScope = "global" | "workspace";
 
 export type SkillEntry = {
   name: string;
   dir: string;
-  scope: SkillScope;
   fm: SkillFrontmatter;
   body: string;
 };
 
-// global first (low priority), workspace last (overrides)
-export function getSkillDirs(): { dir: string; scope: SkillScope }[] {
-  const dirs: { dir: string; scope: SkillScope }[] = [
-    { dir: join(CONFIG_DIR, SKILLS_SUBDIR), scope: "global" },
-  ];
-  const ws = getActiveWorkspace();
-  if (ws) {
-    dirs.push({ dir: join(WORKSPACE_ROOT, ws, SKILLS_SUBDIR), scope: "workspace" });
-  }
-  return dirs;
+export function getSkillsDir(): string {
+  return SKILLS_DIR;
 }
 
-// workspace-first lookup (highest priority first)
-export function findSkillDir(name: string): { dir: string; scope: SkillScope } | null {
-  const dirs = [...getSkillDirs()].reverse();
-  for (const { dir, scope } of dirs) {
-    const skillDir = join(dir, name);
-    if (existsSync(join(skillDir, "SKILL.md"))) return { dir: skillDir, scope };
-  }
+export function findSkillDir(name: string): string | null {
+  const skillDir = join(SKILLS_DIR, name);
+  if (existsSync(join(skillDir, "SKILL.md"))) return skillDir;
   return null;
 }
 
 export function loadAllSkills(): SkillEntry[] {
-  const seen = new Map<string, SkillEntry>();
-  // load global first, then workspace — workspace overrides global
-  for (const { dir, scope } of getSkillDirs()) {
-    if (!existsSync(dir)) continue;
-    let entries: string[];
+  if (!existsSync(SKILLS_DIR)) return [];
+  let entries: string[];
+  try {
+    entries = readdirSync(SKILLS_DIR, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return [];
+  }
+  const result: SkillEntry[] = [];
+  for (const name of entries) {
+    const skillDir = join(SKILLS_DIR, name);
+    const skillFile = join(skillDir, "SKILL.md");
+    if (!existsSync(skillFile)) continue;
     try {
-      entries = readdirSync(dir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
+      const raw = readFileSync(skillFile, "utf8");
+      const { fm, body } = parseSkillFile(raw, skillFile);
+      result.push({ name, dir: skillDir, fm, body });
     } catch {
-      continue;
-    }
-    for (const name of entries) {
-      const skillDir = join(dir, name);
-      const skillFile = join(skillDir, "SKILL.md");
-      if (!existsSync(skillFile)) continue;
-      try {
-        const raw = readFileSync(skillFile, "utf8");
-        const { fm, body } = parseSkillFile(raw, skillFile);
-        seen.set(name, { name, dir: skillDir, scope, fm, body });
-      } catch {
-        // parse errors are surfaced in loadAllSkillsSafe
-      }
+      // parse errors surfaced in loadAllSkillsSafe
     }
   }
-  return [...seen.values()];
+  return result;
 }
 
 export function loadAllSkillsSafe(): { entries: SkillEntry[]; errors: { file: string; message: string }[] } {
-  const seen = new Map<string, SkillEntry>();
+  const entries: SkillEntry[] = [];
   const errors: { file: string; message: string }[] = [];
-
-  for (const { dir, scope } of getSkillDirs()) {
-    if (!existsSync(dir)) continue;
-    let dirEntries: string[];
+  if (!existsSync(SKILLS_DIR)) return { entries, errors };
+  let dirEntries: string[];
+  try {
+    dirEntries = readdirSync(SKILLS_DIR, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return { entries, errors };
+  }
+  for (const name of dirEntries) {
+    const skillDir = join(SKILLS_DIR, name);
+    const skillFile = join(skillDir, "SKILL.md");
+    if (!existsSync(skillFile)) continue;
     try {
-      dirEntries = readdirSync(dir, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
-    } catch {
-      continue;
-    }
-    for (const name of dirEntries) {
-      const skillDir = join(dir, name);
-      const skillFile = join(skillDir, "SKILL.md");
-      if (!existsSync(skillFile)) continue;
-      try {
-        const rawSync = readFileSync(skillFile, "utf8");
-        const { fm, body } = parseSkillFile(rawSync, skillFile);
-        seen.set(name, { name, dir: skillDir, scope, fm, body });
-      } catch (e: unknown) {
-        errors.push({ file: skillFile, message: e instanceof Error ? e.message : String(e) });
-      }
+      const raw = readFileSync(skillFile, "utf8");
+      const { fm, body } = parseSkillFile(raw, skillFile);
+      entries.push({ name, dir: skillDir, fm, body });
+    } catch (e: unknown) {
+      errors.push({ file: skillFile, message: e instanceof Error ? e.message : String(e) });
     }
   }
-
-  return { entries: [...seen.values()], errors };
+  return { entries, errors };
 }
 
-export async function writeSkill(name: string, scope: SkillScope, content: string): Promise<void> {
-  const dirs = getSkillDirs();
-  const target = scope === "workspace" ? dirs[dirs.length - 1] : dirs[0];
-  if (!target) throw new Error(`No directory for scope: ${scope}`);
-  const skillDir = join(target.dir, name);
+export async function writeSkill(name: string, content: string): Promise<void> {
+  const skillDir = join(SKILLS_DIR, name);
   mkdirSync(skillDir, { recursive: true });
   await Bun.write(join(skillDir, "SKILL.md"), content);
 }

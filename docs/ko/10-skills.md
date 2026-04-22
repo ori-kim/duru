@@ -63,7 +63,7 @@ inputs:
 
 | 커맨드 | 설명 |
 |--------|------|
-| `clip skills add <name> [--description <d>] [--tag a,b] [--workspace]` | 스킬 스캐폴드 생성 |
+| `clip skills add <name> [--description <d>] [--tag a,b]` | 스킬 스캐폴드 생성 |
 | `clip skills list [--json]` | 전체 스킬 목록 |
 | `clip skills show <name>` | SKILL.md 원문 출력 |
 | `clip skills get <name> [--input k=v ...]` | inputs 치환 후 렌더링 |
@@ -79,17 +79,6 @@ inputs:
     <name>/
       SKILL.md
 ```
-
-워크스페이스가 활성화된 경우 워크스페이스 스킬이 글로벌 스킬을 덮어씁니다 (동일 이름이면 워크스페이스 우선):
-
-```
-~/.clip/workspace/<ws>/
-  skills/
-    <name>/
-      SKILL.md
-```
-
-`clip skills add`에 `--workspace`를 붙이면 글로벌 대신 활성 워크스페이스에 스킬이 생성됩니다.
 
 ## 에이전트 설치
 
