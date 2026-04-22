@@ -26,6 +26,7 @@ jobs:
         with:
           bun-version: "1.3.5"
       - run: bun install --frozen-lockfile
+      - run: bun run scripts/gen-core-types.ts
       - run: bun build --compile --target=${{ matrix.target }} ./apps/clip/src/main.ts --outfile=${{ matrix.asset }}
       - run: codesign --force --sign - ${{ matrix.asset }}
       - run: codesign -v ${{ matrix.asset }}
