@@ -1,15 +1,17 @@
 /**
  * clip ext — extension 관리 서브커맨드
  *
- *   clip ext list            — 내장 + 사용자 선언 전체 표시
- *   clip ext enable <name>   — manifest entry enabled: true
- *   clip ext disable <name>  — manifest entry enabled: false
- *   clip ext reload <name>   — import 캐시 무효화 (개발 편의)
+ *   clip ext list              — 내장 + 사용자 선언 전체 표시
+ *   clip ext enable <name>     — manifest entry enabled: true
+ *   clip ext disable <name>    — manifest entry enabled: false
+ *   clip ext scaffold <name>   — extension 폴더 + tsconfig 스캐폴드 생성
+ *   clip ext types             — IDE 타입 파일을 CLIP_HOME/types/@clip/core/ 에 배포
+ *   clip ext reload <name>     — import 캐시 무효화 (개발 편의)
  */
 import { die, CONFIG_DIR, type Registry } from "@clip/core";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
-import { parse as yamlParse } from "yaml";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
+import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 import {
   setExtensionEnabled,
   type ExtensionEntry,
@@ -122,6 +124,115 @@ function cmdReload(args: string[]): void {
   process.exit(1);
 }
 
+// core 타입 파일을 CONFIG_DIR/types/@clip/core/ 에 dump
+async function deployTypes(): Promise<void> {
+  const { getCoreTypeFiles } = await import("../core-type-bundle.ts");
+  const destBase = join(CONFIG_DIR, "types", "@clip", "core");
+  const files = getCoreTypeFiles();
+  for (const { path, content } of files) {
+    const destPath = join(destBase, path);
+    mkdirSync(dirname(destPath), { recursive: true });
+    writeFileSync(destPath, content, "utf8");
+  }
+  console.log(`Types deployed to: ${destBase}`);
+}
+
+async function cmdTypes(): Promise<void> {
+  await deployTypes();
+  console.log(`\nTo use in your extension's tsconfig.json:`);
+  console.log(JSON.stringify({
+    compilerOptions: {
+      paths: { "@clip/core": [`${join(CONFIG_DIR, "types", "@clip", "core", "src", "index.ts")}`] },
+    },
+  }, null, 2));
+}
+
+const EXTENSION_SCAFFOLD = `import type { ClipExtension } from "@clip/core";
+
+export const extension: ClipExtension = {
+  name: "ext:NAME",
+  init(api) {
+    api.registerInternalCommand("NAME", async ({ args }) => {
+      // TODO: implement
+      console.log("NAME args:", args);
+    });
+  },
+};
+`;
+
+const MANIFEST_ENTRY_TEMPLATE = (name: string) => ({
+  name,
+  path: name,
+  entry: "src/extension.ts",
+  enabled: true,
+  contributes: { internalCommands: [name], targetTypes: [], hooks: [] },
+});
+
+async function cmdScaffold(args: string[]): Promise<void> {
+  const name = args[0];
+  if (!name) die("Usage: clip ext scaffold <name>");
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) die("Extension name may only contain letters, digits, _ and -");
+
+  const manifestPath = getManifestPath();
+  const extDir = join(dirname(manifestPath), name);
+  const srcDir = join(extDir, "src");
+
+  if (existsSync(join(srcDir, "extension.ts"))) {
+    die(`Extension "${name}" already exists at ${extDir}`);
+  }
+
+  mkdirSync(srcDir, { recursive: true });
+
+  // extension.ts 스캐폴드
+  writeFileSync(join(srcDir, "extension.ts"), EXTENSION_SCAFFOLD.replaceAll("NAME", name), "utf8");
+
+  // core 타입 배포
+  await deployTypes();
+  const typesAbsPath = join(CONFIG_DIR, "types", "@clip", "core", "src", "index.ts");
+
+  // tsconfig.json
+  const tsconfig = {
+    compilerOptions: {
+      module: "Preserve",
+      moduleResolution: "bundler",
+      allowImportingTsExtensions: true,
+      verbatimModuleSyntax: true,
+      strict: true,
+      paths: { "@clip/core": [typesAbsPath] },
+    },
+  };
+  writeFileSync(join(extDir, "tsconfig.json"), JSON.stringify(tsconfig, null, 2) + "\n", "utf8");
+
+  // package.json — yaml/zod 트랜지티브 타입을 에디터가 resolve할 수 있도록 devDeps 명시
+  const pkgJson = { private: true, devDependencies: { yaml: "*", zod: "*" } };
+  writeFileSync(join(extDir, "package.json"), JSON.stringify(pkgJson, null, 2) + "\n", "utf8");
+
+  // extensions.yml에 entry 추가 (없으면 생성)
+  let manifest: { extensions: unknown[] } = { extensions: [] };
+  if (existsSync(manifestPath)) {
+    try {
+      manifest = yamlParse(readFileSync(manifestPath, "utf8")) as typeof manifest ?? manifest;
+    } catch { /* 무시 */ }
+  } else {
+    mkdirSync(dirname(manifestPath), { recursive: true });
+  }
+  if (!Array.isArray(manifest.extensions)) manifest.extensions = [];
+  const alreadyExists = (manifest.extensions as Array<{ name: string }>).some((e) => e.name === name);
+  if (!alreadyExists) {
+    manifest.extensions.push(MANIFEST_ENTRY_TEMPLATE(name));
+    writeFileSync(manifestPath, yamlStringify(manifest), "utf8");
+  }
+
+  console.log(`Extension scaffold created: ${extDir}`);
+  console.log(`  - ${join(srcDir, "extension.ts")}`);
+  console.log(`  - ${join(extDir, "tsconfig.json")}`);
+  console.log(`  - ${join(extDir, "package.json")}`);
+  console.log(`  - manifest entry added: ${manifestPath}`);
+  console.log(`\nRun \`bun install\` in ${extDir} to set up editor types.`);
+  console.log(`Then open ${join(srcDir, "extension.ts")} and start coding.`);
+  console.log(`Run: clip ${name} (after implementing registerInternalCommand)`);
+}
+
 // ---------------------------------------------------------------------------
 // 공개 진입점
 // ---------------------------------------------------------------------------
@@ -140,6 +251,12 @@ export async function runExtCmd(args: string[], registry: Registry): Promise<voi
     case "disable":
       cmdDisable(rest);
       break;
+    case "scaffold":
+      await cmdScaffold(rest);
+      break;
+    case "types":
+      await cmdTypes();
+      break;
     case "reload":
       cmdReload(rest);
       break;
@@ -151,6 +268,8 @@ export async function runExtCmd(args: string[], registry: Registry): Promise<voi
           "  list               Show all extensions (builtin + user declared)",
           "  enable <name>      Set entry enabled: true in manifest",
           "  disable <name>     Set entry disabled in manifest",
+          "  scaffold <name>    Create extension folder + tsconfig scaffold",
+          "  types              Deploy @clip/core types to CLIP_HOME/types/",
           "  reload <name>      Flush import cache (development helper)",
           "",
           "Manifest location: " + getManifestPath(),

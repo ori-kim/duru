@@ -7,3 +7,4 @@ dist/
 *.local
 .clip/
 .claude/
+apps/clip/src/core-type-bundle.generated.ts
