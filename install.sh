@@ -15,10 +15,9 @@ if [ "$OS" != "Darwin" ]; then
 fi
 
 case "$ARCH" in
-  arm64)  ASSET="clip-darwin-arm64" ;;
-  x86_64) ASSET="clip-darwin-x64" ;;
+  arm64) ASSET="clip-darwin-arm64" ;;
   *)
-    echo "error: unsupported architecture '$ARCH'." >&2
+    echo "error: unsupported architecture '$ARCH'. Only Apple Silicon (arm64) is supported." >&2
     echo "Download manually: https://github.com/$REPO/releases/latest" >&2
     exit 1
     ;;

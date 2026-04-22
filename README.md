@@ -29,7 +29,7 @@ A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules,
 
 ## Install
 
-**Pre-built binary** (macOS only, no dependencies):
+**Pre-built binary** (Apple Silicon only, no dependencies):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ori-kim/cli-proxy/main/install.sh | sh

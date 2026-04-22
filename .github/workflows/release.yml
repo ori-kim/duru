@@ -16,9 +16,6 @@ jobs:
           - target: bun-darwin-arm64
             asset: clip-darwin-arm64
             runner: macos-14
-          - target: bun-darwin-x64
-            asset: clip-darwin-x64
-            runner: macos-13
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4

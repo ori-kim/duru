@@ -26,7 +26,7 @@ MCP 서버와 CLI 도구를 위한 통합 CLI 프록시 게이트웨이 — ACL 
 
 ## 설치
 
-**사전 빌드 바이너리** (macOS 전용, 별도 설치 불필요):
+**사전 빌드 바이너리** (Apple Silicon 전용, 별도 설치 불필요):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ori-kim/cli-proxy/main/install.sh | sh
@@ -46,7 +46,7 @@ PATH 추가:
 export PATH="$PATH:$HOME/.local/bin"
 ```
 
-**수동 설치:** [최신 릴리즈](https://github.com/ori-kim/cli-proxy/releases/latest) · macOS 전용 (darwin-arm64, darwin-x64)
+**수동 설치:** [최신 릴리즈](https://github.com/ori-kim/cli-proxy/releases/latest) · Apple Silicon (darwin-arm64)
 
 **Native bind** — `clip` 접두사 없이 원본 명령어 그대로 사용:
 
