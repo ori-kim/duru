@@ -1,2 +1,0 @@
-#!/bin/sh
-exec $HOME/Documents/personal/clip/dist/clip-darwin-arm64 "$@"
