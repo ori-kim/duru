@@ -16,30 +16,84 @@
     "apps/clip": {
       "name": "clip",
       "version": "0.8.0",
+      "dependencies": {
+        "@clip/auth": "workspace:*",
+        "@clip/core": "workspace:*",
+        "@clip/protocol-api": "workspace:*",
+        "@clip/protocol-cli": "workspace:*",
+        "@clip/protocol-graphql": "workspace:*",
+        "@clip/protocol-grpc": "workspace:*",
+        "@clip/protocol-mcp": "workspace:*",
+        "@clip/protocol-script": "workspace:*",
+      },
+    },
+    "apps/clip-minimal": {
+      "name": "@clip/clip-minimal",
+      "version": "0.8.0",
+      "dependencies": {
+        "@clip/core": "workspace:*",
+        "@clip/protocol-mcp": "workspace:*",
+      },
     },
     "extensions/protocol-api": {
       "name": "@clip/protocol-api",
       "version": "0.8.0",
+      "dependencies": {
+        "@clip/auth": "workspace:*",
+        "@clip/core": "workspace:*",
+        "yaml": "^2.7.0",
+        "zod": "^3.24.0",
+      },
     },
     "extensions/protocol-cli": {
       "name": "@clip/protocol-cli",
       "version": "0.8.0",
+      "dependencies": {
+        "@clip/auth": "workspace:*",
+        "@clip/core": "workspace:*",
+        "yaml": "^2.7.0",
+        "zod": "^3.24.0",
+      },
     },
     "extensions/protocol-graphql": {
       "name": "@clip/protocol-graphql",
       "version": "0.8.0",
+      "dependencies": {
+        "@clip/auth": "workspace:*",
+        "@clip/core": "workspace:*",
+        "yaml": "^2.7.0",
+        "zod": "^3.24.0",
+      },
     },
     "extensions/protocol-grpc": {
       "name": "@clip/protocol-grpc",
       "version": "0.8.0",
+      "dependencies": {
+        "@clip/auth": "workspace:*",
+        "@clip/core": "workspace:*",
+        "yaml": "^2.7.0",
+        "zod": "^3.24.0",
+      },
     },
     "extensions/protocol-mcp": {
       "name": "@clip/protocol-mcp",
       "version": "0.8.0",
+      "dependencies": {
+        "@clip/auth": "workspace:*",
+        "@clip/core": "workspace:*",
+        "yaml": "^2.7.0",
+        "zod": "^3.24.0",
+      },
     },
     "extensions/protocol-script": {
       "name": "@clip/protocol-script",
       "version": "0.8.0",
+      "dependencies": {
+        "@clip/auth": "workspace:*",
+        "@clip/core": "workspace:*",
+        "yaml": "^2.7.0",
+        "zod": "^3.24.0",
+      },
     },
     "extensions/skills": {
       "name": "@clip/ext-skills",
@@ -52,6 +106,10 @@
     "packages/core": {
       "name": "@clip/core",
       "version": "0.8.0",
+      "dependencies": {
+        "yaml": "^2.7.0",
+        "zod": "^3.24.0",
+      },
     },
   },
   "packages": {
@@ -74,6 +132,8 @@
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@1.9.4", "", { "os": "win32", "cpu": "x64" }, "sha512-8Y5wMhVIPaWe6jw2H+KlEm4wP/f7EW3810ZLmDlrEEy5KvBsb9ECEfu/kMWD484ijfQ8+nIi0giMgu9g1UAuuA=="],
 
     "@clip/auth": ["@clip/auth@workspace:packages/auth"],
+
+    "@clip/clip-minimal": ["@clip/clip-minimal@workspace:apps/clip-minimal"],
 
     "@clip/core": ["@clip/core@workspace:packages/core"],
 

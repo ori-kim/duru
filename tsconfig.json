@@ -13,6 +13,16 @@
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true
+    "noImplicitOverride": true,
+    "paths": {
+      "@clip/core": ["./packages/core/src/index.ts"],
+      "@clip/auth": ["./packages/auth/src/index.ts"],
+      "@clip/protocol-mcp": ["./extensions/protocol-mcp/src/index.ts"],
+      "@clip/protocol-api": ["./extensions/protocol-api/src/index.ts"],
+      "@clip/protocol-graphql": ["./extensions/protocol-graphql/src/index.ts"],
+      "@clip/protocol-grpc": ["./extensions/protocol-grpc/src/index.ts"],
+      "@clip/protocol-cli": ["./extensions/protocol-cli/src/index.ts"],
+      "@clip/protocol-script": ["./extensions/protocol-script/src/index.ts"]
+    }
   }
 }

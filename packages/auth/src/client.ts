@@ -1,4 +1,4 @@
-import { getStoredAuthHeaders, handleOAuth401, refreshIfExpiring, resolveAuthDir } from "../../../src/commands/oauth.ts";
+import { getStoredAuthHeaders, getAuthStatus, handleOAuth401, refreshIfExpiring } from "./oauth.ts";
 
 /**
  * AuthenticatedClient — OAuth 토큰을 자동으로 주입하고 401 시 재인증하는 HTTP 클라이언트.
@@ -20,11 +20,13 @@ export class AuthenticatedClient {
     serverUrl: string;
     /** target.auth === "oauth" 여부 */
     oauthEnabled: boolean;
+    /** resolveAuthDir(targetName, targetType)로 계산한 configDir */
+    configDir: string;
   }) {
     this.targetName = opts.targetName;
     this.serverUrl = opts.serverUrl;
     this.oauthEnabled = opts.oauthEnabled;
-    this.configDir = resolveAuthDir(opts.targetName, opts.targetType);
+    this.configDir = opts.configDir;
   }
 
   /**
@@ -34,7 +36,6 @@ export class AuthenticatedClient {
   async getAuthHeaders(): Promise<Record<string, string>> {
     if (!this.oauthEnabled) return {};
 
-    // 만료 임박이면 사전 갱신
     const refreshed = await refreshIfExpiring(this.configDir);
     if (refreshed) return refreshed;
 
@@ -50,12 +51,10 @@ export class AuthenticatedClient {
       return fetch(url, init);
     }
 
-    // 사전 토큰 갱신 (retry에서는 이미 처리됨)
     if (!isRetry) {
-      const refreshed = await refreshIfExpiring(this.configDir);
-      if (refreshed) {
-        const mergedHeaders = { ...(init?.headers as Record<string, string> ?? {}), ...refreshed };
-        init = { ...init, headers: mergedHeaders };
+      const authHeaders = await this.getAuthHeaders();
+      if (Object.keys(authHeaders).length > 0) {
+        init = { ...init, headers: { ...(init?.headers as Record<string, string> ?? {}), ...authHeaders } };
       }
     }
 
@@ -85,9 +84,7 @@ export class AuthenticatedClient {
   }
 
   /** getAuthStatus 위임 — list 렌더러에서 사용 */
-  static async getAuthStatus(targetName: string, targetType: string): Promise<string | null> {
-    const configDir = resolveAuthDir(targetName, targetType);
-    const { getAuthStatus } = await import("../../../src/commands/oauth.ts");
+  static async getAuthStatus(configDir: string): Promise<string | null> {
     return getAuthStatus(configDir);
   }
 }

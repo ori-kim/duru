@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@clip/core": ["../core/src/index.ts"],
+      "@clip/auth": ["./src/index.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}

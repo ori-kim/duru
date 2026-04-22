@@ -1,0 +1,10 @@
+{
+  "name": "@clip/clip-minimal",
+  "version": "0.8.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@clip/core": "workspace:*",
+    "@clip/protocol-mcp": "workspace:*"
+  }
+}

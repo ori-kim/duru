@@ -4,38 +4,31 @@
  *
  * builtin-loader.ts의 createDefaultRegistry()를 사용해 registry를 생성한다.
  * 특정 extension을 제거하려면 builtin-loader.ts의 BUILTIN_EXTENSIONS 배열에서 관리한다.
- *
- * 현재 단계: 기존 src/ 구조를 그대로 참조.
- * 이후 단계에서 각 extension이 packages/extensions/* 로 이동하면 import 경로를 업데이트한다.
  */
-import { checkAcl } from "../../../src/acl.ts";
-import { createDefaultRegistry } from "../../../src/builtin-loader.ts";
-import { runAdd } from "../../../src/cli/add.ts";
-import { runConfigCmd } from "../../../src/cli/config-cmd.ts";
-import { HELP, VERSION, printTargetHelp } from "../../../src/cli/help.ts";
-import { runList } from "../../../src/cli/list.ts";
-import { runLogin, runLogout } from "../../../src/cli/login.ts";
-import { runRefresh } from "../../../src/cli/refresh.ts";
-import { runRemove } from "../../../src/cli/remove.ts";
-import { type HasAliases, runAliasCmd } from "../../../src/commands/alias.ts";
-import { runBind, runBinds, runUnbind } from "../../../src/commands/bind.ts";
-import { runCompletionCmd } from "../../../src/commands/completion.ts";
-import { runProfileCmd } from "../../../src/commands/profile.ts";
-import { runSkillsCmd } from "../../../src/commands/skills.ts";
-import { runWorkspaceCmd } from "../../../src/commands/workspace.ts";
-import { loadConfig } from "../../../src/config.ts";
-import { dispatch } from "../../../src/dispatch.ts";
-import { type ClipExtension, Registry } from "../../../src/extension.ts";
-import { loadUserExtensions } from "../../../src/extension-loader.ts";
-import { createRawInvocation } from "../../../src/pipeline/01-raw.ts";
-import { parseInvocation, setInternalVerbSet } from "../../../src/pipeline/02-parse.ts";
-import { matchCommand } from "../../../src/pipeline/03-match-command.ts";
-import { bindTarget } from "../../../src/pipeline/04-bind-target.ts";
-import { resolveProfileStage } from "../../../src/pipeline/05-resolve-profile.ts";
-import type { MatchedCommand, TargetInvocationHandle } from "../../../src/pipeline/types.ts";
-import { outputRegistry } from "../../../src/output-registry.ts";
-import { printAndExit } from "../../../src/utils/errors.ts";
-import { formatToolHelp } from "../../../src/utils/tool-args.ts";
+import { checkAcl, dispatch, loadConfig, outputRegistry, printAndExit, formatToolHelp } from "@clip/core";
+import type { ClipExtension, HasAliases, ResolvedTarget } from "@clip/core";
+import { Registry } from "@clip/core";
+import { createDefaultRegistry } from "./builtin-loader.ts";
+import { runAdd } from "./cli/add.ts";
+import { runConfigCmd } from "./cli/config-cmd.ts";
+import { HELP, VERSION, printTargetHelp } from "./cli/help.ts";
+import { runList } from "./cli/list.ts";
+import { runLogin, runLogout } from "./cli/login.ts";
+import { runRefresh } from "./cli/refresh.ts";
+import { runRemove } from "./cli/remove.ts";
+import { runAliasCmd } from "./commands/alias.ts";
+import { runBind, runBinds, runUnbind } from "./commands/bind.ts";
+import { runCompletionCmd } from "./commands/completion.ts";
+import { runProfileCmd } from "./commands/profile.ts";
+import { runSkillsCmd } from "./commands/skills.ts";
+import { runWorkspaceCmd } from "./commands/workspace.ts";
+import { loadUserExtensions } from "./extension-loader.ts";
+import { createRawInvocation } from "./pipeline/01-raw.ts";
+import { parseInvocation, setInternalVerbSet } from "./pipeline/02-parse.ts";
+import { matchCommand } from "./pipeline/03-match-command.ts";
+import { bindTarget } from "./pipeline/04-bind-target.ts";
+import { resolveProfileStage } from "./pipeline/05-resolve-profile.ts";
+import type { MatchedCommand, TargetInvocationHandle } from "./pipeline/types.ts";
 
 const registry = createDefaultRegistry();
 
@@ -109,7 +102,7 @@ async function main(): Promise<number> {
   const { baseName, subcommand: rawSubcommand, targetArgs } = invocation;
   const { jsonMode, pipeMode, dryRun } = invocation.lateFlags;
 
-  const config = await loadConfig();
+  const config = await loadConfig(registry);
   const bound = bindTarget(invocation, config, registry);
   const mergedResult = resolveProfileStage(bound, registry);
   const { type, target } = mergedResult as unknown as { type: string; target: unknown; invocation: TargetInvocationHandle };
@@ -178,7 +171,7 @@ async function main(): Promise<number> {
     config,
     {
       targetName: invocation.token,
-      resolvedTarget: { type, target } as import("../../../src/config.ts").ResolvedTarget,
+      resolvedTarget: { type, target } as ResolvedTarget,
       subcommand: rawSubcommand,
       args: lateFiltered,
       headers: config.headers ?? {},

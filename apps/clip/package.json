@@ -3,6 +3,16 @@
   "version": "0.8.0",
   "type": "module",
   "private": true,
+  "dependencies": {
+    "@clip/core": "workspace:*",
+    "@clip/auth": "workspace:*",
+    "@clip/protocol-api": "workspace:*",
+    "@clip/protocol-cli": "workspace:*",
+    "@clip/protocol-graphql": "workspace:*",
+    "@clip/protocol-grpc": "workspace:*",
+    "@clip/protocol-mcp": "workspace:*",
+    "@clip/protocol-script": "workspace:*"
+  },
   "scripts": {
     "build:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 ./src/main.ts --outfile=../../dist/clip-darwin-arm64",
     "build:darwin-x64":   "bun build --compile --target=bun-darwin-x64   ./src/main.ts --outfile=../../dist/clip-darwin-x64",

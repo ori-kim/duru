@@ -2,5 +2,12 @@
   "name": "@clip/core",
   "version": "0.8.0",
   "type": "module",
-  "private": true
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.7.0",
+    "zod": "^3.24.0"
+  }
 }

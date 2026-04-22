@@ -1,0 +1,35 @@
+# stepflow.yml — 2026-04-21 workflow-setting으로 생성
+docs:
+  feature_dir: "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/agentic-obsidian/👾 AGENT/workflow/{feature}"
+  implementation: "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/agentic-obsidian/👾 AGENT/workflow/{feature}/IMPLEMENTATION.md"
+  progress: "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/agentic-obsidian/👾 AGENT/workflow/{feature}/PROGRESS.md"
+  task: "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/agentic-obsidian/👾 AGENT/workflow/{feature}/tasks/step-{NN}.md"
+  history: "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/agentic-obsidian/👾 AGENT/workflow/{feature}/history/step-{NN}.md"
+  global_progress: "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/agentic-obsidian/👾 AGENT/workflow/PROGRESS.md"
+  architecture: "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/agentic-obsidian/👾 AGENT/workflow/ARCHITECTURE.md"
+
+branch:
+  trunk: main
+  template: "feature/{feature}/step/{NN}-{desc}"
+
+stack:
+  tool: "graphite"
+  create: "clip gt branch create {branch} -m '{msg}'"
+  track: "clip gt branch track --parent {parent}"
+
+commands:
+  test: "bun test"
+  build: "bun build ./src/clip.ts --outfile=/dev/null --target=bun"
+
+integrations:
+  linear:
+    enabled: false
+  slack:
+    enabled: false
+
+review:
+  engine: "codex"
+  codex_path: "$HOME/.claude/plugins/cache/openai-codex/codex/1.0.3/scripts/codex-companion.mjs"
+
+retry:
+  max: 2

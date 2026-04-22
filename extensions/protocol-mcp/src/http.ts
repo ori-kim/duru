@@ -1,0 +1,261 @@
+import { AuthenticatedClient, resolveAuthDir } from "@clip/auth";
+import { buildAliasSection, die, formatToolHelp, parseToolArgs } from "@clip/core";
+import type { ExecutorContext, TargetResult } from "@clip/core";
+import type { McpHttpTarget } from "./schema.ts";
+import { writeToolsCache } from "./tools-cache.ts";
+
+// --- JSON-RPC 타입 ---
+
+type JsonRpcRequest = {
+  jsonrpc: "2.0";
+  id?: number;
+  method: string;
+  params?: unknown;
+};
+
+type JsonRpcResponse = {
+  jsonrpc: "2.0";
+  id?: number;
+  result?: unknown;
+  error?: { code: number; message: string };
+};
+
+// --- MCP 타입 ---
+
+type McpTool = {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+};
+
+type McpContent = {
+  type: string;
+  text?: string;
+  data?: string;
+  mimeType?: string;
+};
+
+type McpCallResult = {
+  content: McpContent[];
+  isError?: boolean;
+};
+
+// --- SSE 파싱 ---
+
+function parseSSE(body: string, expectedId: number): unknown {
+  const lines = body.split("\n");
+  for (const line of lines) {
+    if (!line.startsWith("data: ")) continue;
+    const data = line.slice(6).trim();
+    try {
+      const parsed = JSON.parse(data) as JsonRpcResponse;
+      if (parsed.id === expectedId) return parsed;
+    } catch {
+      // non-JSON 라인(heartbeat 등) 무시
+    }
+  }
+  // 매칭 id 없으면 마지막 data: 반환
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (line && line.startsWith("data: ")) {
+      const data = line.slice(6).trim();
+      try {
+        return JSON.parse(data);
+      } catch {
+        continue;
+      }
+    }
+  }
+  die("No JSON-RPC response found in SSE stream");
+}
+
+// --- HTTP 클라이언트 ---
+
+type McpSession = {
+  url: string;
+  headers: Record<string, string>;
+  sessionId: string | null;
+  nextId: number;
+  client: AuthenticatedClient;
+};
+
+async function mcpPost(session: McpSession, body: JsonRpcRequest): Promise<unknown> {
+  const reqHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+    ...session.headers,
+    // 최신 auth 헤더를 client에서 가져와 주입
+    ...(await session.client.getAuthHeaders()),
+  };
+  if (session.sessionId) {
+    reqHeaders["Mcp-Session-Id"] = session.sessionId;
+  }
+
+  const resp = await session.client.fetch(session.url, {
+    method: "POST",
+    headers: reqHeaders,
+    body: JSON.stringify(body),
+  });
+
+  // 세션 ID 캡처
+  const sid = resp.headers.get("Mcp-Session-Id");
+  if (sid) session.sessionId = sid;
+
+  if (!resp.ok && resp.status !== 202) {
+    const text = await resp.text();
+    die(`MCP server returned HTTP ${resp.status}: ${text}`);
+  }
+
+  const text = await resp.text();
+
+  // notification은 응답 바디 없음(204/202)
+  if (!text.trim()) return null;
+
+  const contentType = resp.headers.get("Content-Type") ?? "";
+  if (contentType.includes("text/event-stream")) {
+    return parseSSE(text, body.id ?? -1);
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    die(`Failed to parse MCP response: ${text}`);
+  }
+}
+
+function nextId(session: McpSession): number {
+  return session.nextId++;
+}
+
+async function mcpCall(session: McpSession, method: string, params?: unknown): Promise<unknown> {
+  const id = nextId(session);
+  const req: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
+  const raw = (await mcpPost(session, req)) as JsonRpcResponse | null;
+  if (!raw) return null;
+  if (raw.error) die(`MCP error ${raw.error.code}: ${raw.error.message}`);
+  return raw.result;
+}
+
+async function mcpNotify(session: McpSession, method: string, params?: unknown): Promise<void> {
+  const req: JsonRpcRequest = { jsonrpc: "2.0", method, params };
+  await mcpPost(session, req);
+}
+
+// --- MCP target 실행 ---
+
+function buildMcpCurlCommand(url: string, headers: Record<string, string>, body: string): string {
+  const parts = [`curl -X POST '${url}'`];
+  for (const [k, v] of Object.entries(headers)) {
+    parts.push(`  -H '${k}: ${v}'`);
+  }
+  parts.push(`  -d '${body.replace(/'/g, "'\\''")}'`);
+  return `${parts.join(" \\\n")}\n`;
+}
+
+export async function executeMcp(target: McpHttpTarget, ctx: ExecutorContext): Promise<TargetResult> {
+  const { headers: globalHeaders, subcommand: toolName, args: rawArgs, targetName, dryRun } = ctx;
+  const oauthEnabled = target.auth === "oauth";
+
+  if (dryRun && toolName !== "tools") {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      ...(target.headers ?? {}),
+      ...(globalHeaders ?? {}),
+    };
+    const toolArgs = parseToolArgs(rawArgs, {});
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: toolName, arguments: toolArgs },
+    });
+    return { exitCode: 0, stdout: buildMcpCurlCommand(target.url, headers, body), stderr: "" };
+  }
+
+  const client = new AuthenticatedClient({
+    targetName,
+    targetType: "mcp",
+    serverUrl: target.url,
+    oauthEnabled,
+    configDir: resolveAuthDir(targetName, "mcp"),
+  });
+
+  const session: McpSession = {
+    url: target.url,
+    headers: { ...(target.headers ?? {}), ...(globalHeaders ?? {}) },
+    sessionId: null,
+    nextId: 1,
+    client,
+  };
+
+  // 1. Initialize
+  await mcpCall(session, "initialize", {
+    protocolVersion: "2025-03-26",
+    capabilities: {},
+    clientInfo: { name: "clip", version: "0.1.0" },
+  });
+
+  // 2. notifications/initialized
+  await mcpNotify(session, "notifications/initialized");
+
+  // 3. tools/list — help 출력 또는 schema 획득
+  const toolsResult = (await mcpCall(session, "tools/list")) as { tools: McpTool[] };
+  const tools: McpTool[] = toolsResult?.tools ?? [];
+
+  await writeToolsCache(targetName, tools).catch(() => {});
+
+  if (toolName === "refresh") {
+    return { exitCode: 0, stdout: `Refreshed "${targetName}" schema (${tools.length} tools)\n`, stderr: "" };
+  }
+
+  if (toolName === "tools") {
+    if (tools.length === 0) {
+      return { exitCode: 0, stdout: `No tools available.${buildAliasSection(target)}\n`, stderr: "" };
+    }
+    const lines = tools.map((t) => {
+      const desc = t.description.length > 60 ? `${t.description.slice(0, 57)}...` : t.description;
+      return `  ${t.name.padEnd(24)} ${desc}`;
+    });
+    return { exitCode: 0, stdout: `Tools:\n${lines.join("\n")}\n${buildAliasSection(target)}`, stderr: "" };
+  }
+
+  const tool = tools.find((t) => t.name === toolName);
+  if (!tool) {
+    return {
+      exitCode: 1,
+      stdout: "",
+      stderr: `Tool "${toolName}" not found. Run: clip <target> tools\n`,
+    };
+  }
+
+  // --help: tool 파라미터 출력
+  if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
+    return formatToolHelp(tool);
+  }
+
+  // 4. tools/call
+  const toolArgs = parseToolArgs(rawArgs, tool.inputSchema);
+  const callResult = (await mcpCall(session, "tools/call", {
+    name: toolName,
+    arguments: toolArgs,
+  })) as McpCallResult;
+
+  const parts: string[] = [];
+  for (const c of callResult?.content ?? []) {
+    if (c.type === "text" && c.text) {
+      parts.push(c.text);
+    } else if (c.type === "image" && c.data) {
+      const ext = (c.mimeType ?? "image/png").split("/")[1] ?? "png";
+      const path = `/tmp/clip-image-${Date.now()}.${ext}`;
+      await Bun.write(path, Buffer.from(c.data, "base64"));
+      parts.push(path);
+    }
+  }
+
+  const stdout = parts.join("\n");
+  const exitCode = callResult?.isError ? 1 : 0;
+  const stderr = callResult?.isError ? stdout : "";
+
+  return { exitCode, stdout: callResult?.isError ? "" : stdout, stderr };
+}
