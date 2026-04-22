@@ -19,9 +19,9 @@ type ParsedData = {
 // Registry 초기화 전에 parse가 호출될 수 있어 모듈 수준 Set을 공유 상태로 사용.
 // 기본값: builtin internal commands (테스트 및 registry 초기화 이전 호환용)
 const DEFAULT_INTERNAL_VERBS = new Set([
-  "add", "list", "remove", "skills", "bind", "unbind", "binds",
+  "add", "list", "remove", "bind", "unbind", "binds",
   "completion", "profile", "alias", "refresh", "login", "logout",
-  "config", "workspace",
+  "config", "workspace", "ext",
 ]);
 
 let _internalVerbSet: Set<string> = DEFAULT_INTERNAL_VERBS;

@@ -591,7 +591,7 @@ describe("Registry / 중복 등록 거부", () => {
     await expect(reg.initAll()).rejects.toThrow("already registered");
   });
 
-  test("CLIP_EXT_ALLOW_OVERRIDE=1 시 중복 type 허용 (경고만)", async () => {
+  test("allowTypeOverride() 호출 시 builtin type을 user extension이 override 가능 (경고만)", async () => {
     const reg = new Registry();
     const def1 = {
       type: "override-type",
@@ -604,30 +604,95 @@ describe("Registry / 중복 등록 거부", () => {
       executor: async () => ({ exitCode: 0, stdout: "v2", stderr: "" }),
     };
 
+    // builtin:* extension이 먼저 type을 소유
     reg.register({
-      name: "ext1",
+      name: "builtin:ext1",
       init(api) {
         api.registerTargetType(def1);
       },
     });
+    // user extension이 override 시도 — manifest에서 허가한 경우
+    reg.allowTypeOverride("override-type");
     reg.register({
-      name: "ext2",
+      name: "user:ext2",
       init(api) {
         api.registerTargetType(def2);
       },
     });
 
-    const prev = process.env["CLIP_EXT_ALLOW_OVERRIDE"];
-    process.env["CLIP_EXT_ALLOW_OVERRIDE"] = "1";
-    try {
-      await expect(reg.initAll()).resolves.toBeUndefined();
-      // 마지막 등록이 승리
-      const t = reg.getTargetType("override-type");
-      expect(t).toBeDefined();
-    } finally {
-      if (prev === undefined) delete process.env["CLIP_EXT_ALLOW_OVERRIDE"];
-      else process.env["CLIP_EXT_ALLOW_OVERRIDE"] = prev;
-    }
+    await expect(reg.initAll()).resolves.toBeUndefined();
+    // 마지막 등록(user)이 승리
+    const t = reg.getTargetType("override-type");
+    expect(t).toBeDefined();
+  });
+
+  test("allowTypeOverride() 없이 builtin type을 user extension이 override 시도 → throw", async () => {
+    const reg = new Registry();
+    const def1 = {
+      type: "protected-type",
+      schema: {} as never,
+      executor: async () => ({ exitCode: 0, stdout: "v1", stderr: "" }),
+    };
+    const def2 = {
+      type: "protected-type",
+      schema: {} as never,
+      executor: async () => ({ exitCode: 0, stdout: "v2", stderr: "" }),
+    };
+
+    reg.register({
+      name: "builtin:ext1",
+      init(api) {
+        api.registerTargetType(def1);
+      },
+    });
+    reg.register({
+      name: "user:ext2",
+      init(api) {
+        api.registerTargetType(def2);
+      },
+    });
+
+    await expect(reg.initAll()).rejects.toThrow("owned by a builtin extension");
+  });
+
+  test("allowVerbOverride() 없이 builtin verb를 user extension이 탈취 시도 → throw", async () => {
+    const reg = new Registry();
+
+    reg.register({
+      name: "builtin:cmds",
+      init(api) {
+        api.registerInternalCommand("myverb", async () => {});
+      },
+    });
+    reg.register({
+      name: "user:ext",
+      init(api) {
+        api.registerInternalCommand("myverb", async () => {});
+      },
+    });
+
+    await expect(reg.initAll()).rejects.toThrow("owned by a builtin extension");
+  });
+
+  test("allowVerbOverride() 호출 시 builtin verb를 user extension이 override 가능", async () => {
+    const reg = new Registry();
+
+    reg.register({
+      name: "builtin:cmds",
+      init(api) {
+        api.registerInternalCommand("myverb", async () => {});
+      },
+    });
+    reg.allowVerbOverride("myverb");
+    reg.register({
+      name: "user:ext",
+      init(api) {
+        api.registerInternalCommand("myverb", async () => {});
+      },
+    });
+
+    await expect(reg.initAll()).resolves.toBeUndefined();
+    expect(reg.getInternalCommand("myverb")).toBeDefined();
   });
 });
 

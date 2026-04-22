@@ -224,9 +224,9 @@ describe("internal verbs", () => {
     expect(p.userArgs).toEqual(["bash"]);
   });
 
-  test("skills subcommand", () => {
-    const p = parse(["skills", "list"]);
-    expect(p.internalVerb).toBe("skills");
+  test("ext subcommand", () => {
+    const p = parse(["ext", "list"]);
+    expect(p.internalVerb).toBe("ext");
     expect(p.userArgs).toEqual(["list"]);
   });
 

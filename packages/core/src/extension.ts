@@ -214,6 +214,7 @@ export class Registry {
   private readonly _extensions: ClipExtension[] = [];
   private readonly _initialized = new Set<string>();
   private readonly _types = new Map<string, TargetTypeDef>();
+  private _api: ExtensionApi | undefined = undefined;
   private readonly _contributions = new Map<string, TargetTypeContribution>();
   private readonly _internalCommands = new Map<string, InternalCommandHandler>();
   private readonly _hooks: Map<HookPhase, RegisteredHook[]> = new Map([
@@ -225,6 +226,29 @@ export class Registry {
   private _disposed = false;
   private readonly _ac = new AbortController();
 
+  /**
+   * builtin이 소유한 internal verb 세트.
+   * builtin:* extension이 registerInternalCommand()를 호출하면 자동으로 추가된다.
+   */
+  private readonly _builtinVerbOwners = new Set<string>();
+
+  /**
+   * builtin이 소유한 target type 세트.
+   * builtin:* extension이 registerTargetType()을 호출하면 자동으로 추가된다.
+   */
+  private readonly _builtinTypeOwners = new Set<string>();
+
+  /**
+   * manifest에서 enabled:false로 명시해 override를 허용한 verb 세트.
+   * extension-loader가 Phase 1 인덱싱 결과를 바탕으로 주입한다.
+   */
+  private readonly _allowedVerbOverrides = new Set<string>();
+
+  /**
+   * manifest에서 enabled:false로 명시해 override를 허용한 target type 세트.
+   */
+  private readonly _allowedTypeOverrides = new Set<string>();
+
   register(ext: ClipExtension): void {
     if (this._extensions.some((e) => e.name === ext.name)) {
       throw new Error(`Extension "${ext.name}" is already registered.`);
@@ -232,24 +256,74 @@ export class Registry {
     this._extensions.push(ext);
   }
 
+  hasExtension(name: string): boolean {
+    return this._extensions.some((e) => e.name === name);
+  }
+
+  /**
+   * builtin internal verb에 대한 사용자 override를 허용한다.
+   * extension-loader가 manifest의 builtin entry enabled:false를 감지했을 때 호출.
+   */
+  allowVerbOverride(verb: string): void {
+    this._allowedVerbOverrides.add(verb);
+  }
+
+  /**
+   * builtin target type에 대한 사용자 override를 허용한다.
+   */
+  allowTypeOverride(type: string): void {
+    this._allowedTypeOverrides.add(type);
+  }
+
+  /** 현재 초기화 중인 extension 이름 추적 (builtin 판단용) */
+  private _currentExtName = "";
+
   async initAll(outputSink?: {
     registerResultPresenter(p: ResultPresenter): void;
     registerOutputRenderer(r: OutputRenderer): void;
   }): Promise<void> {
+
     const api: ExtensionApi = {
       registerTargetType: <T>(def: TargetTypeDef<T>): void => {
-        if (this._types.has(def.type)) {
-          if (process.env["CLIP_EXT_ALLOW_OVERRIDE"] !== "1") {
+        const isBuiltin = this._currentExtName.startsWith("builtin:");
+        if (this._builtinTypeOwners.has(def.type)) {
+          // builtin이 이미 소유: 사용자 extension은 manifest override 허가 없이 덮어쓰기 불가
+          if (!isBuiltin && !this._allowedTypeOverrides.has(def.type)) {
+            throw new Error(
+              `Target type "${def.type}" is owned by a builtin extension and cannot be overridden. ` +
+              `To override, disable the builtin entry in your extensions manifest.`,
+            );
+          }
+          if (!isBuiltin) {
+            process.stderr.write(`clip: warning: target type "${def.type}" overridden by user extension\n`);
+          }
+        } else if (this._types.has(def.type)) {
+          // 다른 user extension이 이미 등록한 경우 — 중복 금지
+          if (!isBuiltin) {
             throw new Error(`Target type "${def.type}" is already registered.`);
           }
-          process.stderr.write(`clip: warning: target type "${def.type}" overridden\n`);
         }
+        if (isBuiltin) this._builtinTypeOwners.add(def.type);
         this._types.set(def.type, def as TargetTypeDef);
       },
       registerContribution: (contribution: TargetTypeContribution): void => {
         this._contributions.set(contribution.type, contribution);
       },
       registerInternalCommand: (verb: string, handler: InternalCommandHandler): void => {
+        const isBuiltin = this._currentExtName.startsWith("builtin:");
+        if (this._builtinVerbOwners.has(verb)) {
+          // builtin이 이미 소유: 사용자 extension은 manifest override 허가 없이 탈취 불가
+          if (!isBuiltin && !this._allowedVerbOverrides.has(verb)) {
+            throw new Error(
+              `Internal command "${verb}" is owned by a builtin extension and cannot be overridden. ` +
+              `To override, disable the builtin entry in your extensions manifest.`,
+            );
+          }
+          if (!isBuiltin) {
+            process.stderr.write(`clip: warning: internal command "${verb}" overridden by user extension\n`);
+          }
+        }
+        if (isBuiltin) this._builtinVerbOwners.add(verb);
         this._internalCommands.set(verb, handler);
       },
       registerHook: (phase, fn, opts = {}): void => {
@@ -268,11 +342,34 @@ export class Registry {
       env: Object.freeze({ ...process.env } as Record<string, string>),
       signal: this._ac.signal,
     };
+    this._api = api;
     for (const ext of this._extensions) {
       if (this._initialized.has(ext.name)) continue;
+      this._currentExtName = ext.name;
       this._initialized.add(ext.name);
       await ext.init(api);
     }
+    this._currentExtName = "";
+  }
+
+  /**
+   * initAll() 이후 동적으로 추가된 extension 단건을 초기화한다.
+   * extension-loader가 bindTarget() 이후에 type-matched entry를 lazy init할 때 사용.
+   * initAll() 전에는 호출하지 않는다 (_api가 없음).
+   */
+  async initOne(extName: string): Promise<void> {
+    if (!this._api) {
+      throw new Error(`Registry.initOne("${extName}") called before initAll()`);
+    }
+    const ext = this._extensions.find((e) => e.name === extName);
+    if (!ext) {
+      throw new Error(`Extension "${extName}" is not registered`);
+    }
+    if (this._initialized.has(ext.name)) return;
+    this._currentExtName = ext.name;
+    this._initialized.add(ext.name);
+    await ext.init(this._api);
+    this._currentExtName = "";
   }
 
   async disposeAll(): Promise<void> {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ClipError } from "@clip/core";
-import { runSkillsCmd } from "./skills.ts";
+import { runSkillsCmd } from "../../../../extensions/skills/src/skills.ts";
 
 // --- validation (loadConfig 호출 이전에 throw) ---
 
@@ -51,11 +51,14 @@ describe("runSkillsCmd / AGENT_PRESETS (소스 검증)", () => {
     }
 
     // 소스 코드에 AGENT_PRESETS 상수로 등록되어 있는지 직접 확인
+    // extensions/skills/src/skills.ts가 단일 진실 소스
     const fs = await import("fs");
     const path = await import("path");
     const { fileURLToPath } = await import("url");
-    const dir = path.dirname(fileURLToPath(import.meta.url));
-    const content = fs.readFileSync(path.join(dir, "skills.ts"), "utf8");
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+    // apps/clip/src/commands/ → project root → extensions/skills/src/skills.ts
+    const skillsSrc = path.resolve(thisDir, "../../../../extensions/skills/src/skills.ts");
+    const content = fs.readFileSync(skillsSrc, "utf8");
 
     expect(content).toContain('"claude-code"');
     expect(content).toContain('codex');
@@ -68,13 +71,13 @@ describe("runSkillsCmd / AGENT_PRESETS (소스 검증)", () => {
 
 describe("runSkillsCmd / install --to 누락 시 Available 안내", () => {
   test("install --to 없으면 Available 목록이 오류 메시지에 포함", async () => {
-    // 먼저 실제로 존재하지 않는 스킬로 테스트 — 'not found' 오류가 먼저 나올 수 있음
-    // --to 없이 install을 요청하는 케이스를 소스 레벨로 검증
+    // extensions/skills/src/skills.ts가 단일 진실 소스
     const fs = await import("fs");
     const path = await import("path");
     const { fileURLToPath } = await import("url");
-    const dir = path.dirname(fileURLToPath(import.meta.url));
-    const content = fs.readFileSync(path.join(dir, "skills.ts"), "utf8");
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+    const skillsSrc = path.resolve(thisDir, "../../../../extensions/skills/src/skills.ts");
+    const content = fs.readFileSync(skillsSrc, "utf8");
 
     // cmdInstall이 --to 없을 때 die()로 Available 목록을 보여주는 패턴 확인
     expect(content).toMatch(/at least one --to/);
