@@ -15,6 +15,14 @@ export const extension: ClipExtension = {
     });
     api.registerContribution({
       type: "cli",
+      dispatchPriority: 60,
+      argSpec: {
+        booleanFlags: [],
+        valueFlags: ["command", "args"],
+        identifyFlags: ["command"],
+        passthrough: true,
+      },
+      displayHint: { headerColor: "32" },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as CliTarget;
         const { color, bind } = opts;

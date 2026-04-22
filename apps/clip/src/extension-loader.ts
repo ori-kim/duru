@@ -18,7 +18,7 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, isAbsolute, join, resolve } from "path";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
-import type { ClipExtension, ExtensionApi, Registry } from "@clip/core";
+import type { ClipExtension, ExtensionApi, Registry, TargetTypeManifestSpec } from "@clip/core";
 
 // ---------------------------------------------------------------------------
 // manifest 스키마 타입
@@ -26,7 +26,7 @@ import type { ClipExtension, ExtensionApi, Registry } from "@clip/core";
 
 export type ContributesSpec = {
   internalCommands?: string[];
-  targetTypes?: string[];
+  targetTypes?: (string | TargetTypeManifestSpec)[];
   hooks?: string[];
   outputFormats?: string[];
   initOrder?: number;
@@ -90,6 +90,10 @@ function loadManifest(manifestPath: string): ExtensionManifest | null {
     warn(`failed to read manifest ${manifestPath}: ${e instanceof Error ? e.message : String(e)}`);
     return null;
   }
+}
+
+function normalizeTypeSpecs(types: (string | TargetTypeManifestSpec)[]): TargetTypeManifestSpec[] {
+  return types.map((t) => (typeof t === "string" ? { name: t } : t));
 }
 
 // entry 경로를 절대 경로로 해석
@@ -270,7 +274,7 @@ export async function loadUserExtensions(
     const hasOnlyTargetTypes =
       !hasHooks &&
       (entry.contributes?.internalCommands ?? []).length === 0 &&
-      (entry.contributes?.targetTypes ?? []).length > 0;
+      normalizeTypeSpecs(entry.contributes?.targetTypes ?? []).length > 0;
 
     if (hasOnlyTargetTypes) {
       // targetTypes 전용 extension — initMatchingType()에서 lazy init
@@ -303,8 +307,9 @@ export async function loadUserExtensions(
       // bindTarget() 이후 호출. actualType과 매칭되는 targetTypes entry만 init.
       for (const loaded of phase1Entries) {
         const { entry, entryAbsPath } = loaded;
-        const types = entry.contributes?.targetTypes ?? [];
-        if (!types.includes(actualType)) continue;
+        const typeSpecs = normalizeTypeSpecs(entry.contributes?.targetTypes ?? []);
+        const matchedSpec = typeSpecs.find((s) => s.name === actualType);
+        if (!matchedSpec) continue;
         if (loaded.initialized) {
           trace(`[type-lazy-skip] "${entry.name}" already initialized`);
           continue;
@@ -312,11 +317,15 @@ export async function loadUserExtensions(
         trace(`[type-lazy-init] "${entry.name}" matched type "${actualType}"`);
         const ext = await importEntry(entryAbsPath, entry);
         if (!ext) continue;
-        // initAll() 이후이므로 registry.initOne()으로 api 재사용
         if (!reg.hasExtension(`user:${entry.name}`)) {
           reg.register({ name: `user:${entry.name}`, init: ext.init.bind(ext), dispose: ext.dispose?.bind(ext) });
         }
         await reg.initOne(`user:${entry.name}`);
+        // manifest argSpec/displayHint override가 있으면 Registry에 적용
+        const { name: _, ...override } = matchedSpec;
+        if (Object.keys(override).length > 0) {
+          reg.applyManifestOverride(actualType, override);
+        }
         loaded.initialized = true;
       }
     },

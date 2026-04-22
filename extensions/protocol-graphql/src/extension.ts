@@ -31,6 +31,13 @@ export const extension: ClipExtension = {
     });
     api.registerContribution({
       type: "graphql",
+      dispatchPriority: 10,
+      argSpec: {
+        booleanFlags: ["graphql"],
+        valueFlags: ["endpoint"],
+        identifyFlags: ["graphql"],
+      },
+      displayHint: { headerColor: "38;5;205" },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as GraphqlTarget;
         const { color, bind } = opts;

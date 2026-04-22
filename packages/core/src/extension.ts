@@ -84,6 +84,25 @@ export type TargetTypeDef<T = unknown> = {
 
 // --- TargetTypeContribution ---
 
+export type ArgSpec = {
+  booleanFlags?: string[];
+  valueFlags?: string[];
+  identifyFlags?: string[];
+  passthrough?: boolean;
+};
+
+export type DisplayHint = {
+  headerColor?: string;
+  nameColor?: string;
+};
+
+export type TargetTypeManifestSpec = {
+  name: string;
+  argSpec?: ArgSpec;
+  displayHint?: DisplayHint;
+  dispatchPriority?: number;
+};
+
 export type ListOpts = {
   bound: Set<string>;
   tty: boolean;
@@ -105,6 +124,9 @@ export type AddArgs = {
  */
 export type TargetTypeContribution = {
   type: string;
+  dispatchPriority?: number;
+  argSpec?: ArgSpec;
+  displayHint?: DisplayHint;
   /** clip list — 해당 타입의 target 한 줄 렌더링 */
   listRenderer?: (name: string, target: unknown, opts: ListOpts) => Promise<string>;
   /** clip add — URL이 이 타입에 해당하는지 판단 */
@@ -213,6 +235,7 @@ export class Registry {
   private readonly _types = new Map<string, TargetTypeDef>();
   private _api: ExtensionApi | undefined = undefined;
   private readonly _contributions = new Map<string, TargetTypeContribution>();
+  private readonly _contributionOverrides = new Map<string, Partial<TargetTypeContribution>>();
   private readonly _internalCommands = new Map<string, InternalCommandHandler>();
   private readonly _hooks: Map<HookPhase, RegisteredHook[]> = new Map([
     ["toolcall", []],
@@ -304,6 +327,12 @@ export class Registry {
         this._types.set(def.type, def as TargetTypeDef);
       },
       registerContribution: (contribution: TargetTypeContribution): void => {
+        const boolSet = new Set(contribution.argSpec?.booleanFlags ?? []);
+        for (const f of contribution.argSpec?.valueFlags ?? []) {
+          if (boolSet.has(f)) {
+            throw new Error(`Extension "${this._currentExtName}": flag "--${f}" cannot be both boolean and value`);
+          }
+        }
         this._contributions.set(contribution.type, contribution);
       },
       registerInternalCommand: (verb: string, handler: InternalCommandHandler): void => {
@@ -386,12 +415,57 @@ export class Registry {
     return [...this._types.keys()];
   }
 
+  applyManifestOverride(type: string, patch: Partial<TargetTypeContribution>): void {
+    this._contributionOverrides.set(type, patch);
+  }
+
   getContribution(type: string): TargetTypeContribution | undefined {
-    return this._contributions.get(type);
+    const base = this._contributions.get(type);
+    if (!base) return undefined;
+    const ovr = this._contributionOverrides.get(type);
+    if (!ovr) return base;
+    return {
+      ...base,
+      ...ovr,
+      argSpec: { ...base.argSpec, ...ovr.argSpec },
+      displayHint: { ...base.displayHint, ...ovr.displayHint },
+    };
   }
 
   listContributions(): TargetTypeContribution[] {
-    return [...this._contributions.values()];
+    return [...this._contributions.keys()].map((t) => this.getContribution(t)!);
+  }
+
+  listContributionsByPriority(): TargetTypeContribution[] {
+    return this.listContributions().sort((a, b) => {
+      const pa = a.dispatchPriority ?? 100;
+      const pb = b.dispatchPriority ?? 100;
+      return pa !== pb ? pa - pb : a.type.localeCompare(b.type);
+    });
+  }
+
+  listBooleanFlags(): Set<string> {
+    const out = new Set<string>();
+    for (const c of this.listContributions()) {
+      for (const f of c.argSpec?.booleanFlags ?? []) out.add(f);
+    }
+    return out;
+  }
+
+  listValueFlags(): Set<string> {
+    const out = new Set<string>();
+    for (const c of this.listContributions()) {
+      for (const f of c.argSpec?.valueFlags ?? []) out.add(f);
+    }
+    return out;
+  }
+
+  getArgSpec(type: string): ArgSpec | undefined {
+    return this.getContribution(type)?.argSpec;
+  }
+
+  getDisplayHint(type: string): DisplayHint | undefined {
+    return this.getContribution(type)?.displayHint;
   }
 
   getInternalCommand(verb: string): InternalCommandHandler | undefined {

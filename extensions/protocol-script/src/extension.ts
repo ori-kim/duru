@@ -38,6 +38,14 @@ export const extension: ClipExtension = {
     });
     api.registerContribution({
       type: "script",
+      dispatchPriority: 40,
+      argSpec: {
+        booleanFlags: ["script"],
+        valueFlags: ["description"],
+        identifyFlags: ["script"],
+        passthrough: true,
+      },
+      displayHint: { headerColor: "38;5;245" },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as ScriptTarget;
         const { color, bind } = opts;

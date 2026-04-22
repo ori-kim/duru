@@ -1,42 +1,43 @@
 import type { Registry } from "@clip/core";
 import { die } from "@clip/core";
 
-function buildZshCompletionCore(): string {
+function buildZshCompletionCore(cmd = "clip"): string {
+  const fn = "_" + cmd.replace(/-/g, "_");
   return `\
 zmodload zsh/complist 2>/dev/null
 
 zstyle ':completion:*' use-cache yes
-zstyle ':completion::complete:clip:' cache-policy _clip_cache_policy
+zstyle ':completion::complete:${cmd}:' cache-policy ${fn}_cache_policy
 
 # Separate tags into individual groups, show descriptions (list format)
-zstyle ':completion:*:*:clip:*' group-name ''
-zstyle ':completion:*:*:clip:*' verbose yes
+zstyle ':completion:*:*:${cmd}:*' group-name ''
+zstyle ':completion:*:*:${cmd}:*' verbose yes
 
 # Group header format (colored)
-zstyle ':completion:*:*:clip:*:cli-targets'     format '%F{green}── %d ──%f'
-zstyle ':completion:*:*:clip:*:mcp-targets'     format '%F{yellow}── %d ──%f'
-zstyle ':completion:*:*:clip:*:api-targets'     format '%F{cyan}── %d ──%f'
-zstyle ':completion:*:*:clip:*:grpc-targets'    format '%B%F{blue}── %d ──%f%b'
-zstyle ':completion:*:*:clip:*:graphql-targets' format '%F{205}── %d ──%f'
-zstyle ':completion:*:*:clip:*:script-targets'  format '%F{245}── %d ──%f'
-zstyle ':completion:*:*:clip:*:builtins'        format '── %d ──'
-zstyle ':completion:*:*:clip:*:tools'           format '%F{246}── %d ──%f'
+zstyle ':completion:*:*:${cmd}:*:cli-targets'     format '%F{green}── %d ──%f'
+zstyle ':completion:*:*:${cmd}:*:mcp-targets'     format '%F{yellow}── %d ──%f'
+zstyle ':completion:*:*:${cmd}:*:api-targets'     format '%F{cyan}── %d ──%f'
+zstyle ':completion:*:*:${cmd}:*:grpc-targets'    format '%B%F{blue}── %d ──%f%b'
+zstyle ':completion:*:*:${cmd}:*:graphql-targets' format '%F{205}── %d ──%f'
+zstyle ':completion:*:*:${cmd}:*:script-targets'  format '%F{245}── %d ──%f'
+zstyle ':completion:*:*:${cmd}:*:builtins'        format '── %d ──'
+zstyle ':completion:*:*:${cmd}:*:tools'           format '%F{246}── %d ──%f'
 
 # Item colors per group
-zstyle ':completion:*:*:clip:*:cli-targets'     list-colors '=*=32'
-zstyle ':completion:*:*:clip:*:mcp-targets'     list-colors '=*=33'
-zstyle ':completion:*:*:clip:*:api-targets'     list-colors '=*=36'
-zstyle ':completion:*:*:clip:*:grpc-targets'    list-colors '=*=34;1'
-zstyle ':completion:*:*:clip:*:graphql-targets' list-colors '=*=38;5;205'
-zstyle ':completion:*:*:clip:*:script-targets'  list-colors '=*=38;5;245'
+zstyle ':completion:*:*:${cmd}:*:cli-targets'     list-colors '=*=32'
+zstyle ':completion:*:*:${cmd}:*:mcp-targets'     list-colors '=*=33'
+zstyle ':completion:*:*:${cmd}:*:api-targets'     list-colors '=*=36'
+zstyle ':completion:*:*:${cmd}:*:grpc-targets'    list-colors '=*=34;1'
+zstyle ':completion:*:*:${cmd}:*:graphql-targets' list-colors '=*=38;5;205'
+zstyle ':completion:*:*:${cmd}:*:script-targets'  list-colors '=*=38;5;245'
 
-_clip_cache_policy() {
+${fn}_cache_policy() {
   local -a outdated
   outdated=( "$1"(Nmh+1) )
   (( $#outdated ))
 }
 
-_clip() {
+${fn}() {
   local gtdir="\${CLIP_HOME:-$HOME/.clip}/target"
 
   if (( CURRENT == 2 )); then
@@ -112,11 +113,11 @@ _clip() {
   # api / mcp: complete tool names at position 3 (cached, with spinner)
   if (( CURRENT == 3 )); then
     local -a tools
-    local cache_id="clip-tools-v2-$target"
+    local cache_id="${cmd}-tools-v2-$target"
     if _cache_invalid "$cache_id" || ! _retrieve_cache "$cache_id"; then
       local tmpf
-      tmpf=$(mktemp /tmp/clip-tools-XXXXXX)
-      clip "$target" tools >"$tmpf" 2>/dev/null &
+      tmpf=$(mktemp /tmp/${cmd}-tools-XXXXXX)
+      ( ${cmd} "$target" tools >"$tmpf" 2>/dev/null ) &
       local fetch_pid=$!
       if [[ -n "\$ZLE_STATE" ]]; then
         local -a _sp=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
@@ -128,9 +129,10 @@ _clip() {
         done
       fi
       wait $fetch_pid
+      local _fetch_ok=$?
       tools=("\${(@f)$(awk '/^  /{name=$1; sub(/^  [^ ]+[ ]+/, ""); print name":"$0}' "$tmpf")}")
       rm -f "$tmpf"
-      _store_cache "$cache_id" tools
+      (( _fetch_ok == 0 )) && [[ -n "\${tools[1]:-}" ]] && _store_cache "$cache_id" tools
     fi
     _describe -t tools "tools ($target)" tools
     return
@@ -140,8 +142,8 @@ _clip() {
 }
 
 // For eval "$(clip completion zsh)" in .zshrc
-export function buildZshCompletion(registry?: Registry): string {
-  // extension contribution의 completionContributor 조각들 aggregation
+export function buildZshCompletion(registry?: Registry, cmd = "clip"): string {
+  const fn = "_" + cmd.replace(/-/g, "_");
   let extraContribs = "";
   if (registry) {
     const builtinTypes = new Set(["cli", "mcp", "api", "grpc", "graphql", "script"]);
@@ -152,20 +154,24 @@ export function buildZshCompletion(registry?: Registry): string {
     }
   }
 
-  return `# clip zsh completion
-# Add to ~/.zshrc:  eval "$(clip completion zsh)"
+  return `# ${cmd} zsh completion
+# Add to ~/.zshrc:  eval "$(${cmd} completion zsh)"
 # Inline hints:     ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 
-${buildZshCompletionCore()}${extraContribs}
-compdef _clip clip
+${buildZshCompletionCore(cmd)}${extraContribs}
+compdef ${fn} ${cmd}
 `;
 }
 
 export async function runCompletionCmd(args: string[], registry?: Registry): Promise<void> {
-  const [shell] = args;
+  let shell: string | undefined;
+  let cmd = "clip";
+  const nameIdx = args.indexOf("--name");
+  if (nameIdx !== -1) cmd = args[nameIdx + 1] ?? "clip";
+  shell = args.find((a) => !a.startsWith("-") && a !== args[nameIdx + 1]);
 
   if (!shell || shell === "zsh") {
-    process.stdout.write(buildZshCompletion(registry));
+    process.stdout.write(buildZshCompletion(registry, cmd));
     return;
   }
 

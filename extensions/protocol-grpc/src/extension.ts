@@ -32,6 +32,13 @@ export const extension: ClipExtension = {
     });
     api.registerContribution({
       type: "grpc",
+      dispatchPriority: 20,
+      argSpec: {
+        booleanFlags: ["grpc", "plaintext"],
+        valueFlags: ["address", "proto"],
+        identifyFlags: ["grpc"],
+      },
+      displayHint: { headerColor: "1;34" },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as GrpcTarget;
         const { color, bind } = opts;

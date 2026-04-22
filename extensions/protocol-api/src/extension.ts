@@ -30,6 +30,13 @@ export const extension: ClipExtension = {
     });
     api.registerContribution({
       type: "api",
+      dispatchPriority: 30,
+      argSpec: {
+        booleanFlags: ["api"],
+        valueFlags: ["base-url", "baseUrl", "openapi-url", "openapiUrl"],
+        identifyFlags: ["api"],
+      },
+      displayHint: { headerColor: "36" },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as ApiTarget;
         const { color, bind } = opts;

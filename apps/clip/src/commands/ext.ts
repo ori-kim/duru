@@ -6,7 +6,7 @@
  *   clip ext disable <name>  — manifest entry enabled: false
  *   clip ext reload <name>   — import 캐시 무효화 (개발 편의)
  */
-import { die } from "@clip/core";
+import { die, type Registry } from "@clip/core";
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -15,7 +15,7 @@ import {
   setExtensionEnabled,
   type ExtensionEntry,
 } from "../extension-loader.ts";
-import { BUILTIN_EXTENSION_ENTRIES as BUILTIN_EXTENSIONS } from "../builtin-loader.ts";
+import { deriveBuiltinEntries } from "../builtin-loader.ts";
 
 // ---------------------------------------------------------------------------
 // manifest 직접 읽기 (loader context 없는 경우를 위한 fallback)
@@ -45,7 +45,7 @@ function readUserEntries(): ExtensionEntry[] {
 // 서브커맨드 핸들러
 // ---------------------------------------------------------------------------
 
-function cmdList(): void {
+function cmdList(registry: Registry): void {
   const tty = process.stdout.isTTY;
   const bold = (s: string) => (tty ? `\x1b[1m${s}\x1b[0m` : s);
   const dim = (s: string) => (tty ? `\x1b[2m${s}\x1b[0m` : s);
@@ -56,7 +56,7 @@ function cmdList(): void {
   const userEntries = readUserEntries();
 
   const allEntries: Array<{ entry: ExtensionEntry; kind: "builtin" | "user" }> = [
-    ...BUILTIN_EXTENSIONS.map((e) => ({ entry: e, kind: "builtin" as const })),
+    ...deriveBuiltinEntries(registry).map((e) => ({ entry: e, kind: "builtin" as const })),
     ...userEntries.map((e) => ({ entry: e, kind: "user" as const })),
   ];
 
@@ -80,7 +80,9 @@ function cmdList(): void {
       contributes.push(`cmds=[${e.contributes.internalCommands.join(",")}]`);
     }
     if (e.contributes?.targetTypes?.length) {
-      contributes.push(`types=[${e.contributes.targetTypes.join(",")}]`);
+      const typeNames = (e.contributes.targetTypes as Array<string | { name: string }>)
+        .map((t) => (typeof t === "string" ? t : t.name));
+      contributes.push(`types=[${typeNames.join(",")}]`);
     }
     if (e.contributes?.hooks?.length) {
       contributes.push(`hooks=[${e.contributes.hooks.join(",")}]`);
@@ -128,13 +130,13 @@ function cmdReload(args: string[]): void {
 // 공개 진입점
 // ---------------------------------------------------------------------------
 
-export async function runExtCmd(args: string[]): Promise<void> {
+export async function runExtCmd(args: string[], registry: Registry): Promise<void> {
   const sub = args[0];
   const rest = args.slice(1);
 
   switch (sub) {
     case "list":
-      cmdList();
+      cmdList(registry);
       break;
     case "enable":
       cmdEnable(rest);

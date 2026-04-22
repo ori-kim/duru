@@ -1,2 +1,2 @@
-#!/usr/bin/env bun
-import "./src/clip.ts";
+#!/bin/sh
+exec $HOME/Documents/personal/clip/dist/clip-darwin-arm64 "$@"

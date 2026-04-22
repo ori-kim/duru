@@ -16,60 +16,36 @@ export const BUILTIN_EXTENSIONS: ClipExtension[] = [
   scriptExtension,
 ];
 
-/**
- * clip ext list 표시용 내장 extension 메타데이터.
- * BUILTIN_EXTENSIONS와 순서·목록을 동기화한다.
- */
-export const BUILTIN_EXTENSION_ENTRIES: ExtensionEntry[] = [
-  {
-    name: "protocol-cli",
-    path: "(builtin)",
-    entry: "@clip/protocol-cli",
-    enabled: true,
-    builtin: true,
-    contributes: { targetTypes: ["cli"], internalCommands: [], hooks: [], outputFormats: [] },
-  },
-  {
-    name: "protocol-mcp",
-    path: "(builtin)",
-    entry: "@clip/protocol-mcp",
-    enabled: true,
-    builtin: true,
-    contributes: { targetTypes: ["mcp"], internalCommands: [], hooks: [], outputFormats: [] },
-  },
-  {
-    name: "protocol-api",
-    path: "(builtin)",
-    entry: "@clip/protocol-api",
-    enabled: true,
-    builtin: true,
-    contributes: { targetTypes: ["api"], internalCommands: [], hooks: [], outputFormats: [] },
-  },
-  {
-    name: "protocol-grpc",
-    path: "(builtin)",
-    entry: "@clip/protocol-grpc",
-    enabled: true,
-    builtin: true,
-    contributes: { targetTypes: ["grpc"], internalCommands: [], hooks: [], outputFormats: [] },
-  },
-  {
-    name: "protocol-graphql",
-    path: "(builtin)",
-    entry: "@clip/protocol-graphql",
-    enabled: true,
-    builtin: true,
-    contributes: { targetTypes: ["graphql"], internalCommands: [], hooks: [], outputFormats: [] },
-  },
-  {
-    name: "protocol-script",
-    path: "(builtin)",
-    entry: "@clip/protocol-script",
-    enabled: true,
-    builtin: true,
-    contributes: { targetTypes: ["script"], internalCommands: [], hooks: [], outputFormats: [] },
-  },
+/** clip ext list 표시용 내장 extension 최소 메타데이터 */
+const BUILTIN_EXTENSION_META: Array<{ name: string; entry: string }> = [
+  { name: "protocol-cli",     entry: "@clip/protocol-cli" },
+  { name: "protocol-mcp",     entry: "@clip/protocol-mcp" },
+  { name: "protocol-api",     entry: "@clip/protocol-api" },
+  { name: "protocol-grpc",    entry: "@clip/protocol-grpc" },
+  { name: "protocol-graphql", entry: "@clip/protocol-graphql" },
+  { name: "protocol-script",  entry: "@clip/protocol-script" },
 ];
+
+/** Registry에서 builtin type 목록을 파생해 ExtensionEntry[] 생성 */
+export function deriveBuiltinEntries(registry: Registry): ExtensionEntry[] {
+  return BUILTIN_EXTENSION_META.map((m) => {
+    const typeName = m.name.replace(/^protocol-/, "");
+    const hasType = registry.getContribution(typeName) !== undefined;
+    return {
+      name: m.name,
+      path: "(builtin)",
+      entry: m.entry,
+      enabled: true,
+      builtin: true,
+      contributes: {
+        targetTypes: hasType ? [typeName] : [],
+        internalCommands: [],
+        hooks: [],
+        outputFormats: [],
+      },
+    };
+  });
+}
 
 export function createDefaultRegistry(): Registry {
   const reg = new Registry();

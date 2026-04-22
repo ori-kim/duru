@@ -1,113 +1,88 @@
 # Extensions
 
-clip supports a hook-based extension system that lets you add new target types, inject headers, log calls, or short-circuit execution — without modifying clip itself.
+clip supports a manifest-based extension system. You can add new target types, integrate them with `clip add`, inject headers, log calls, and more — without modifying clip itself.
 
-Extensions are `.ts` files placed in `~/.clip/extensions/`. clip loads them at startup in alphabetical order.
+The standalone `clip` binary includes a TypeScript transpiler, so `.ts` extension files work without a separate bun installation.
 
-## Quick start
+---
 
-Create `~/.clip/extensions/trace.ts`:
+## Structure
+
+```
+~/.clip/extensions/
+  extensions.yml        ← extension manifest (registry)
+  sql/
+    index.ts            ← extension implementation
+  audit/
+    index.ts
+```
+
+Only extensions declared in `extensions.yml` are loaded.
+
+---
+
+## Quick start — hook extension
+
+The simplest form: add behavior to existing target types (logging, header injection, etc.).
+
+**1. Write the extension**
 
 ```ts
-import type { ClipExtension } from "../../Documents/personal/clip/types/extension.d.ts";
-// or: copy types/extension.d.ts to ~/.clip/extensions/ and import from "./extension.d.ts"
-
-export default {
-  name: "my:trace",
+// ~/.clip/extensions/audit/index.ts
+export const extension = {
+  name: "my:audit",
   init(api) {
     api.registerHook("toolcall", (ctx) => {
       api.logger.info(`→ ${ctx.targetName} ${ctx.subcommand} ${ctx.args.join(" ")}`);
     });
   },
-} satisfies ClipExtension;
+};
 ```
 
-Then run:
+**2. Register in the manifest**
+
+```yaml
+# ~/.clip/extensions/extensions.yml
+extensions:
+  - name: my-audit
+    path: /Users/me/.clip/extensions/audit
+    entry: index.ts
+    contributes:
+      hooks: ["toolcall"]   # eager init — hooks-declaring extensions always load
+```
+
+**3. Run**
 
 ```sh
 clip gh pr list
 # stderr: [clip] → gh pr list
 ```
 
-## Lifecycle hooks
+---
 
-Each hook fires at a specific phase. Only one phase allows mutation per call.
+## Registering a new target type
 
-| Phase | When | Can return |
-|-------|------|-----------|
-| `toolcall` | After alias expansion, before ACL check | `void` (observe only) |
-| `beforeExecute` | After ACL check, before executor | Modify headers/args/subcommand, or short-circuit |
-| `afterExecute` | After executor returns | Partial-merge the result |
+Adding a new target type integrates it with `clip add`, `clip list`, and execution (`clip <name> <tool>`) automatically.
 
-### Observe (toolcall)
+### Minimal example — SQLite
 
 ```ts
-api.registerHook("toolcall", (ctx) => {
-  console.error(`[audit] ${ctx.targetName}.${ctx.subcommand}`);
-});
-```
-
-### Inject headers (beforeExecute)
-
-```ts
-api.registerHook("beforeExecute", async (ctx) => {
-  if (ctx.targetType !== "api") return;
-  const token = await fetchToken(api.env["TOKEN_URL"]!);
-  return { headers: { Authorization: `Bearer ${token}` } };
-});
-```
-
-### Short-circuit (beforeExecute)
-
-```ts
-api.registerHook("beforeExecute", (ctx) => {
-  if (ctx.dryRun) {
-    return { shortCircuit: { exitCode: 0, stdout: "[dry-run] skipped", stderr: "" } };
-  }
-});
-```
-
-### Rewrite result (afterExecute)
-
-```ts
-api.registerHook("afterExecute", (ctx) => {
-  if (!ctx.result) return;
-  return { result: { stdout: ctx.result.stdout.replace(/secret=\S+/g, "secret=***") } };
-});
-```
-
-### Filter by type / target / subcommand
-
-```ts
-api.registerHook("beforeExecute", injectAuth, {
-  match: { type: ["api", "graphql"], target: [/^prod-/] },
-});
-```
-
-## Register a new target type
-
-Extensions can add entirely new target types backed by a config schema.
-
-```ts
-// ~/.clip/extensions/sqlite.ts
+// ~/.clip/extensions/sqlite/index.ts
 import { z } from "zod";
-import type { ClipExtension } from "./extension.d.ts";
 
 const schema = z.object({
   file: z.string(),
   readOnly: z.boolean().default(false),
 });
 
-export default {
-  name: "builtin-user:sqlite",
+export const extension = {
+  name: "user:sqlite",
   init(api) {
+    // 1. Register schema + executor
     api.registerTargetType({
       type: "sqlite",
       schema,
       async executor(target, ctx) {
-        if (ctx.subcommand !== "query") {
-          return { exitCode: 1, stdout: "", stderr: `Unknown subcommand: ${ctx.subcommand}` };
-        }
         const sql = ctx.args.join(" ");
         const flags = target.readOnly ? ["--readonly"] : [];
         const proc = Bun.spawn(["sqlite3", ...flags, target.file, sql]);
@@ -116,64 +91,212 @@ export default {
         return { exitCode: await proc.exited, stdout, stderr };
       },
     });
+
+    // 2. Register CLI-layer contract
+    api.registerContribution({
+      type: "sqlite",
+      dispatchPriority: 35,         // lower = evaluated earlier during `clip add`
+
+      argSpec: {
+        booleanFlags: ["sqlite"],   // --sqlite does not consume the next token as a value
+        valueFlags: ["file"],       // --file <path> consumes the next token
+        identifyFlags: ["sqlite"],  // if --sqlite is present, this type handles the add
+      },
+
+      displayHint: { headerColor: "34" },  // ANSI color code for `clip list` header
+
+      urlHeuristic: (url) => url.endsWith(".db") || url.endsWith(".sqlite"),
+
+      addHandler: async ({ name, positionals, flags }) => {
+        const file = flags["file"] ?? positionals[0];
+        if (!file) throw new Error("Usage: clip add <name> <file.db> --sqlite");
+        await api.addTarget(name, "sqlite", { file });
+        console.log(`Added SQLite target "${name}" → ${file}`);
+      },
+
+      listRenderer: async (name, target, opts) => {
+        const nm = opts.color("34", name.padEnd(16));
+        return `  ${nm} ${target.file}`;
+      },
+    });
   },
-} satisfies ClipExtension;
+};
 ```
 
-Register a target using the new type:
+**Register in the manifest**
 
 ```yaml
-# ~/.clip/target/sqlite/mydb/config.yml
-file: ~/data/mydb.sqlite
-readOnly: true
+# ~/.clip/extensions/extensions.yml
+extensions:
+  - name: user-sqlite
+    path: /Users/me/.clip/extensions/sqlite
+    entry: index.ts
+    contributes:
+      targetTypes: [sqlite]    # lazy init — only loaded when this type is needed
 ```
 
+**Usage**
+
 ```sh
+clip add mydb ~/data/app.db --sqlite
+# or: clip add mydb ~/data/app.db      (urlHeuristic detects .db)
+
 clip mydb query "SELECT * FROM users LIMIT 5"
+clip list
+# ── sqlite ──
+#   mydb             ~/data/app.db
 ```
+
+### argSpec reference
+
+| Field | Role |
+|---|---|
+| `booleanFlags` | `--flag` does not consume the next token. e.g. `--sqlite`, `--plaintext` |
+| `valueFlags` | `--flag <value>` consumes the next token. e.g. `--file /path` |
+| `identifyFlags` | If any of these flags is present, `clip add` dispatches to this type |
+
+`dispatchPriority`: lower value = evaluated first. Tie-broken alphabetically by type name.
+
+### Override argSpec via manifest
+
+You can override `argSpec` / `displayHint` of any type from the manifest without changing code.
+
+```yaml
+extensions:
+  - name: my-sqlite-wrapper
+    path: /Users/me/.clip/extensions/sqlite
+    entry: index.ts
+    contributes:
+      targetTypes:
+        - name: sqlite
+          argSpec:
+            booleanFlags: ["sqlite", "wal"]   # add --wal flag
+          displayHint:
+            headerColor: "36"
+          dispatchPriority: 25
+```
+
+---
+
+## Lifecycle hooks
+
+Use hooks to modify the behavior of existing target types.
+
+| Phase | When | Can return |
+|-------|------|-----------|
+| `toolcall` | After alias expansion, before ACL check | `void` (observe only) |
+| `beforeExecute` | After ACL check, before executor | Modify headers/args/subcommand, or short-circuit |
+| `afterExecute` | After executor returns | Partial-merge the result |
+
+```ts
+// Inject headers
+api.registerHook("beforeExecute", async (ctx) => {
+  if (ctx.targetType !== "api") return;
+  const token = await fetchToken(api.env["TOKEN_URL"]!);
+  return { headers: { Authorization: `Bearer ${token}` } };
+});
+
+// Filter by type / target
+api.registerHook("beforeExecute", injectAuth, {
+  match: { type: ["api", "graphql"], target: [/^prod-/] },
+});
+
+// Short-circuit
+api.registerHook("beforeExecute", (ctx) => {
+  if (ctx.dryRun) {
+    return { shortCircuit: { exitCode: 0, stdout: "[dry-run] skipped", stderr: "" } };
+  }
+});
+
+// Rewrite result
+api.registerHook("afterExecute", (ctx) => {
+  if (!ctx.result) return;
+  return { result: { stdout: ctx.result.stdout.replace(/secret=\S+/g, "secret=***") } };
+});
+```
+
+Extensions using hooks must declare `hooks: [...]` in the manifest to ensure eager init.
+
+---
 
 ## Error handlers
 
 ```ts
 api.registerErrorHandler(async (ctx) => {
-  if (ctx.aclDenied) return; // let ACL denials propagate
+  if (ctx.aclDenied) return;
   await reportToSlack(`clip error in ${ctx.targetName}: ${ctx.error}`);
-  // return nothing → rethrow original
 });
 ```
 
-## Hook priority
+---
 
-Lower priority number runs first in `beforeExecute` / `toolcall`, and last in `afterExecute` (onion model).
+## clip ext commands
 
-```ts
-api.registerHook("beforeExecute", injectTokenA, { priority: 10 });
-api.registerHook("beforeExecute", injectTokenB, { priority: 20 }); // runs after A
+```sh
+clip ext list              # show all extensions (builtin + user, including disabled)
+clip ext enable <name>     # set enabled: true in manifest
+clip ext disable <name>    # set enabled: false in manifest
 ```
 
-When multiple hooks return `headers`, they are merged (last writer wins per key).
+```
+NAME              KIND     STATUS    CONTRIBUTES
+────────────────  ───────  ────────  ──────────────────
+protocol-cli      builtin  enabled   types=[cli]
+protocol-mcp      builtin  enabled   types=[mcp]
+user-sqlite       user     enabled   types=[sqlite]
+my-audit          user     disabled  hooks=[toolcall]
+```
 
-## Lifecycle
+---
+
+## Lifecycle (2-phase)
 
 ```
-init()  →  [toolcall hook]  →  [beforeExecute hook]  →  executor  →  [afterExecute hook]  →  result
-                                                                                ↓
-                                                              [errorHandler on throw]
+Phase 1 (startup):  read extensions.yml → index contributes (no import)
+Phase 2 (on demand): match argv → import + init only the needed extensions
+
+hooks-declaring extensions → always Phase 2 (eager)
+targetTypes-only extensions → Phase 2 only when that type is used (lazy)
+```
+
+Execution flow after init:
+
+```
+init()  →  [toolcall]  →  [beforeExecute]  →  executor  →  [afterExecute]  →  result
+                                                                   ↓
+                                                      [errorHandler on throw]
 dispose()  ←  SIGINT / beforeExit
 ```
 
+---
+
 ## Disabling extensions
 
-Set `CLIP_NO_EXTENSIONS=1` to skip loading `~/.clip/extensions/`. Built-in target types still load.
-
 ```sh
-CLIP_NO_EXTENSIONS=1 clip gh pr list
+CLIP_NO_EXTENSIONS=1 clip gh pr list   # skip all user extensions
 ```
+
+Built-in target types (mcp, cli, api, etc.) are always loaded.
+
+---
 
 ## TypeScript types
 
-Public types are in `types/extension.d.ts` in the clip repo. Copy the file to your extensions directory for local type checking:
+For type hints, reference the clip repository locally:
 
-```sh
-cp "$(dirname $(which clip))/../lib/clip/types/extension.d.ts" ~/.clip/extensions/
+```ts
+import type { ClipExtension, AddArgs, ListOpts, ArgSpec } from "/path/to/clip/packages/core/src/index.ts";
+```
+
+Types are optional — extensions work fine without them:
+
+```ts
+export const extension = {
+  name: "my:hook",
+  init(api) {
+    api.registerHook("toolcall", (ctx) => {
+      console.error(ctx.targetName);
+    });
+  },
+};
 ```

@@ -54,7 +54,7 @@ function registerInternalCommands(reg: Registry): void {
       api.registerInternalCommand("refresh",    async ({ args }) => { await runRefresh(args, reg); });
       api.registerInternalCommand("login",      async ({ args }) => { await runLogin(args, reg); });
       api.registerInternalCommand("logout",     async ({ args }) => { await runLogout(args); });
-      api.registerInternalCommand("ext",        async ({ args }) => { await runExtCmd(args); });
+      api.registerInternalCommand("ext",        async ({ args }) => { await runExtCmd(args, reg); });
     },
   };
   reg.register(ext);
@@ -140,7 +140,8 @@ async function main(): Promise<number> {
   const effectiveDryRun = dryRun;
   const effectiveJsonMode = jsonMode;
   const effectivePipeMode = pipeMode;
-  const effectivePassthrough = !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode;
+  const supportsPassthrough = registry.getArgSpec(type)?.passthrough ?? false;
+  const effectivePassthrough = supportsPassthrough && !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode;
 
   const hasHelpFlag = lateFiltered.includes("--help") || lateFiltered.includes("-h");
   if (hasHelpFlag && rawSubcommand !== "tools") {

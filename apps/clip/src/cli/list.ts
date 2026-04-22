@@ -3,7 +3,7 @@ import type { Registry } from "@clip/core";
 import { loadConfig } from "@clip/core";
 
 export async function runList(registry: Registry): Promise<void> {
-  const config = await loadConfig();
+  const config = await loadConfig(registry);
   const bound = new Set(await listBound());
   const tty = process.stdout.isTTY;
   const c = (code: string, text: string) => (tty ? `\x1b[${code}m${text}\x1b[0m` : text);
@@ -11,8 +11,8 @@ export async function runList(registry: Registry): Promise<void> {
 
   const opts = { bound, tty, color: c, bind };
 
-  // contribution이 등록된 타입들을 순서대로 렌더링
-  const contributions = registry.listContributions();
+  // contribution이 등록된 타입들을 priority 순서대로 렌더링
+  const contributions = registry.listContributionsByPriority();
   let first = true;
 
   for (const contribution of contributions) {
@@ -78,24 +78,12 @@ export async function runList(registry: Registry): Promise<void> {
   }
 }
 
-// type별 헤더 색상은 contribution이 알고 있으나 현재 API에 노출되지 않음.
-// contribution의 listRenderer가 첫 줄에 헤더를 포함하지 않으므로 헤더는 여기서 생성한다.
-// type → ANSI 색상 코드 매핑 (builtin 타입들과 일치해야 함)
-const TYPE_HEADER_COLORS: Record<string, string> = {
-  cli:     "32",
-  mcp:     "33",
-  api:     "36",
-  grpc:    "1;34",
-  graphql: "38;5;205",
-  script:  "38;5;245",
-};
-
 async function getHeaderLine(
   type: string,
-  _contribution: import("@clip/core").TargetTypeContribution,
+  contribution: import("@clip/core").TargetTypeContribution,
   _firstTarget: unknown,
   opts: import("@clip/core").ListOpts,
 ): Promise<string> {
-  const code = TYPE_HEADER_COLORS[type] ?? "35";
+  const code = contribution.displayHint?.headerColor ?? "35";
   return opts.color(code, `── ${type} ──`);
 }

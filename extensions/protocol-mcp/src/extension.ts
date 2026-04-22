@@ -47,6 +47,13 @@ export const extension: ClipExtension = {
     });
     api.registerContribution({
       type: "mcp",
+      dispatchPriority: 50,
+      argSpec: {
+        booleanFlags: ["stdio", "sse"],
+        valueFlags: ["url", "command", "args"],
+        identifyFlags: ["stdio", "sse", "url"],
+      },
+      displayHint: { headerColor: "33" },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as McpTarget;
         const { color, bind } = opts;

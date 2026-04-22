@@ -7,6 +7,7 @@
     "clip": "./clip"
   },
   "scripts": {
+    "dev": "bun apps/clip/src/main.ts",
     "test": "bun test",
     "lint": "biome check .",
     "format": "biome format --write .",
