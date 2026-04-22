@@ -123,7 +123,7 @@ async function runProfileList(args: string[]): Promise<void> {
 
   if (names.length === 0) {
     console.log(`No profiles on "${targetName}".`);
-    console.log(`\nAdd one:\n  clip profile add ${targetName} <profile> --args "exec,<profile>,--,gh"`);
+    console.log(`\nAdd one:\n  clip profile add ${targetName} <profile> --env "GH_TOKEN=\${GH_TOKEN_<profile>}"`);
     return;
   }
 

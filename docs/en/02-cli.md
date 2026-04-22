@@ -1,6 +1,6 @@
 # CLI Target
 
-Registers a locally installed CLI tool (`gh`, `gh`, `gh`, etc.) with the clip gateway.
+Registers a locally installed CLI tool (`gh`, `git`, etc.) with the clip gateway.
 
 clip runs the command directly after ACL checks. Output is streamed in passthrough mode when connected to a TTY, and buffered when piped.
 
@@ -14,8 +14,8 @@ clip add <name> <command> [--allow x,y] [--deny z] [--args prepend-args]
 # Register gh — block the delete subcommand
 clip add gh gh --deny delete
 
-# Prepend args: always insert -c my-cluster before user args
-clip add gh gh --args "-c,my-cluster"
+# Prepend args: always insert --hostname before user args
+clip add mygh gh --args "--hostname,github.example.com"
 ```
 
 ## Config
@@ -122,7 +122,7 @@ clip gh repo clone ori-kim/cli-proxy --dry-run
 With prepended args:
 
 ```sh
-# config: args: ["-c", "my-cluster"]
-clip gh topic list --dry-run
-# gh -c my-cluster topic list
+# config: args: ["--hostname", "github.example.com"]
+clip mygh pr list --dry-run
+# gh --hostname github.example.com pr list
 ```

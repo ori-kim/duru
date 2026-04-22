@@ -1,6 +1,6 @@
 # CLI Target
 
-로컬에 설치된 CLI 명령어(`gh`, `gh`, `gh` 등)를 clip 게이트웨이에 등록합니다.
+로컬에 설치된 CLI 명령어(`gh`, `git` 등)를 clip 게이트웨이에 등록합니다.
 
 clip은 명령어를 **ACL 검사 후 그대로 실행**합니다. 출력은 TTY에서 passthrough(실시간 스트림), pipe에서 버퍼 모드로 동작합니다.
 
@@ -14,8 +14,8 @@ clip add <name> <command> [--allow x,y] [--deny z] [--args prepend-args]
 # gh 등록 — delete 서브커맨드 차단
 clip add gh gh --deny delete
 
-# prepend args: clip gh 실행 시 항상 -c my-cluster 삽입
-clip add gh gh --args "-c,my-cluster"
+# prepend args: clip mygh 실행 시 항상 --hostname 삽입
+clip add mygh gh --args "--hostname,github.example.com"
 ```
 
 ## Config
@@ -122,7 +122,7 @@ clip gh repo clone ori-kim/cli-proxy --dry-run
 prepend args가 있으면 포함되어 출력됩니다:
 
 ```sh
-# config: args: ["-c", "my-cluster"]
-clip gh topic list --dry-run
-# gh -c my-cluster topic list
+# config: args: ["--hostname", "github.example.com"]
+clip mygh pr list --dry-run
+# gh --hostname github.example.com pr list
 ```

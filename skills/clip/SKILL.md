@@ -47,7 +47,7 @@ Flags can appear anywhere: `clip gh pr list --json`, `clip --dry-run petstore ge
 
 **CLI** — wraps a local command with ACL rules
 ```sh
-clip gh get pods -n default
+clip gh issue list
 clip gh pr list --json
 ```
 
@@ -95,8 +95,8 @@ clip my-scripts deploy production          # run a command
 A target can have multiple profiles — variants that override `args`, `url`, `env`, `headers`, etc.
 
 ```sh
-clip mygh@alpha-kr get pods -n default   # one-shot override
-clip profile use mygh prod-kr            # set active default
+clip mygh@personal issue list            # one-shot override
+clip profile use mygh work               # set active default
 clip profile list mygh                   # inspect
 ```
 

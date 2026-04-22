@@ -58,7 +58,7 @@ OAuth tokens:
   ~/.clip/target/graphql/<name>/auth.json
 
 Examples:
-  clip add gh gh --deny delete,apply
+  clip add gh gh --deny delete
   clip add notion https://mcp.notion.com/mcp
   clip add linear https://mcp.linear.app/mcp
   clip add petstore https://petstore3.swagger.io/api/v3/openapi.json --api
@@ -82,22 +82,22 @@ Examples:
   clip gh viewer '{ login bio }'
   clip gh repository --owner foo --name bar --select name,stargazerCount
   clip --json gh pr list
-  clip gh get pods -n default
+  clip gh issue list
   clip bind gh            # 이후 "gh pr list" 가 clip을 통해 실행됨
   clip unbind gh
   clip alias add slack send-me --subcommand chat.postMessage --input-json '{"channel":"U123","text":"$1"}' --description "Send DM to me"
   clip slack send-me "hello"
-  clip alias add gh pods-dev --subcommand get --arg pods --arg -n --arg dev
-  clip gh pods-dev
+  clip alias add gh my-prs --subcommand pr --arg list --arg --author --arg @me
+  clip gh my-prs
   # script target — bash/file 조합 명령
   clip lag lag my-group    # ~/.clip/target/script/lag/ 에 정의된 스크립트 실행
 
 Tree ACL (~/.clip/target/cli/gh/config.yml 직접 편집):
   command: gh
   acl:
-    topic:
-      allow: [describe, list]
-    group:
+    pr:
+      allow: [list, view, create]
+    repo:
       deny: [delete]
 
 Agent integration:

@@ -89,7 +89,7 @@ describe("profile application", () => {
     const reg = await makeRegistry();
     const target = {
       command: "gh",
-      profiles: { dev: { args: ["--context", "dev-cluster"] } },
+      profiles: { dev: { args: ["--hostname", "dev.example.com"] } },
     };
     const config = makeConfig("cli", "kube", target);
     const inv = makeInvocation("kube", "dev");
@@ -106,7 +106,7 @@ describe("profile application", () => {
     const target = {
       command: "gh",
       active: "prod",
-      profiles: { prod: { args: ["--context", "prod-cluster"] } },
+      profiles: { prod: { args: ["--hostname", "prod.example.com"] } },
     };
     const config = makeConfig("cli", "kube", target);
     const inv = makeInvocation("kube"); // no explicit profile
@@ -143,8 +143,8 @@ describe("profile application", () => {
       command: "gh",
       active: "dev",
       profiles: {
-        dev: { args: ["--context", "dev"] },
-        prod: { args: ["--context", "prod"] },
+        dev: { args: ["--hostname", "dev.example.com"] },
+        prod: { args: ["--hostname", "prod.example.com"] },
       },
     };
     const config = makeConfig("cli", "kube", target);

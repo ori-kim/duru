@@ -12,7 +12,7 @@ clip <target> <subcommand> [args...]
 
 | 종류 | 설명 | 예시 |
 |------|------|------|
-| [CLI](./02-cli.md) | 로컬 CLI 명령어를 ACL로 감싸 실행 | `gh`, `gh`, `gh` |
+| [CLI](./02-cli.md) | 로컬 CLI 명령어를 ACL로 감싸 실행 | `gh`, `git` |
 | [MCP (HTTP)](./03-mcp.md) | HTTP MCP 서버 (Streamable HTTP) | `notion`, `linear` |
 | [MCP (SSE)](./03-mcp.md#sse) | legacy SSE transport MCP 서버 | 구버전 MCP 서버 |
 | [MCP (STDIO)](./03-mcp.md#stdio) | 로컬 프로세스로 실행되는 MCP 서버 | `filesystem`, `sqlite` |
@@ -101,20 +101,20 @@ aliases:
 
 ```sh
 # target 등록
-clip add mygh gh --allow "get,describe,logs,top"
+clip add mygh gh --allow "pr,issue,repo"
 
 # profile 추가
-clip profile add mygh prod-kr --args "exec,example/prod/kr,--,gh"
-clip profile add mygh alpha-kr --args "exec,example/alpha/kr,--,gh"
+clip profile add mygh work --env "GH_TOKEN=${GH_TOKEN_WORK}"
+clip profile add mygh personal --env "GH_TOKEN=${GH_TOKEN_PERSONAL}"
 
 # active 설정
-clip profile use mygh prod-kr
+clip profile use mygh work
 
 # 실행 (active profile 사용)
-clip mygh get pods -n default
+clip mygh pr list
 
 # 1회성 override
-clip mygh@alpha-kr get pods -n default
+clip mygh@personal issue list
 
 # profile 목록 확인
 clip profile list mygh
@@ -123,7 +123,7 @@ clip profile list mygh
 clip profile unset mygh
 
 # profile 삭제
-clip profile remove mygh alpha-kr
+clip profile remove mygh personal
 ```
 
 ### Profile 커맨드

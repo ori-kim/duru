@@ -37,7 +37,7 @@ Registers a locally installed CLI tool. clip runs the command after ACL checks.
 
 ```sh
 clip add gh gh --deny delete
-clip add gh gh --args "-c,my-cluster"
+clip add mygh gh --args "--hostname,github.example.com"
 ```
 
 Config (`~/.clip/target/cli/gh/config.yml`):
@@ -299,10 +299,10 @@ clip my-scripts deploy production --dry-run
 Override target fields per environment:
 
 ```sh
-clip profile add mygh prod-kr --args "exec,example/prod/kr,--,gh"
-clip profile add mygh alpha-kr --args "exec,example/alpha/kr,--,gh"
-clip profile use mygh prod-kr         # set active
-clip mygh@alpha-kr get pods           # one-shot override
+clip profile add mygh work --env "GH_TOKEN=${GH_TOKEN_WORK}"
+clip profile add mygh personal --env "GH_TOKEN=${GH_TOKEN_PERSONAL}"
+clip profile use mygh work             # set active
+clip mygh@personal pr list             # one-shot override
 clip profile list mygh
 clip profile unset mygh
 ```

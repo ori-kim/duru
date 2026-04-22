@@ -12,7 +12,7 @@ clip <target> <subcommand> [args...]
 
 | Type | Description | Examples |
 |------|-------------|---------|
-| [CLI](./02-cli.md) | Wraps a local CLI command with ACL enforcement | `gh`, `gh`, `gh` |
+| [CLI](./02-cli.md) | Wraps a local CLI command with ACL enforcement | `gh`, `git` |
 | [MCP (HTTP)](./03-mcp.md) | Connects to an HTTP MCP server (Streamable HTTP) | `notion`, `linear` |
 | [MCP (SSE)](./03-mcp.md#sse) | Connects to a legacy SSE-transport MCP server | older MCP servers |
 | [MCP (STDIO)](./03-mcp.md#stdio) | Spawns a local process as an MCP server | `filesystem`, `sqlite` |
@@ -101,20 +101,20 @@ Register multiple variants (profiles) on a single target. Each profile overrides
 
 ```sh
 # Register base target
-clip add mygh gh --allow "get,describe,logs,top"
+clip add mygh gh --allow "pr,issue,repo"
 
 # Add profiles
-clip profile add mygh prod-kr --args "exec,example/prod/kr,--,gh"
-clip profile add mygh alpha-kr --args "exec,example/alpha/kr,--,gh"
+clip profile add mygh work --env "GH_TOKEN=${GH_TOKEN_WORK}"
+clip profile add mygh personal --env "GH_TOKEN=${GH_TOKEN_PERSONAL}"
 
 # Set active default
-clip profile use mygh prod-kr
+clip profile use mygh work
 
 # Run with active profile
-clip mygh get pods -n default
+clip mygh pr list
 
 # One-shot override
-clip mygh@alpha-kr get pods -n default
+clip mygh@personal issue list
 
 # List profiles
 clip profile list mygh
@@ -123,7 +123,7 @@ clip profile list mygh
 clip profile unset mygh
 
 # Remove a profile
-clip profile remove mygh alpha-kr
+clip profile remove mygh personal
 ```
 
 ### Profile Commands
