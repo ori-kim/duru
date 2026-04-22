@@ -1,5 +1,4 @@
 import type {
-  InternalVerb,
   LateFlags,
   MatchedCommand,
   ParsedInvocation,
@@ -12,7 +11,7 @@ type ParsedData = {
   explicitProfile: string | undefined;
   userArgs: readonly string[];
   lateFlags: LateFlags;
-  internalVerb: InternalVerb | "help" | "version" | undefined;
+  internalVerb: string | undefined;
 };
 
 export function matchCommand(parsed: ParsedInvocation): MatchedCommand {
@@ -27,7 +26,7 @@ export function matchCommand(parsed: ParsedInvocation): MatchedCommand {
   if (p.internalVerb && p.internalVerb !== "version") {
     return {
       kind: "internal",
-      verb: p.internalVerb as InternalVerb,
+      verb: p.internalVerb,
       rest: p.userArgs,
     } as unknown as MatchedCommand;
   }

@@ -1,3 +1,4 @@
+import type { Registry } from "../extension.ts";
 import { die } from "../utils/errors.ts";
 
 function buildZshCompletionCore(): string {
@@ -167,21 +168,32 @@ _clip() {
 }
 
 // For eval "$(clip completion zsh)" in .zshrc
-export function buildZshCompletion(): string {
+export function buildZshCompletion(registry?: Registry): string {
+  // extension contribution의 completionContributor 조각들 aggregation
+  let extraContribs = "";
+  if (registry) {
+    const builtinTypes = new Set(["cli", "mcp", "api", "grpc", "graphql", "script"]);
+    for (const contribution of registry.listContributions()) {
+      if (!builtinTypes.has(contribution.type) && contribution.completionContributor) {
+        extraContribs += "\n" + contribution.completionContributor();
+      }
+    }
+  }
+
   return `# clip zsh completion
 # Add to ~/.zshrc:  eval "$(clip completion zsh)"
 # Inline hints:     ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 
-${buildZshCompletionCore()}
+${buildZshCompletionCore()}${extraContribs}
 compdef _clip clip
 `;
 }
 
-export async function runCompletionCmd(args: string[]): Promise<void> {
+export async function runCompletionCmd(args: string[], registry?: Registry): Promise<void> {
   const [shell] = args;
 
   if (!shell || shell === "zsh") {
-    process.stdout.write(buildZshCompletion());
+    process.stdout.write(buildZshCompletion(registry));
     return;
   }
 

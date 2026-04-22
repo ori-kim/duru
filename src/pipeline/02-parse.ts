@@ -1,5 +1,5 @@
 import { HELP, VERSION } from "../cli/help.ts";
-import type { InternalVerb, LateFlags, ParsedInvocation, RawInvocation } from "./types.ts";
+import type { LateFlags, ParsedInvocation, RawInvocation } from "./types.ts";
 
 type RawData = { argv: readonly string[]; env: Readonly<Record<string, string>>; at: number };
 type ParsedData = {
@@ -12,26 +12,23 @@ type ParsedData = {
   userArgs: readonly string[];
   lateFlags: LateFlags;
   configPath: string | undefined;
-  internalVerb: InternalVerb | "help" | "version" | undefined;
+  internalVerb: string | "help" | "version" | undefined;
 };
 
-const INTERNAL_VERBS = new Set<InternalVerb>([
-  "add",
-  "list",
-  "remove",
-  "skills",
-  "bind",
-  "unbind",
-  "binds",
-  "completion",
-  "profile",
-  "alias",
-  "refresh",
-  "login",
-  "logout",
-  "config",
-  "workspace",
+// 동적 verb 세트: builtin-loader 또는 clip.ts에서 주입한다.
+// Registry 초기화 전에 parse가 호출될 수 있어 모듈 수준 Set을 공유 상태로 사용.
+// 기본값: builtin internal commands (테스트 및 registry 초기화 이전 호환용)
+const DEFAULT_INTERNAL_VERBS = new Set([
+  "add", "list", "remove", "skills", "bind", "unbind", "binds",
+  "completion", "profile", "alias", "refresh", "login", "logout",
+  "config", "workspace",
 ]);
+
+let _internalVerbSet: Set<string> = DEFAULT_INTERNAL_VERBS;
+
+export function setInternalVerbSet(verbs: Set<string>): void {
+  _internalVerbSet = verbs;
+}
 
 const LATE_FLAG_SET = new Set(["--dry-run", "--json", "--pipe", "--debug"]);
 
@@ -88,7 +85,7 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
   let pipeMode = false;
   let dryRun = false;
   let configPath: string | undefined;
-  let internalVerb: InternalVerb | "help" | "version" | undefined;
+  let internalVerb: string | undefined;
   let i = 0;
 
   // global flags 스캔 (argv 선두)
@@ -131,8 +128,8 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
 
   if (!internalVerb && rest.length > 0) {
     const first = rest[0]!;
-    if (INTERNAL_VERBS.has(first as InternalVerb)) {
-      internalVerb = first as InternalVerb;
+    if (_internalVerbSet.has(first)) {
+      internalVerb = first;
       rawTargetArgs = rest.slice(1);
     } else {
       // @profile 분리

@@ -7,22 +7,9 @@ export type Brand<T, B> = T & { readonly [__brand]: B };
 
 // --- Internal Verbs ---
 
-export type InternalVerb =
-  | "add"
-  | "list"
-  | "remove"
-  | "skills"
-  | "bind"
-  | "unbind"
-  | "binds"
-  | "completion"
-  | "profile"
-  | "alias"
-  | "refresh"
-  | "login"
-  | "logout"
-  | "config"
-  | "workspace";
+// 동적 registry로 전환: 리터럴 유니언 대신 string 사용.
+// 등록된 verb는 Registry.listInternalVerbs()로 조회한다.
+export type InternalVerb = string;
 
 // --- Late Flags ---
 

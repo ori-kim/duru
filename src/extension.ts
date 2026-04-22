@@ -82,6 +82,54 @@ export type TargetTypeDef<T = unknown> = {
   aclRule?: { skipSubcommands?: string[] };
 };
 
+// --- TargetTypeContribution ---
+
+export type ListOpts = {
+  bound: Set<string>;
+  activeWorkspace: string | null;
+  tty: boolean;
+  color: (code: string, text: string) => string;
+  wsTag: (name: string) => string;
+  bind: (name: string) => string;
+};
+
+export type AddArgs = {
+  name: string;
+  positionals: string[];
+  flags: Record<string, string>;
+  allow: string[] | undefined;
+  deny: string[] | undefined;
+  addOpts: { global: boolean } | undefined;
+};
+
+/**
+ * TargetTypeContribution: CLI-layer の コントリビューション インターフェース.
+ * 각 builtin이 CLI 명령별 렌더/핸들러를 등록한다.
+ */
+export type TargetTypeContribution = {
+  type: string;
+  /** clip list — 해당 타입의 target 한 줄 렌더링 */
+  listRenderer?: (name: string, target: unknown, opts: ListOpts) => Promise<string>;
+  /** clip add — URL이 이 타입에 해당하는지 판단 */
+  urlHeuristic?: (url: string) => boolean;
+  /** clip add — 이 타입의 target 추가 처리 */
+  addHandler?: (args: AddArgs) => Promise<void>;
+  /** clip help — target 상세 설명 한 줄 */
+  helpRenderer?: (name: string, target: unknown) => Promise<string>;
+  /** clip login — OAuth / auth 처리 */
+  loginHandler?: (name: string, target: unknown) => Promise<void>;
+  /** clip completion — zsh completion 조각 생성 */
+  completionContributor?: () => string;
+};
+
+// --- InternalCommandHandler ---
+
+export type InternalCommandCtx = {
+  args: string[];
+};
+
+export type InternalCommandHandler = (ctx: InternalCommandCtx) => Promise<void>;
+
 export type HookOpts = {
   priority?: number;
   match?: {
@@ -100,6 +148,8 @@ export type Logger = {
 
 export type ExtensionApi = {
   registerTargetType<T>(def: TargetTypeDef<T>): void;
+  registerContribution(contribution: TargetTypeContribution): void;
+  registerInternalCommand(verb: string, handler: InternalCommandHandler): void;
   registerHook(phase: HookPhase, fn: HookFn, opts?: HookOpts): void;
   registerErrorHandler(fn: ErrorHandler, opts?: HookOpts): void;
   logger: Logger;
@@ -160,6 +210,8 @@ export class Registry {
   private readonly _extensions: ClipExtension[] = [];
   private readonly _initialized = new Set<string>();
   private readonly _types = new Map<string, TargetTypeDef>();
+  private readonly _contributions = new Map<string, TargetTypeContribution>();
+  private readonly _internalCommands = new Map<string, InternalCommandHandler>();
   private readonly _hooks: Map<HookPhase, RegisteredHook[]> = new Map([
     ["toolcall", []],
     ["beforeExecute", []],
@@ -186,6 +238,12 @@ export class Registry {
           process.stderr.write(`clip: warning: target type "${def.type}" overridden\n`);
         }
         this._types.set(def.type, def as TargetTypeDef);
+      },
+      registerContribution: (contribution: TargetTypeContribution): void => {
+        this._contributions.set(contribution.type, contribution);
+      },
+      registerInternalCommand: (verb: string, handler: InternalCommandHandler): void => {
+        this._internalCommands.set(verb, handler);
       },
       registerHook: (phase, fn, opts = {}): void => {
         (this._hooks.get(phase) ?? []).push({ fn, opts: { priority: 100, ...opts } });
@@ -219,6 +277,22 @@ export class Registry {
 
   listTypes(): string[] {
     return [...this._types.keys()];
+  }
+
+  getContribution(type: string): TargetTypeContribution | undefined {
+    return this._contributions.get(type);
+  }
+
+  listContributions(): TargetTypeContribution[] {
+    return [...this._contributions.values()];
+  }
+
+  getInternalCommand(verb: string): InternalCommandHandler | undefined {
+    return this._internalCommands.get(verb);
+  }
+
+  listInternalVerbs(): string[] {
+    return [...this._internalCommands.keys()];
   }
 
   async runHooks(phase: HookPhase, ctx: HookCtx): Promise<HookReturn | null> {

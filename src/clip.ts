@@ -16,43 +16,55 @@ import { runSkillsCmd } from "./commands/skills.ts";
 import { runWorkspaceCmd } from "./commands/workspace.ts";
 import { loadConfig } from "./config.ts";
 import { dispatch } from "./dispatch.ts";
+import { type ClipExtension, Registry } from "./extension.ts";
 import { loadUserExtensions } from "./extension-loader.ts";
 import { createRawInvocation } from "./pipeline/01-raw.ts";
-import { parseInvocation } from "./pipeline/02-parse.ts";
+import { parseInvocation, setInternalVerbSet } from "./pipeline/02-parse.ts";
 import { matchCommand } from "./pipeline/03-match-command.ts";
 import { bindTarget } from "./pipeline/04-bind-target.ts";
 import { resolveProfileStage } from "./pipeline/05-resolve-profile.ts";
-import type { InternalVerb, MatchedCommand, TargetInvocationHandle } from "./pipeline/types.ts";
+import type { MatchedCommand, TargetInvocationHandle } from "./pipeline/types.ts";
 import { printAndExit } from "./utils/errors.ts";
 import { formatOutput } from "./utils/output.ts";
 import { formatToolHelp } from "./utils/tool-args.ts";
 
 const registry = createDefaultRegistry();
 
-async function runInternal(verb: InternalVerb, rest: readonly string[], reg: typeof registry): Promise<number> {
-  const args = rest as string[];
-  switch (verb) {
-    case "config": await runConfigCmd(args); return 0;
-    case "list": await runList(); return 0;
-    case "add": await runAdd(args); return 0;
-    case "remove": await runRemove(args); return 0;
-    case "skills": await runSkillsCmd(args); return 0;
-    case "bind": await runBind(args); return 0;
-    case "unbind": await runUnbind(args); return 0;
-    case "binds": await runBinds(); return 0;
-    case "completion": await runCompletionCmd(args); return 0;
-    case "profile": await runProfileCmd(args); return 0;
-    case "alias": await runAliasCmd(args); return 0;
-    case "refresh": await runRefresh(args, reg); return 0;
-    case "login": await runLogin(args); return 0;
-    case "logout": await runLogout(args); return 0;
-    case "workspace": await runWorkspaceCmd(args); return 0;
-  }
+// internal commands를 extension으로 등록한다.
+// cli/* 파일들이 config.ts → builtin-loader.ts 순환을 피하기 위해 clip.ts에서 직접 등록.
+function registerInternalCommands(reg: Registry): void {
+  const ext: ClipExtension = {
+    name: "builtin:internal-commands",
+    init(api) {
+      api.registerInternalCommand("config",     async ({ args }) => { await runConfigCmd(args); });
+      api.registerInternalCommand("list",       async () => { await runList(reg); });
+      api.registerInternalCommand("add",        async ({ args }) => { await runAdd(args, reg); });
+      api.registerInternalCommand("remove",     async ({ args }) => { await runRemove(args); });
+      api.registerInternalCommand("skills",     async ({ args }) => { await runSkillsCmd(args); });
+      api.registerInternalCommand("bind",       async ({ args }) => { await runBind(args); });
+      api.registerInternalCommand("unbind",     async ({ args }) => { await runUnbind(args); });
+      api.registerInternalCommand("binds",      async () => { await runBinds(); });
+      api.registerInternalCommand("completion", async ({ args }) => { await runCompletionCmd(args, reg); });
+      api.registerInternalCommand("profile",    async ({ args }) => { await runProfileCmd(args); });
+      api.registerInternalCommand("alias",      async ({ args }) => { await runAliasCmd(args); });
+      api.registerInternalCommand("refresh",    async ({ args }) => { await runRefresh(args, reg); });
+      api.registerInternalCommand("login",      async ({ args }) => { await runLogin(args, reg); });
+      api.registerInternalCommand("logout",     async ({ args }) => { await runLogout(args); });
+      api.registerInternalCommand("workspace",  async ({ args }) => { await runWorkspaceCmd(args); });
+    },
+  };
+  reg.register(ext);
 }
+
+registerInternalCommands(registry);
 
 async function main(): Promise<number> {
   await loadUserExtensions(registry);
   await registry.initAll();
+
+  // parse 단계에서 internal verb를 판별할 수 있도록 registry에 등록된 verb 세트를 주입한다.
+  setInternalVerbSet(new Set(registry.listInternalVerbs()));
+
   process.on("SIGINT", () => {
     registry.disposeAll().finally(() => process.exit(0));
   });
@@ -77,7 +89,13 @@ async function main(): Promise<number> {
   }
 
   if (matched.kind === "internal") {
-    return runInternal(matched.verb, matched.rest, registry);
+    const handler = registry.getInternalCommand(matched.verb);
+    if (!handler) {
+      process.stderr.write(`clip: unknown command "${matched.verb}"\n`);
+      return 1;
+    }
+    await handler({ args: matched.rest as string[] });
+    return 0;
   }
 
   // kind === "target" (completion은 internal verb로 처리되므로 여기 도달하지 않음)
@@ -92,8 +110,7 @@ async function main(): Promise<number> {
   const { type, target } = mergedResult as unknown as { type: string; target: unknown; invocation: TargetInvocationHandle };
 
   if (!rawSubcommand || rawSubcommand === "--help" || rawSubcommand === "-h") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await printTargetHelp(baseName, type as any, target as any);
+    await printTargetHelp(baseName, type, target, registry);
     return 0;
   }
 

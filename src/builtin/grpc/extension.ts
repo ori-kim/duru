@@ -1,4 +1,7 @@
-import type { ClipExtension, NormalizeCtx } from "../../extension.ts";
+import { getAuthStatus } from "../../commands/oauth.ts";
+import { addTarget } from "../../config.ts";
+import type { AddArgs, ClipExtension, ListOpts, NormalizeCtx } from "../../extension.ts";
+import { die } from "../../utils/errors.ts";
 import { subProfiles, subRecord } from "../../utils/env-sub.ts";
 import { describeGrpcTools, executeGrpc } from "./executor.ts";
 import { type GrpcTarget, grpcTargetSchema } from "./schema.ts";
@@ -23,5 +26,54 @@ export const extension: ClipExtension = {
       normalizeConfig: (parsed, ctx) => normalizeGrpc(parsed as GrpcTarget, ctx),
       aclRule: { skipSubcommands: ["describe", "types"] },
     });
+    api.registerContribution({
+      type: "grpc",
+      listRenderer: async (name, target, opts: ListOpts) => {
+        const t = target as GrpcTarget;
+        const { color, wsTag, bind } = opts;
+        const nm = color("1;34", name.padEnd(16));
+        const authStatus = t.oauth ? await getAuthStatus(name, "grpc") : null;
+        const metadata = t.metadata as Record<string, string> | undefined;
+        const statusTag = authStatus
+          ? color("2", `  [${authStatus}]`)
+          : t.oauth ? color("2", "  [not authenticated]")
+          : metadata?.["authorization"] ? color("2", "  [api key]")
+          : color("2", "  [no auth]");
+        const profileTag = (t as Record<string, unknown>).active ? ` @${(t as Record<string, unknown>).active}` : "";
+        const aclStr = formatAcl(t as Record<string, unknown>);
+        return `  ${nm} ${t.address}${profileTag}${aclStr}${statusTag}${bind(name)}${wsTag(name)}`;
+      },
+      urlHeuristic: () => false,
+      addHandler: async (args: AddArgs) => {
+        const { name, positionals, flags, allow, deny, addOpts } = args;
+        const address = flags["address"] ?? positionals[0];
+        if (!address) die("gRPC target requires an address (e.g. clip add petstore grpc.example.com:443 --grpc)");
+        const proto = flags["proto"] ?? undefined;
+        const plaintext = flags["plaintext"] ? true : undefined;
+        await addTarget(name, "grpc", {
+          address,
+          ...(proto ? { proto } : {}),
+          ...(plaintext ? { plaintext } : {}),
+          allow,
+          deny,
+        }, addOpts);
+        console.log(`Added gRPC target "${name}" → ${address}`);
+      },
+      helpRenderer: async (_name, target) => {
+        const t = target as GrpcTarget;
+        return `gRPC: ${t.address}`;
+      },
+    });
   },
 };
+
+function formatAcl(target: Record<string, unknown>): string {
+  const allow = target["allow"] as string[] | undefined;
+  const deny = target["deny"] as string[] | undefined;
+  const acl = target["acl"] as Record<string, unknown> | undefined;
+  const parts: string[] = [];
+  if (allow && allow.length > 0) parts.push(`allow: ${allow.join(",")}`);
+  if (deny && deny.length > 0) parts.push(`deny: ${deny.join(",")}`);
+  if (acl) parts.push(`acl: [${Object.keys(acl).join(",")}]`);
+  return parts.length > 0 ? `  (${parts.join("  ")})` : "";
+}

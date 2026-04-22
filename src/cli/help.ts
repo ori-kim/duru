@@ -1,6 +1,7 @@
 import { type HasAliases, listAliases } from "../commands/alias.ts";
 import { BIND_DIR } from "../commands/bind.ts";
-import type { ApiTarget, CliTarget, GraphqlTarget, GrpcTarget, McpTarget, ScriptTarget } from "../config.ts";
+import type { CliTarget } from "../config.ts";
+import type { Registry } from "../extension.ts";
 import pkg from "../../package.json";
 
 export const VERSION = pkg.version;
@@ -112,50 +113,40 @@ Zsh completion:
 
 export async function printTargetHelp(
   name: string,
-  type: "cli" | "mcp" | "api" | "grpc" | "graphql" | "script",
-  target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget | ScriptTarget,
+  type: string,
+  target: unknown,
+  registry?: Registry,
 ): Promise<void> {
-  let detail: string;
-  if (type === "mcp") {
-    const mcp = target as McpTarget;
-    detail =
-      mcp.transport === "stdio"
-        ? `STDIO MCP: ${mcp.command}`
-        : mcp.transport === "sse"
-          ? `SSE MCP: ${mcp.url}`
-          : `MCP server: ${mcp.url}`;
-  } else if (type === "api") {
-    detail = `API: ${(target as ApiTarget).baseUrl ?? (target as ApiTarget).openapiUrl ?? ""}`;
-  } else if (type === "grpc") {
-    detail = `gRPC: ${(target as GrpcTarget).address}`;
-  } else if (type === "graphql") {
-    detail = `GraphQL: ${(target as GraphqlTarget).endpoint}`;
-  } else if (type === "script") {
-    const st = target as ScriptTarget;
-    const cmdCount = Object.keys(st.commands ?? {}).length;
-    detail = st.description ? `Script: ${st.description}` : `Script target (${cmdCount} commands)`;
-  } else {
-    detail = `CLI command: ${(target as CliTarget).command}`;
-  }
+  // contribution의 helpRenderer가 있으면 사용, 없으면 fallback
+  const contribution = registry?.getContribution(type);
+  const detail = contribution?.helpRenderer
+    ? await contribution.helpRenderer(name, target)
+    : `${type} target`;
+
   console.log(`clip ${name} — ${detail}`);
   console.log(`\nUsage: clip ${name} <subcommand> [...args]`);
 
-  if (target.allow && target.allow.length > 0) {
-    console.log(`\nAllowed: ${target.allow.join(", ")}`);
+  const t = target as Record<string, unknown>;
+  const allow = t["allow"] as string[] | undefined;
+  const deny = t["deny"] as string[] | undefined;
+  const acl = t["acl"] as Record<string, { allow?: string[]; deny?: string[] }> | undefined;
+
+  if (allow && allow.length > 0) {
+    console.log(`\nAllowed: ${allow.join(", ")}`);
   }
-  if (target.deny && target.deny.length > 0) {
-    console.log(`Denied:  ${target.deny.join(", ")}`);
+  if (deny && deny.length > 0) {
+    console.log(`Denied:  ${deny.join(", ")}`);
   }
-  if (target.acl) {
+  if (acl) {
     console.log("\nACL tree:");
-    for (const [sub, node] of Object.entries(target.acl)) {
+    for (const [sub, node] of Object.entries(acl)) {
       const parts: string[] = [];
       if (node.allow?.length) parts.push(`allow: ${node.allow.join(", ")}`);
       if (node.deny?.length) parts.push(`deny: ${node.deny.join(", ")}`);
       console.log(`  ${sub}: ${parts.join("  ") || "(unrestricted)"}`);
     }
   }
-  if (!target.allow?.length && !target.deny?.length && !target.acl) {
+  if (!allow?.length && !deny?.length && !acl) {
     console.log(`\nNo ACL restrictions.`);
   }
 
@@ -169,22 +160,13 @@ export async function printTargetHelp(
     }
   }
 
-  if (type === "mcp" || type === "api" || type === "grpc" || type === "graphql" || type === "script") {
+  // 타입별 추가 힌트: contribution에 describeTools가 있으면 tools 가능
+  const def = registry?.getTargetType(type);
+  if (def?.describeTools) {
     console.log(`\nRun: clip ${name} tools  — to list available tools`);
   }
-  if (type === "api") {
-    console.log(`Run: clip refresh ${name}  — to re-fetch spec`);
-  }
-  if (type === "grpc") {
-    console.log(`Run: clip ${name} describe  — to list services`);
-    console.log(`Run: clip refresh ${name}  — to refresh schema cache`);
-  }
-  if (type === "graphql") {
-    console.log(`Run: clip ${name} types    — to list schema types`);
-    console.log(`Run: clip ${name} describe <TypeName>  — SDL-style type description`);
-    console.log(`Run: clip refresh ${name}  — to re-fetch schema`);
-  }
 
+  // cli 타입은 --help 위임
   if (type === "cli") {
     const cli = target as CliTarget;
     const proc = Bun.spawn([cli.command, ...(cli.args ?? []), "--help"], {
