@@ -76,7 +76,7 @@ printf "Install Agents skill via skills.sh? (y/N) "
 read INSTALL_SKILL </dev/tty || INSTALL_SKILL="n"
 case "$INSTALL_SKILL" in
   [yY]|[yY][eE][sS])
-    npx skills add ori-kim/cli-proxy
+    npx skills add ori-kim/cli-proxy </dev/tty
     ;;
   *)
     echo "Skipped. Run 'npx skills add ori-kim/cli-proxy' to install later."
