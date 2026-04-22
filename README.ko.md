@@ -26,19 +26,27 @@ MCP 서버와 CLI 도구를 위한 통합 CLI 프록시 게이트웨이 — ACL 
 
 ## 설치
 
+**사전 빌드 바이너리** (macOS 전용, 별도 설치 불필요):
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ori-kim/cli-proxy/main/install.sh | sh
 ```
 
-기본 설치 경로는 `~/.local/bin/clip`. `CLIP_INSTALL_DIR` 환경변수로 변경 가능.
+기본 설치 경로: `~/.local/bin/clip`. `CLIP_INSTALL_DIR` 환경변수로 변경 가능.
 
-**수동 설치:** [최신 릴리즈](https://github.com/ori-kim/cli-proxy/releases/latest) · macOS 전용 (darwin-arm64, darwin-x64)
+**Bun으로 설치** ([Bun](https://bun.sh) ≥ 1.0 필요):
+
+```sh
+bun install -g github:ori-kim/cli-proxy
+```
 
 PATH 추가:
 
 ```sh
 export PATH="$PATH:$HOME/.local/bin"
 ```
+
+**수동 설치:** [최신 릴리즈](https://github.com/ori-kim/cli-proxy/releases/latest) · macOS 전용 (darwin-arm64, darwin-x64)
 
 **Native bind** — `clip` 접두사 없이 원본 명령어 그대로 사용:
 

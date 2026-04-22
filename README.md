@@ -29,7 +29,15 @@ A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules,
 
 ## Install
 
-Requires [Bun](https://bun.sh) ≥ 1.0.
+**Pre-built binary** (macOS only, no dependencies):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ori-kim/cli-proxy/main/install.sh | sh
+```
+
+Default install path: `~/.local/bin/clip`. Override with `CLIP_INSTALL_DIR`.
+
+**Via Bun** (requires [Bun](https://bun.sh) ≥ 1.0):
 
 ```sh
 bun install -g github:ori-kim/cli-proxy
