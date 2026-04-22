@@ -17,6 +17,7 @@ export type LateFlags = {
   jsonMode: boolean;
   pipeMode: boolean;
   dryRun: boolean;
+  format?: string;
 };
 
 // --- Stage 1: RawInvocation ---

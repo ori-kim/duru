@@ -30,6 +30,12 @@ export const extension: ClipExtension = {
       executor: executeScript,
       normalizeConfig: (parsed, ctx) => normalizeScript(parsed as ScriptTarget, ctx),
     });
+    api.registerResultPresenter({
+      type: "script",
+      toViewModel(result, meta) {
+        return { kind: "call-result", content: result, meta };
+      },
+    });
     api.registerContribution({
       type: "script",
       listRenderer: async (name, target, opts: ListOpts) => {

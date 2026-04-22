@@ -8,7 +8,7 @@ type P = {
   baseName: string | undefined;
   explicitProfile: string | undefined;
   userArgs: readonly string[];
-  lateFlags: { jsonMode: boolean; pipeMode: boolean; dryRun: boolean };
+  lateFlags: { jsonMode: boolean; pipeMode: boolean; dryRun: boolean; format?: string };
   configPath: string | undefined;
   internalVerb: string | undefined;
 };
@@ -173,9 +173,10 @@ describe("late flags in target args", () => {
     expect(p.userArgs).toEqual(["list"]);
   });
 
-  test("non-late flags not removed", () => {
+  test("--format removed from userArgs and stored in lateFlags", () => {
     const p = parse(["slack", "tools", "--format", "json"]);
-    expect(p.userArgs).toEqual(["tools", "--format", "json"]);
+    expect(p.userArgs).toEqual(["tools"]);
+    expect(p.lateFlags.format).toBe("json");
   });
 
   test("--help in target args NOT removed (not a late flag)", () => {

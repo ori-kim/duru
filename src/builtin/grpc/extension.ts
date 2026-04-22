@@ -26,6 +26,12 @@ export const extension: ClipExtension = {
       normalizeConfig: (parsed, ctx) => normalizeGrpc(parsed as GrpcTarget, ctx),
       aclRule: { skipSubcommands: ["describe", "types"] },
     });
+    api.registerResultPresenter({
+      type: "grpc",
+      toViewModel(result, meta) {
+        return { kind: "call-result", content: result, meta };
+      },
+    });
     api.registerContribution({
       type: "grpc",
       listRenderer: async (name, target, opts: ListOpts) => {

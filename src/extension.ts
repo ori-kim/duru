@@ -152,6 +152,8 @@ export type ExtensionApi = {
   registerInternalCommand(verb: string, handler: InternalCommandHandler): void;
   registerHook(phase: HookPhase, fn: HookFn, opts?: HookOpts): void;
   registerErrorHandler(fn: ErrorHandler, opts?: HookOpts): void;
+  registerResultPresenter(presenter: import("./utils/output.ts").ResultPresenter): void;
+  registerOutputRenderer(renderer: import("./utils/output.ts").OutputRenderer): void;
   logger: Logger;
   env: Readonly<Record<string, string>>;
   signal: AbortSignal;
@@ -229,6 +231,8 @@ export class Registry {
   }
 
   async initAll(): Promise<void> {
+    // outputRegistry는 circular import을 피하기 위해 동적 import
+    const { outputRegistry } = await import("./output-registry.ts");
     const api: ExtensionApi = {
       registerTargetType: <T>(def: TargetTypeDef<T>): void => {
         if (this._types.has(def.type)) {
@@ -250,6 +254,12 @@ export class Registry {
       },
       registerErrorHandler: (fn, opts = {}): void => {
         this._errorHandlers.push({ fn, opts: { priority: 100, ...opts } });
+      },
+      registerResultPresenter: (presenter): void => {
+        outputRegistry.registerResultPresenter(presenter);
+      },
+      registerOutputRenderer: (renderer): void => {
+        outputRegistry.registerOutputRenderer(renderer);
       },
       logger: defaultLogger,
       env: Object.freeze({ ...process.env } as Record<string, string>),

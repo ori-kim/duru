@@ -42,6 +42,12 @@ export const extension: ClipExtension = {
       describeTools: (_, { targetName }) => readToolsCache(targetName),
       normalizeConfig: (parsed, ctx) => normalizeMcp(parsed as McpTarget, ctx),
     });
+    api.registerResultPresenter({
+      type: "mcp",
+      toViewModel(result, meta) {
+        return { kind: "call-result", content: result, meta };
+      },
+    });
     api.registerContribution({
       type: "mcp",
       listRenderer: async (name, target, opts: ListOpts) => {

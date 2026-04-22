@@ -24,6 +24,12 @@ export const extension: ClipExtension = {
       describeTools: (target, { targetName }) => describeApiTools(target, targetName),
       normalizeConfig: (parsed, ctx) => normalizeApi(parsed as ApiTarget, ctx),
     });
+    api.registerResultPresenter({
+      type: "api",
+      toViewModel(result, meta) {
+        return { kind: "call-result", content: result, meta };
+      },
+    });
     api.registerContribution({
       type: "api",
       listRenderer: async (name, target, opts: ListOpts) => {

@@ -8,6 +8,12 @@ export const extension: ClipExtension = {
   name: "builtin:cli",
   init(api) {
     api.registerTargetType({ type: "cli", schema: cliTargetSchema, executor: executeCli });
+    api.registerResultPresenter({
+      type: "cli",
+      toViewModel(result, meta) {
+        return { kind: "call-result", content: result, meta };
+      },
+    });
     api.registerContribution({
       type: "cli",
       listRenderer: async (name, target, opts: ListOpts) => {

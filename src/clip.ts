@@ -24,8 +24,8 @@ import { matchCommand } from "./pipeline/03-match-command.ts";
 import { bindTarget } from "./pipeline/04-bind-target.ts";
 import { resolveProfileStage } from "./pipeline/05-resolve-profile.ts";
 import type { MatchedCommand, TargetInvocationHandle } from "./pipeline/types.ts";
+import { outputRegistry } from "./output-registry.ts";
 import { printAndExit } from "./utils/errors.ts";
-import { formatOutput } from "./utils/output.ts";
 import { formatToolHelp } from "./utils/tool-args.ts";
 
 const registry = createDefaultRegistry();
@@ -36,7 +36,7 @@ function registerInternalCommands(reg: Registry): void {
   const ext: ClipExtension = {
     name: "builtin:internal-commands",
     init(api) {
-      api.registerInternalCommand("config",     async ({ args }) => { await runConfigCmd(args); });
+      api.registerInternalCommand("config",     async ({ args }) => { await runConfigCmd(args, reg); });
       api.registerInternalCommand("list",       async () => { await runList(reg); });
       api.registerInternalCommand("add",        async ({ args }) => { await runAdd(args, reg); });
       api.registerInternalCommand("remove",     async ({ args }) => { await runRemove(args); });
@@ -193,8 +193,12 @@ async function main(): Promise<number> {
   if (shouldPassthrough) {
     return result.exitCode;
   }
-  const jMode = type === "graphql" ? jsonMode : effectiveJsonMode;
-  return formatOutput(result, jMode ? "json" : "plain");
+
+  const lateFlags = invocation.lateFlags;
+  const format = lateFlags.format ?? (effectiveJsonMode ? "json" : "plain");
+  const meta = { target: invocation.token, durationMs: 0, format };
+  await outputRegistry.render(result, type, meta, format);
+  return result.exitCode;
 }
 
 main()

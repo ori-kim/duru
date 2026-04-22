@@ -30,7 +30,7 @@ export function setInternalVerbSet(verbs: Set<string>): void {
   _internalVerbSet = verbs;
 }
 
-const LATE_FLAG_SET = new Set(["--dry-run", "--json", "--pipe", "--debug"]);
+const LATE_FLAG_SET = new Set(["--dry-run", "--json", "--pipe", "--debug", "--format"]);
 
 // cli/parser.ts re-export 호환용 — process.exit 포함 기존 동작 유지
 export function parseGlobalFlags(argv: string[]): {
@@ -147,14 +147,21 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
   let effectiveDryRun = dryRun;
   let effectiveJsonMode = jsonMode;
   let effectivePipeMode = pipeMode;
+  let effectiveFormat: string | undefined;
   const filteredArgs: string[] = [];
 
-  for (const a of rawTargetArgs) {
-    if (LATE_FLAG_SET.has(a)) {
-      if (a === "--dry-run") effectiveDryRun = true;
-      else if (a === "--json") effectiveJsonMode = true;
-      else if (a === "--pipe") effectivePipeMode = true;
-      else if (a === "--debug") process.env["CLIP_EXT_TRACE"] = "1";
+  for (let i = 0; i < rawTargetArgs.length; i++) {
+    const a = rawTargetArgs[i] ?? "";
+    if (a === "--dry-run") {
+      effectiveDryRun = true;
+    } else if (a === "--json") {
+      effectiveJsonMode = true;
+    } else if (a === "--pipe") {
+      effectivePipeMode = true;
+    } else if (a === "--debug") {
+      process.env["CLIP_EXT_TRACE"] = "1";
+    } else if (a === "--format") {
+      effectiveFormat = rawTargetArgs[++i] ?? "plain";
     } else {
       filteredArgs.push(a);
     }
@@ -168,7 +175,12 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
     baseName,
     explicitProfile,
     userArgs: Object.freeze(filteredArgs) as readonly string[],
-    lateFlags: { jsonMode: effectiveJsonMode, pipeMode: effectivePipeMode, dryRun: effectiveDryRun },
+    lateFlags: {
+      jsonMode: effectiveJsonMode,
+      pipeMode: effectivePipeMode,
+      dryRun: effectiveDryRun,
+      ...(effectiveFormat !== undefined ? { format: effectiveFormat } : {}),
+    },
     configPath,
     internalVerb,
   };

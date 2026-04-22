@@ -25,6 +25,12 @@ export const extension: ClipExtension = {
       normalizeConfig: (parsed, ctx) => normalizeGraphql(parsed as GraphqlTarget, ctx),
       aclRule: { skipSubcommands: ["describe", "types"] },
     });
+    api.registerResultPresenter({
+      type: "graphql",
+      toViewModel(result, meta) {
+        return { kind: "call-result", content: result, meta };
+      },
+    });
     api.registerContribution({
       type: "graphql",
       listRenderer: async (name, target, opts: ListOpts) => {
