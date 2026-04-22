@@ -1,11 +1,8 @@
 {
   "name": "clip",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "type": "module",
   "workspaces": ["apps/*", "packages/*", "extensions/*"],
-  "bin": {
-    "clip": "./clip"
-  },
   "scripts": {
     "dev": "bun apps/clip/src/main.ts",
     "test": "bun test",
