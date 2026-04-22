@@ -57,11 +57,29 @@ export type AnySchema<T = unknown> = {
   safeParse: (input: unknown) => ParseResult<T>;
 };
 
+export type NormalizeCtx = {
+  /** configDir: target의 config.yml이 있는 디렉터리 절대 경로 */
+  configDir: string;
+  /** env: 이 target에 적용된 환경 변수 (global + workspace + target .env 병합 결과) */
+  env: Record<string, string>;
+};
+
 export type TargetTypeDef<T = unknown> = {
   type: string;
   schema: AnySchema<T>;
   executor: (target: T, ctx: ExecutorContext) => Promise<TargetResult>;
   describeTools?: (target: T, ctx: { targetName: string; headers?: Record<string, string> }) => Promise<Tool[] | null>;
+  /**
+   * normalizeConfig: schema 검증 이후, Config에 저장하기 직전에 호출.
+   * env 치환·경로 해석 등 builtin별 후처리를 여기에 구현한다.
+   * 반환값이 없으면 schema 검증 결과를 그대로 사용한다.
+   */
+  normalizeConfig?: (parsed: T, ctx: NormalizeCtx) => T;
+  /**
+   * aclRule.skipSubcommands: ACL 검사를 건너뛸 subcommand 목록.
+   * dispatch에서 shouldCheckAcl 판단에 사용된다.
+   */
+  aclRule?: { skipSubcommands?: string[] };
 };
 
 export type HookOpts = {

@@ -1,16 +1,18 @@
 import { listBound } from "../commands/bind.ts";
 import { getAuthStatus } from "../commands/oauth.ts";
-import type { ApiTarget, CliTarget, GraphqlTarget, GrpcTarget, McpTarget, ScriptTarget } from "../config.ts";
 import { getActiveWorkspace, loadConfig } from "../config.ts";
 
 export function formatAcl(
-  target: CliTarget | McpTarget | ApiTarget | GrpcTarget | GraphqlTarget | ScriptTarget,
+  target: Record<string, unknown>,
 ): string {
+  const allow = target["allow"] as string[] | undefined;
+  const deny = target["deny"] as string[] | undefined;
+  const acl = target["acl"] as Record<string, unknown> | undefined;
   const parts: string[] = [];
-  if (target.allow && target.allow.length > 0) parts.push(`allow: ${target.allow.join(",")}`);
-  if (target.deny && target.deny.length > 0) parts.push(`deny: ${target.deny.join(",")}`);
-  if (target.acl) {
-    const keys = Object.keys(target.acl);
+  if (allow && allow.length > 0) parts.push(`allow: ${allow.join(",")}`);
+  if (deny && deny.length > 0) parts.push(`deny: ${deny.join(",")}`);
+  if (acl) {
+    const keys = Object.keys(acl);
     parts.push(`acl: [${keys.join(",")}]`);
   }
   return parts.length > 0 ? `  (${parts.join("  ")})` : "";
@@ -18,12 +20,12 @@ export function formatAcl(
 
 export async function runList(): Promise<void> {
   const config = await loadConfig();
-  const cliEntries = Object.entries(config.cli);
-  const mcpEntries = Object.entries(config.mcp);
-  const apiEntries = Object.entries(config.api);
-  const grpcEntries = Object.entries(config.grpc);
-  const graphqlEntries = Object.entries(config.graphql);
-  const scriptEntries = Object.entries(config.script);
+  const cliEntries = Object.entries((config.targets["cli"] ?? {}) as Record<string, Record<string, unknown>>);
+  const mcpEntries = Object.entries((config.targets["mcp"] ?? {}) as Record<string, Record<string, unknown>>);
+  const apiEntries = Object.entries((config.targets["api"] ?? {}) as Record<string, Record<string, unknown>>);
+  const grpcEntries = Object.entries((config.targets["grpc"] ?? {}) as Record<string, Record<string, unknown>>);
+  const graphqlEntries = Object.entries((config.targets["graphql"] ?? {}) as Record<string, Record<string, unknown>>);
+  const scriptEntries = Object.entries((config.targets["script"] ?? {}) as Record<string, Record<string, unknown>>);
   const extEntries = Object.entries(config._ext ?? {}).filter(([, m]) => Object.keys(m).length > 0);
 
   if (
@@ -76,30 +78,31 @@ export async function runList(): Promise<void> {
   if (cliEntries.length > 0) {
     printHeader("cli");
     for (const [name, b] of [...cliEntries].sort(([a], [b]) => a.localeCompare(b))) {
-      const profileTag = b.active ? ` @${b.active}` : "";
-      console.log(`  ${nm("cli", name)} ${b.command}${profileTag}${formatAcl(b)}${bind(name)}${wsTag(name)}`);
+      const profileTag = b["active"] ? ` @${b["active"]}` : "";
+      console.log(`  ${nm("cli", name)} ${b["command"]}${profileTag}${formatAcl(b)}${bind(name)}${wsTag(name)}`);
     }
   }
 
   if (mcpEntries.length > 0) {
     printHeader("mcp");
     for (const [name, b] of [...mcpEntries].sort(([a], [b]) => a.localeCompare(b))) {
-      if (b.transport === "stdio") {
-        const profileTag = b.active ? ` @${b.active}` : "";
-        console.log(`  ${nm("mcp", name)} stdio: ${b.command}${profileTag}${formatAcl(b)}${bind(name)}${wsTag(name)}`);
+      if (b["transport"] === "stdio") {
+        const profileTag = b["active"] ? ` @${b["active"]}` : "";
+        console.log(`  ${nm("mcp", name)} stdio: ${b["command"]}${profileTag}${formatAcl(b)}${bind(name)}${wsTag(name)}`);
       } else {
         const authStatus = await getAuthStatus(name);
+        const auth = b["auth"];
         const statusTag = authStatus
           ? c("2", `  [${authStatus}]`)
-          : b.auth === "oauth"
+          : auth === "oauth"
             ? c("2", "  [not authenticated]")
-            : b.auth === "apikey"
+            : auth === "apikey"
               ? c("2", "  [api key]")
               : c("2", "  [no auth]");
-        const transportLabel = b.transport === "sse" ? "sse: " : "";
-        const profileTag = b.active ? ` @${b.active}` : "";
+        const transportLabel = b["transport"] === "sse" ? "sse: " : "";
+        const profileTag = b["active"] ? ` @${b["active"]}` : "";
         console.log(
-          `  ${nm("mcp", name)} ${transportLabel}${b.url}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`,
+          `  ${nm("mcp", name)} ${transportLabel}${b["url"]}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`,
         );
       }
     }
@@ -109,16 +112,18 @@ export async function runList(): Promise<void> {
     printHeader("api");
     for (const [name, b] of [...apiEntries].sort(([a], [b]) => a.localeCompare(b))) {
       const authStatus = await getAuthStatus(name, "api");
+      const auth = b["auth"];
       const statusTag = authStatus
         ? c("2", `  [${authStatus}]`)
-        : b.auth === "oauth"
+        : auth === "oauth"
           ? c("2", "  [not authenticated]")
-          : b.auth === "apikey"
+          : auth === "apikey"
             ? c("2", "  [api key]")
             : c("2", "  [no auth]");
-      const profileTag = b.active ? ` @${b.active}` : "";
+      const profileTag = b["active"] ? ` @${b["active"]}` : "";
+      const url = (b["baseUrl"] ?? b["openapiUrl"] ?? "") as string;
       console.log(
-        `  ${nm("api", name)} ${b.baseUrl ?? b.openapiUrl ?? ""}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`,
+        `  ${nm("api", name)} ${url}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`,
       );
     }
   }
@@ -126,40 +131,43 @@ export async function runList(): Promise<void> {
   if (grpcEntries.length > 0) {
     printHeader("grpc");
     for (const [name, b] of [...grpcEntries].sort(([a], [b]) => a.localeCompare(b))) {
-      const authStatus = b.oauth ? await getAuthStatus(name, "grpc") : null;
+      const authStatus = b["oauth"] ? await getAuthStatus(name, "grpc") : null;
+      const metadata = b["metadata"] as Record<string, string> | undefined;
       const statusTag = authStatus
         ? c("2", `  [${authStatus}]`)
-        : b.oauth
+        : b["oauth"]
           ? c("2", "  [not authenticated]")
-          : b.metadata?.["authorization"]
+          : metadata?.["authorization"]
             ? c("2", "  [api key]")
             : c("2", "  [no auth]");
-      const profileTag = b.active ? ` @${b.active}` : "";
-      console.log(`  ${nm("grpc", name)} ${b.address}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`);
+      const profileTag = b["active"] ? ` @${b["active"]}` : "";
+      console.log(`  ${nm("grpc", name)} ${b["address"]}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`);
     }
   }
 
   if (graphqlEntries.length > 0) {
     printHeader("graphql");
     for (const [name, b] of [...graphqlEntries].sort(([a], [b]) => a.localeCompare(b))) {
-      const authStatus = b.oauth ? await getAuthStatus(name, "graphql") : null;
+      const authStatus = b["oauth"] ? await getAuthStatus(name, "graphql") : null;
+      const headers = b["headers"] as Record<string, string> | undefined;
       const statusTag = authStatus
         ? c("2", `  [${authStatus}]`)
-        : b.oauth
+        : b["oauth"]
           ? c("2", "  [not authenticated]")
-          : b.headers?.["authorization"]
+          : headers?.["authorization"]
             ? c("2", "  [api key]")
             : c("2", "  [no auth]");
-      const profileTag = b.active ? ` @${b.active}` : "";
-      console.log(`  ${nm("graphql", name)} ${b.endpoint}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`);
+      const profileTag = b["active"] ? ` @${b["active"]}` : "";
+      console.log(`  ${nm("graphql", name)} ${b["endpoint"]}${profileTag}${formatAcl(b)}${statusTag}${bind(name)}${wsTag(name)}`);
     }
   }
 
   if (scriptEntries.length > 0) {
     printHeader("script");
     for (const [name, b] of [...scriptEntries].sort(([a], [b]) => a.localeCompare(b))) {
-      const cmdCount = Object.keys(b.commands ?? {}).length;
-      const desc = b.description ? ` — ${b.description}` : "";
+      const commands = b["commands"] as Record<string, unknown> | undefined;
+      const cmdCount = Object.keys(commands ?? {}).length;
+      const desc = b["description"] ? ` — ${b["description"]}` : "";
       console.log(`  ${nm("script", name)} ${cmdCount} command(s)${desc}${formatAcl(b)}${bind(name)}${wsTag(name)}`);
     }
   }

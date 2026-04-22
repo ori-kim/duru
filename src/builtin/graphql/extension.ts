@@ -1,6 +1,15 @@
-import type { ClipExtension } from "../../extension.ts";
+import type { ClipExtension, NormalizeCtx } from "../../extension.ts";
+import { subProfiles, subRecord } from "../../utils/env-sub.ts";
 import { describeGraphqlTools, executeGraphql } from "./executor.ts";
-import { graphqlTargetSchema } from "./schema.ts";
+import { type GraphqlTarget, graphqlTargetSchema } from "./schema.ts";
+
+function normalizeGraphql(t: GraphqlTarget, ctx: NormalizeCtx): GraphqlTarget {
+  return {
+    ...t,
+    headers: subRecord(t.headers, ctx.env),
+    profiles: subProfiles(t.profiles, ctx.env, ["headers"]),
+  };
+}
 
 export const extension: ClipExtension = {
   name: "builtin:graphql",
@@ -10,6 +19,8 @@ export const extension: ClipExtension = {
       schema: graphqlTargetSchema,
       executor: executeGraphql,
       describeTools: (target, { targetName, headers }) => describeGraphqlTools(target, targetName, headers),
+      normalizeConfig: (parsed, ctx) => normalizeGraphql(parsed as GraphqlTarget, ctx),
+      aclRule: { skipSubcommands: ["describe", "types"] },
     });
   },
 };

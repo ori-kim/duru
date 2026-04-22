@@ -1,6 +1,15 @@
-import type { ClipExtension } from "../../extension.ts";
+import type { ClipExtension, NormalizeCtx } from "../../extension.ts";
+import { subProfiles, subRecord } from "../../utils/env-sub.ts";
 import { describeApiTools, executeApi } from "./executor.ts";
-import { apiTargetSchema } from "./schema.ts";
+import { type ApiTarget, apiTargetSchema } from "./schema.ts";
+
+function normalizeApi(t: ApiTarget, ctx: NormalizeCtx): ApiTarget {
+  return {
+    ...t,
+    headers: subRecord(t.headers, ctx.env),
+    profiles: subProfiles(t.profiles, ctx.env, ["headers"]),
+  };
+}
 
 export const extension: ClipExtension = {
   name: "builtin:api",
@@ -10,6 +19,7 @@ export const extension: ClipExtension = {
       schema: apiTargetSchema,
       executor: executeApi,
       describeTools: (target, { targetName }) => describeApiTools(target, targetName),
+      normalizeConfig: (parsed, ctx) => normalizeApi(parsed as ApiTarget, ctx),
     });
   },
 };

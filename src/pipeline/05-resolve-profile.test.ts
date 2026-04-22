@@ -59,14 +59,11 @@ async function makeRegistry(
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeConfig(type: string, name: string, target: any) {
-  const base = { cli: {}, mcp: {}, api: {}, grpc: {}, graphql: {}, script: {}, _ext: {} };
-  if (type === "cli") return { ...base, cli: { [name]: target } };
-  if (type === "mcp") return { ...base, mcp: { [name]: target } };
-  if (type === "api") return { ...base, api: { [name]: target } };
-  if (type === "grpc") return { ...base, grpc: { [name]: target } };
-  if (type === "graphql") return { ...base, graphql: { [name]: target } };
-  if (type === "script") return { ...base, script: { [name]: target } };
-  return { ...base, _ext: { [type]: { [name]: target } } };
+  const builtinTypes = new Set(["cli", "mcp", "api", "grpc", "graphql", "script"]);
+  if (builtinTypes.has(type)) {
+    return { targets: { [type]: { [name]: target } }, _ext: {} };
+  }
+  return { targets: {}, _ext: { [type]: { [name]: target } } };
 }
 
 // --- profile 없음 → identity ---

@@ -1,7 +1,6 @@
 import { checkAcl } from "./acl.ts";
 import { createDefaultRegistry } from "./builtin-loader.ts";
 import { type HasAliases, resolveAlias } from "./commands/alias.ts";
-import { TARGET_TYPES } from "./config.ts";
 import type { Config, ResolvedTarget } from "./config.ts";
 import type { ErrorCtx, ExecutorContext, TargetResult } from "./extension.ts";
 import type { HookCtx, Registry } from "./extension.ts";
@@ -18,8 +17,6 @@ export type DispatchInput = {
   env: Record<string, string>;
 };
 
-const BUILTIN_TYPES = new Set(TARGET_TYPES as readonly string[]);
-
 // lazy default registry: builtin들의 init은 동기적이므로 첫 dispatch에서 초기화
 let _defaultRegistry: Registry | undefined;
 
@@ -32,13 +29,13 @@ async function resolveRegistry(override?: Registry): Promise<Registry> {
   return _defaultRegistry;
 }
 
-function shouldCheckAcl(type: string, subcommand: string): boolean {
+function shouldCheckAcl(skipSubcommands: string[] | undefined, type: string, subcommand: string): boolean {
   if (subcommand === "tools" && type !== "cli") return false;
-  if ((type === "graphql" || type === "grpc") && (subcommand === "describe" || subcommand === "types")) return false;
+  if (skipSubcommands && skipSubcommands.includes(subcommand)) return false;
   return true;
 }
 
-export async function dispatch(_cfg: Config, input: DispatchInput, registry?: Registry): Promise<TargetResult> {
+export async function dispatch(cfg: Config, input: DispatchInput, registry?: Registry): Promise<TargetResult> {
   const reg = await resolveRegistry(registry);
   const { type, target } = input.resolvedTarget;
 
@@ -75,8 +72,11 @@ export async function dispatch(_cfg: Config, input: DispatchInput, registry?: Re
   try {
     await reg.runHooks("toolcall", baseCtx);
 
+    const def = reg.getTargetType(type);
+    if (!def) throw new Error(`Unknown target type: "${type}"`);
+
     // ACL 검사
-    if (shouldCheckAcl(type, subcommand)) {
+    if (shouldCheckAcl(def.aclRule?.skipSubcommands, type, subcommand)) {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         checkAcl(target as any, subcommand, args[0], input.targetName);
@@ -114,13 +114,12 @@ export async function dispatch(_cfg: Config, input: DispatchInput, registry?: Re
       passthrough: input.passthrough,
     };
 
-    const def = reg.getTargetType(type);
-    if (!def) throw new Error(`Unknown target type: "${type}"`);
-
     // extension 타겟은 raw config를 dispatch 시에 schema로 검증
+    // builtin 타겟은 loadConfig()에서 이미 검증+normalizeConfig 완료된 상태
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let validTarget: any = target;
-    if (!BUILTIN_TYPES.has(type)) {
+    const isExtension = cfg._ext?.[type]?.[input.targetName] !== undefined;
+    if (isExtension) {
       const parsed = def.schema.safeParse(target);
       if (!parsed.success) throw new Error(`Invalid config for "${input.targetName}": ${parsed.error.message}`);
       validTarget = parsed.data;

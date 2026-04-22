@@ -6,7 +6,7 @@ import type { ExecutorContext, TargetResult } from "./extension.ts";
 
 // --- helpers ---
 
-const emptyCfg: Config = { cli: {}, mcp: {}, api: {}, grpc: {}, graphql: {}, script: {}, _ext: {} };
+const emptyCfg: Config = { targets: {}, _ext: {} };
 
 async function makeRegistry(
   fn: (target: unknown, ctx: ExecutorContext) => Promise<TargetResult>,

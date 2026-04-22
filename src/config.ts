@@ -1,20 +1,20 @@
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { homedir } from "os";
-import { dirname, isAbsolute, join, resolve } from "path";
+import { join } from "path";
 import YAML from "yaml";
-import { type ApiTarget, apiTargetSchema } from "./builtin/api/schema.ts";
-import { type CliTarget, cliTargetSchema } from "./builtin/cli/schema.ts";
-import { type GraphqlTarget, graphqlTargetSchema } from "./builtin/graphql/schema.ts";
-import { type GrpcTarget, grpcTargetSchema } from "./builtin/grpc/schema.ts";
+import { type ApiTarget } from "./builtin/api/schema.ts";
+import { type CliTarget } from "./builtin/cli/schema.ts";
+import { type GraphqlTarget } from "./builtin/graphql/schema.ts";
+import { type GrpcTarget } from "./builtin/grpc/schema.ts";
 import {
   type McpHttpTarget,
   type McpSseTarget,
   type McpStdioTarget,
   type McpTarget,
-  mcpTargetSchema,
 } from "./builtin/mcp/schema.ts";
-import { type ScriptCommandDef, type ScriptTarget, scriptTargetSchema } from "./builtin/script/schema.ts";
-import type { TargetResult } from "./extension.ts";
+import { type ScriptCommandDef, type ScriptTarget } from "./builtin/script/schema.ts";
+import { createDefaultRegistry } from "./builtin-loader.ts";
+import type { NormalizeCtx, TargetResult, TargetTypeDef } from "./extension.ts";
 import { die } from "./utils/errors.ts";
 import {
   type AclNode,
@@ -47,38 +47,17 @@ export type {
 export const TARGET_TYPES = ["cli", "mcp", "api", "grpc", "graphql", "script"] as const;
 export type TargetType = (typeof TARGET_TYPES)[number];
 
-export const TARGET_SCHEMAS = {
-  cli: cliTargetSchema,
-  mcp: mcpTargetSchema,
-  api: apiTargetSchema,
-  grpc: grpcTargetSchema,
-  graphql: graphqlTargetSchema,
-  script: scriptTargetSchema,
-} as const;
-
 // --- Types ---
 
 export type Config = {
   headers?: Record<string, string>;
-  cli: Record<string, CliTarget>;
-  mcp: Record<string, McpTarget>;
-  api: Record<string, ApiTarget>;
-  grpc: Record<string, GrpcTarget>;
-  graphql: Record<string, GraphqlTarget>;
-  script: Record<string, ScriptTarget>;
+  targets: Record<string, Record<string, unknown>>; // type -> name -> normalized config
   _ext: Record<string, Record<string, unknown>>; // extension 타겟: type -> name -> raw config
   _sources?: Record<string, string | null>; // name -> workspace name (null = global)
   _configDirs?: Record<string, string>; // name -> absolute configDir path
 };
 
-export type ResolvedTarget =
-  | { type: "cli"; target: CliTarget }
-  | { type: "mcp"; target: McpTarget }
-  | { type: "api"; target: ApiTarget }
-  | { type: "grpc"; target: GrpcTarget }
-  | { type: "graphql"; target: GraphqlTarget }
-  | { type: "script"; target: ScriptTarget }
-  | { type: string; target: unknown }; // extension 타겟
+export type ResolvedTarget = { type: string; target: unknown };
 
 // --- Paths ---
 
@@ -145,44 +124,19 @@ async function loadDotEnv(path: string): Promise<Record<string, string>> {
   return env;
 }
 
-function subRecord(
-  r: Record<string, string> | undefined,
-  env: Record<string, string>,
-): Record<string, string> | undefined {
-  if (!r) return r;
-  const merged = { ...process.env, ...env } as Record<string, string>;
-  return Object.fromEntries(
-    Object.entries(r).map(([k, v]) => [k, v.replace(/\$\{([^}]+)\}/g, (_, key) => merged[key] ?? "")]),
-  );
-}
-
-function subProfiles<P extends { headers?: Record<string, string>; metadata?: Record<string, string> }>(
-  profiles: Record<string, P> | undefined,
-  env: Record<string, string>,
-  fields: ReadonlyArray<"headers" | "metadata">,
-): Record<string, P> | undefined {
-  if (!profiles) return profiles;
-  return Object.fromEntries(
-    Object.entries(profiles).map(([name, p]) => {
-      const next = { ...p };
-      for (const f of fields) {
-        const r = next[f];
-        if (r) (next as Record<string, unknown>)[f] = subRecord(r, env);
-      }
-      return [name, next];
-    }),
-  );
-}
-
-function resolveScriptPath(file: string, baseDir: string): string {
-  if (file.startsWith("~/") || file === "~") {
-    return join(homedir(), file.slice(1));
-  }
-  if (isAbsolute(file)) return file;
-  return resolve(baseDir, file);
-}
-
 // --- Load ---
+
+// Lazy registry for normalizeConfig — initialized once per process.
+let _configRegistry: { getTargetType: (t: string) => TargetTypeDef | undefined } | undefined;
+
+async function getConfigRegistry(): Promise<{ getTargetType: (t: string) => TargetTypeDef | undefined }> {
+  if (!_configRegistry) {
+    const reg = createDefaultRegistry();
+    await reg.initAll();
+    _configRegistry = reg;
+  }
+  return _configRegistry;
+}
 
 export async function loadConfig(): Promise<Config> {
   const globalEnv = await loadDotEnv(join(CONFIG_DIR, ".env"));
@@ -190,19 +144,26 @@ export async function loadConfig(): Promise<Config> {
   const wsEnv = ws ? await loadDotEnv(join(getWorkspaceDir(ws), ".env")) : {};
   const baseEnv = { ...globalEnv, ...wsEnv };
 
-  const cli: Record<string, CliTarget> = {};
-  const mcp: Record<string, McpTarget> = {};
-  const api: Record<string, ApiTarget> = {};
-  const grpc: Record<string, GrpcTarget> = {};
-  const graphql: Record<string, GraphqlTarget> = {};
-  const script: Record<string, ScriptTarget> = {};
+  const reg = await getConfigRegistry();
+
+  const targets: Record<string, Record<string, unknown>> = {};
   const _ext: Record<string, Record<string, unknown>> = {};
   const _sources: Record<string, string | null> = {};
   const _configDirs: Record<string, string> = {};
 
   // Process each target dir: global first, workspace last (workspace overrides global on same name).
   for (const { dir: targetDirBase, workspace: srcWorkspace } of getTargetDirs()) {
-    for (const type of TARGET_TYPES) {
+    // Enumerate all type subdirectories under this target dir.
+    let allTypeDirs: string[];
+    try {
+      allTypeDirs = readdirSync(targetDirBase, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+    } catch {
+      allTypeDirs = [];
+    }
+
+    for (const type of allTypeDirs) {
       const typeDir = join(targetDirBase, type);
       let names: string[];
       try {
@@ -213,105 +174,55 @@ export async function loadConfig(): Promise<Config> {
         continue;
       }
 
+      // Registry에 등록된 타입이면 builtin/extension 공통 normalizeConfig 경로,
+      // 등록되지 않은 타입이면 raw 저장 (dispatch 시 lazy schema 검증).
+      const def = reg.getTargetType(type);
+
       for (const name of names) {
-        const configPath = join(typeDir, name, "config.yml");
+        const configDir = join(typeDir, name);
+        const configPath = join(configDir, "config.yml");
         const file = Bun.file(configPath);
         if (!(await file.exists())) continue;
 
-        let parsed: unknown;
+        let rawParsed: unknown;
         try {
-          parsed = YAML.parse(await file.text());
+          rawParsed = YAML.parse(await file.text());
         } catch (e) {
           die(`Failed to parse config at ${configPath}: ${e}`);
         }
 
-        const result = TARGET_SCHEMAS[type].safeParse(parsed);
+        _sources[name] = srcWorkspace;
+        _configDirs[name] = configDir;
+
+        if (!def) {
+          // Unregistered type: store raw config, schema validation deferred to dispatch.
+          if (!_ext[type]) _ext[type] = {};
+          _ext[type]![name] = rawParsed as unknown;
+          continue;
+        }
+
+        // Registered type: validate schema then call normalizeConfig.
+        const result = def.schema.safeParse(rawParsed);
         if (!result.success) {
           die(`Invalid config at ${configPath}:\n${result.error.message}`);
         }
 
-        const targetEnv = await loadDotEnv(join(typeDir, name, ".env"));
+        const targetEnv = await loadDotEnv(join(configDir, ".env"));
         const base = srcWorkspace ? baseEnv : globalEnv;
         const env = { ...base, ...targetEnv };
 
-        _sources[name] = srcWorkspace;
-        _configDirs[name] = join(typeDir, name);
+        const normalizeCtx: NormalizeCtx = { configDir, env };
+        const normalized = def.normalizeConfig
+          ? def.normalizeConfig(result.data as never, normalizeCtx)
+          : result.data;
 
-        if (type === "cli") {
-          cli[name] = result.data as CliTarget;
-        } else if (type === "mcp") {
-          const t = result.data as McpTarget;
-          mcp[name] =
-            t.transport === "stdio"
-              ? t
-              : { ...t, headers: subRecord(t.headers, env), profiles: subProfiles(t.profiles, env, ["headers"]) };
-        } else if (type === "api") {
-          const t = result.data as ApiTarget;
-          api[name] = { ...t, headers: subRecord(t.headers, env), profiles: subProfiles(t.profiles, env, ["headers"]) };
-        } else if (type === "grpc") {
-          const t = result.data as GrpcTarget;
-          grpc[name] = {
-            ...t,
-            metadata: subRecord(t.metadata, env),
-            reflectMetadata: subRecord(t.reflectMetadata, env),
-            profiles: subProfiles(t.profiles, env, ["metadata"]),
-          };
-        } else if (type === "graphql") {
-          const t = result.data as GraphqlTarget;
-          graphql[name] = {
-            ...t,
-            headers: subRecord(t.headers, env),
-            profiles: subProfiles(t.profiles, env, ["headers"]),
-          };
-        } else if (type === "script") {
-          const t = result.data as ScriptTarget;
-          const configDir = dirname(configPath);
-          const resolvedCommands: ScriptTarget["commands"] = {};
-          for (const [cmd, def] of Object.entries(t.commands)) {
-            resolvedCommands[cmd] = def.file ? { ...def, file: resolveScriptPath(def.file, configDir) } : def;
-          }
-          script[name] = { ...t, commands: resolvedCommands };
-        }
-      }
-    }
-
-    // Extension target types for this dir
-    const builtinSet = new Set<string>(TARGET_TYPES);
-    let extTypeDirs: string[];
-    try {
-      extTypeDirs = readdirSync(targetDirBase, { withFileTypes: true })
-        .filter((d) => d.isDirectory() && !builtinSet.has(d.name))
-        .map((d) => d.name);
-    } catch {
-      extTypeDirs = [];
-    }
-
-    for (const extType of extTypeDirs) {
-      const typeDir = join(targetDirBase, extType);
-      let names: string[];
-      try {
-        names = readdirSync(typeDir, { withFileTypes: true })
-          .filter((d) => d.isDirectory())
-          .map((d) => d.name);
-      } catch {
-        continue;
-      }
-      if (!_ext[extType]) _ext[extType] = {};
-      for (const name of names) {
-        const configPath = join(typeDir, name, "config.yml");
-        const file = Bun.file(configPath);
-        if (!(await file.exists())) continue;
-        try {
-          _ext[extType]![name] = YAML.parse(await file.text()) as unknown;
-          _sources[name] = srcWorkspace;
-        } catch (e) {
-          process.stderr.write(`clip: warning: failed to parse ${configPath}: ${e}\n`);
-        }
+        if (!targets[type]) targets[type] = {};
+        targets[type]![name] = normalized as unknown;
       }
     }
   }
 
-  return { cli, mcp, api, grpc, graphql, script, _ext, _sources, _configDirs };
+  return { targets, _ext, _sources, _configDirs };
 }
 
 // --- Management helpers ---
@@ -333,16 +244,8 @@ export async function addTarget(
   const targetDirBase = ws ? join(getWorkspaceDir(ws), "target") : join(CONFIG_DIR, "target");
 
   const config = await loadConfig();
-  const allNames = new Set([
-    ...Object.keys(config.cli),
-    ...Object.keys(config.mcp),
-    ...Object.keys(config.api),
-    ...Object.keys(config.grpc),
-    ...Object.keys(config.graphql),
-    ...Object.keys(config.script),
-    ...Object.values(config._ext ?? {}).flatMap((targets) => Object.keys(targets)),
-  ]);
-  if (allNames.has(name) && !config[type]?.[name]) {
+  const allNames = getAllTargetNames(config);
+  if (allNames.has(name) && !(config.targets[type]?.[name])) {
     die(`Target name "${name}" is already used by another type. Choose a different name.`);
   }
 
@@ -357,7 +260,16 @@ export async function updateTarget(
 ): Promise<void> {
   const dirs = [...getTargetDirs()].reverse(); // workspace first
   for (const { dir: targetDirBase } of dirs) {
-    for (const type of TARGET_TYPES) {
+    // Enumerate all type subdirectories to find the target.
+    let typeDirs: string[];
+    try {
+      typeDirs = readdirSync(targetDirBase, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+    } catch {
+      typeDirs = [];
+    }
+    for (const type of typeDirs) {
       const configPath = join(targetDirBase, type, name, "config.yml");
       const file = Bun.file(configPath);
       if (!(await file.exists())) continue;
@@ -370,12 +282,12 @@ export async function updateTarget(
 }
 
 function hasGlobalTarget(name: string): boolean {
-  if (TARGET_TYPES.some((t) => existsSync(join(CONFIG_DIR, "target", t, name, "config.yml")))) return true;
   try {
-    const builtinSet = new Set<string>(TARGET_TYPES);
-    return readdirSync(join(CONFIG_DIR, "target"), { withFileTypes: true })
-      .filter((d) => d.isDirectory() && !builtinSet.has(d.name))
-      .some((d) => existsSync(join(CONFIG_DIR, "target", d.name, name, "config.yml")));
+    const globalTargetDir = join(CONFIG_DIR, "target");
+    const typeDirs = readdirSync(globalTargetDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+    return typeDirs.some((t) => existsSync(join(globalTargetDir, t, name, "config.yml")));
   } catch {
     return false;
   }
@@ -383,29 +295,18 @@ function hasGlobalTarget(name: string): boolean {
 
 export async function removeTarget(name: string): Promise<void> {
   const dirs = [...getTargetDirs()].reverse(); // workspace first
-  const builtinSet = new Set<string>(TARGET_TYPES);
 
   for (const { dir: targetDirBase, workspace } of dirs) {
-    for (const type of TARGET_TYPES) {
-      const dir = join(targetDirBase, type, name);
-      if (await Bun.file(join(dir, "config.yml")).exists()) {
-        await Bun.spawn(["rm", "-rf", dir]).exited;
-        if (workspace !== null && hasGlobalTarget(name)) {
-          console.warn(`warning: removed workspace copy of "${name}"; the global target is now active.`);
-        }
-        return;
-      }
-    }
-    let extTypeDirs: string[];
+    let typeDirs: string[];
     try {
-      extTypeDirs = readdirSync(targetDirBase, { withFileTypes: true })
-        .filter((d) => d.isDirectory() && !builtinSet.has(d.name))
+      typeDirs = readdirSync(targetDirBase, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
         .map((d) => d.name);
     } catch {
-      extTypeDirs = [];
+      typeDirs = [];
     }
-    for (const extType of extTypeDirs) {
-      const dir = join(targetDirBase, extType, name);
+    for (const type of typeDirs) {
+      const dir = join(targetDirBase, type, name);
       if (await Bun.file(join(dir, "config.yml")).exists()) {
         await Bun.spawn(["rm", "-rf", dir]).exited;
         if (workspace !== null && hasGlobalTarget(name)) {
@@ -418,15 +319,20 @@ export async function removeTarget(name: string): Promise<void> {
   die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }
 
+// getAllTargetNames returns the set of all registered target names across builtin and extension types.
+export function getAllTargetNames(config: Config): Set<string> {
+  return new Set([
+    ...Object.values(config.targets).flatMap((byName) => Object.keys(byName)),
+    ...Object.values(config._ext ?? {}).flatMap((byName) => Object.keys(byName)),
+  ]);
+}
+
 export function getTarget(config: Config, name: string): ResolvedTarget {
-  if (config.cli[name]) return { type: "cli", target: config.cli[name]! };
-  if (config.mcp[name]) return { type: "mcp", target: config.mcp[name]! };
-  if (config.api[name]) return { type: "api", target: config.api[name]! };
-  if (config.grpc[name]) return { type: "grpc", target: config.grpc[name]! };
-  if (config.graphql[name]) return { type: "graphql", target: config.graphql[name]! };
-  if (config.script[name]) return { type: "script", target: config.script[name]! };
-  for (const [extType, targets] of Object.entries(config._ext ?? {})) {
-    if (targets[name] !== undefined) return { type: extType, target: targets[name]! };
+  for (const [type, byName] of Object.entries(config.targets)) {
+    if (byName[name] !== undefined) return { type, target: byName[name]! };
+  }
+  for (const [extType, byName] of Object.entries(config._ext ?? {})) {
+    if (byName[name] !== undefined) return { type: extType, target: byName[name]! };
   }
   die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }

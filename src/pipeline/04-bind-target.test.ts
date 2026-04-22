@@ -45,15 +45,18 @@ async function makeRegistry(types: string[]): Promise<Registry> {
 
 const BUILTIN_TYPES = ["cli", "mcp", "api", "grpc", "graphql", "script"];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const notionTarget = { transport: "http", url: "https://mcp.notion.com/mcp", auth: false };
+
 const baseConfig: Config = {
   headers: {},
-  cli: { mygh: { command: "gh" } },
-  mcp: { notion: { transport: "http", url: "https://mcp.notion.com/mcp", auth: false } as any },
-  api: { petstore: { baseUrl: "https://petstore.example.com", openapiUrl: "https://petstore.example.com/spec.json", auth: false } as any },
-  grpc: { localgrpc: { address: "localhost:50051", plaintext: true } },
-  graphql: { gh: { endpoint: "https://api.github.com/graphql" } },
-  script: { lag: { commands: { run: { script: "echo hi" } } } },
+  targets: {
+    cli: { mygh: { command: "gh" } },
+    mcp: { notion: notionTarget },
+    api: { petstore: { baseUrl: "https://petstore.example.com", openapiUrl: "https://petstore.example.com/spec.json", auth: false } },
+    grpc: { localgrpc: { address: "localhost:50051", plaintext: true } },
+    graphql: { gh: { endpoint: "https://api.github.com/graphql" } },
+    script: { lag: { commands: { run: { script: "echo hi" } } } },
+  },
   _ext: { mytype: { mytarget: { host: "localhost" } } },
 };
 
@@ -62,7 +65,7 @@ const baseConfig: Config = {
 describe("builtin targets", () => {
   test.each(BUILTIN_TYPES)("%s target binds successfully", async (type) => {
     const reg = await makeRegistry(BUILTIN_TYPES);
-    const name = Object.keys(baseConfig[type as keyof Config] as Record<string, unknown>)[0]!;
+    const name = Object.keys((baseConfig.targets[type] ?? {}) as Record<string, unknown>)[0]!;
     const inv = makeInvocation(name);
     const bound = bindTarget(inv, baseConfig, reg) as unknown as BoundData;
 
@@ -124,7 +127,7 @@ describe("rawTarget passthrough", () => {
   test("rawTarget is the original config object", async () => {
     const reg = await makeRegistry(BUILTIN_TYPES);
     const bound = bindTarget(makeInvocation("notion"), baseConfig, reg) as unknown as BoundData;
-    expect(bound.rawTarget).toEqual(baseConfig.mcp["notion"]);
+    expect(bound.rawTarget).toEqual(notionTarget);
   });
 });
 

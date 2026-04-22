@@ -1,5 +1,5 @@
 import { basename, join } from "path";
-import { CONFIG_DIR, getActiveWorkspace, getTarget, loadConfig } from "../config.ts";
+import { CONFIG_DIR, getAllTargetNames, getActiveWorkspace, getTarget, loadConfig } from "../config.ts";
 import { die } from "../utils/errors.ts";
 
 export const BIND_DIR = join(CONFIG_DIR, "bin");
@@ -75,14 +75,7 @@ export async function runBind(args: string[]): Promise<void> {
   const flag = args[0];
   if (flag === "--all") {
     const config = await loadConfig();
-    const names = [
-      ...Object.keys(config.cli),
-      ...Object.keys(config.mcp),
-      ...Object.keys(config.api),
-      ...Object.keys(config.grpc),
-      ...Object.keys(config.graphql),
-      ...Object.keys(config.script),
-    ];
+    const names = [...getAllTargetNames(config)];
     if (names.length === 0) {
       console.log("No targets configured.");
       return;
