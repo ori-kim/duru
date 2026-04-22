@@ -4,6 +4,8 @@
 
 [한국어](README.ko.md)
 
+> **Pre-release:** clip is not yet production-ready. APIs and configuration formats may change without notice between versions.
+
 A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules, handle OAuth auth, and integrate with AI agents from one command.
 
 ## Table of Contents
@@ -161,6 +163,18 @@ bun run src/clip.ts --help
 bun run build   # → dist/
 bun test
 ```
+
+## Versioning
+
+clip uses **[HeadVer](https://techblog.lycorp.co.jp/ko/headver-new-versioning-system-for-product-teams)** — a versioning system designed for product teams by LY Corporation.
+
+Format: `Head.YearWeek.Build`
+
+| Field | Set by | Meaning |
+|-------|--------|---------|
+| `Head` | Manual | Increments with each meaningful release. `0` = pre-release. |
+| `YearWeek` | Auto | ISO 8601 year + week number (e.g. `2617` = 2026 week 17) |
+| `Build` | Auto | Git commit count — uniquely identifies the exact binary |
 
 ## License
 

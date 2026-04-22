@@ -2,6 +2,8 @@
 
 <img src="assets/icon.png" alt="clip icon" width="120" />
 
+> **프리릴리즈:** clip은 아직 상용 단계가 아닙니다. 버전 간 API나 설정 포맷이 예고 없이 변경될 수 있습니다.
+
 MCP 서버와 CLI 도구를 위한 통합 CLI 프록시 게이트웨이 — ACL 규칙 적용, OAuth 인증, AI 에이전트 통합을 하나의 커맨드로.
 
 ## 목차
@@ -142,6 +144,18 @@ bun run src/clip.ts --help
 bun run build   # → dist/
 bun test
 ```
+
+## 버저닝
+
+clip은 LY Corporation이 제안한 **[HeadVer](https://techblog.lycorp.co.jp/ko/headver-new-versioning-system-for-product-teams)** 버전 체계를 사용합니다.
+
+형식: `Head.YearWeek.Build`
+
+| 필드 | 설정 | 의미 |
+|------|------|------|
+| `Head` | 수동 | 의미 있는 릴리즈마다 증가. `0` = 프리릴리즈. |
+| `YearWeek` | 자동 | ISO 8601 연도 + 주차 (예: `2617` = 2026년 17주차) |
+| `Build` | 자동 | Git commit count — 정확한 바이너리를 식별 |
 
 ## 라이선스
 
