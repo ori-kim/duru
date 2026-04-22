@@ -181,6 +181,30 @@ async function cmdScaffold(args: string[]): Promise<void> {
     die(`Extension "${name}" already exists at ${extDir}`);
   }
 
+  // 매니페스트를 먼저 읽어 유효성 검증 — 파싱 실패 시 파일 생성 전 중단
+  let manifest: { extensions: unknown[] } = { extensions: [] };
+  if (existsSync(manifestPath)) {
+    let raw: string;
+    try {
+      raw = readFileSync(manifestPath, "utf8");
+    } catch (e) {
+      die(`Cannot read manifest at ${manifestPath}: ${e}`);
+    }
+    try {
+      const parsed = yamlParse(raw!) as typeof manifest;
+      if (parsed != null && typeof parsed !== "object") die(`Manifest at ${manifestPath} is not a valid YAML object`);
+      if (parsed != null) manifest = parsed;
+    } catch (e) {
+      die(`Manifest at ${manifestPath} contains invalid YAML — fix it before scaffolding: ${e}`);
+    }
+  } else {
+    mkdirSync(dirname(manifestPath), { recursive: true });
+  }
+  if (!Array.isArray(manifest.extensions)) manifest.extensions = [];
+
+  const alreadyExists = (manifest.extensions as Array<{ name: string }>).some((e) => e.name === name);
+
+  // 파일 생성
   mkdirSync(srcDir, { recursive: true });
 
   // extension.ts 스캐폴드
@@ -207,17 +231,7 @@ async function cmdScaffold(args: string[]): Promise<void> {
   const pkgJson = { private: true, devDependencies: { yaml: "*", zod: "*" } };
   writeFileSync(join(extDir, "package.json"), JSON.stringify(pkgJson, null, 2) + "\n", "utf8");
 
-  // extensions.yml에 entry 추가 (없으면 생성)
-  let manifest: { extensions: unknown[] } = { extensions: [] };
-  if (existsSync(manifestPath)) {
-    try {
-      manifest = yamlParse(readFileSync(manifestPath, "utf8")) as typeof manifest ?? manifest;
-    } catch { /* 무시 */ }
-  } else {
-    mkdirSync(dirname(manifestPath), { recursive: true });
-  }
-  if (!Array.isArray(manifest.extensions)) manifest.extensions = [];
-  const alreadyExists = (manifest.extensions as Array<{ name: string }>).some((e) => e.name === name);
+  // extensions.yml에 entry 추가
   if (!alreadyExists) {
     manifest.extensions.push(MANIFEST_ENTRY_TEMPLATE(name));
     writeFileSync(manifestPath, yamlStringify(manifest), "utf8");
