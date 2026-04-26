@@ -127,10 +127,17 @@ async function fetchResourceMetadata(serverUrl: string, hintUrl?: string): Promi
 }
 
 async function fetchASMetadata(authServer: string): Promise<ASMetadata> {
-  const base = authServer.replace(/\/$/, "");
+  const u = new URL(authServer);
+  const base = u.origin;
+  const path = u.pathname.replace(/\/$/, "");
+  const candidates: string[] = [];
   for (const suffix of ["/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"]) {
+    if (path) candidates.push(`${base}${suffix}${path}`);
+    candidates.push(`${base}${suffix}`);
+  }
+  for (const url of candidates) {
     try {
-      const resp = await fetch(`${base}${suffix}`);
+      const resp = await fetch(url);
       if (resp.ok) return (await resp.json()) as ASMetadata;
     } catch {
       // 다음 시도
@@ -230,6 +237,7 @@ async function exchangeCode(
   code: string,
   redirectUri: string,
   codeVerifier: string,
+  resource: string,
   clientSecret?: string,
 ): Promise<TokenResponse> {
   const params = new URLSearchParams({
@@ -238,6 +246,7 @@ async function exchangeCode(
     redirect_uri: redirectUri,
     client_id: clientId,
     code_verifier: codeVerifier,
+    resource,
   });
   if (clientSecret) params.set("client_secret", clientSecret);
 
@@ -261,6 +270,7 @@ async function doRefresh(stored: StoredAuth): Promise<TokenResponse | null> {
     grant_type: "refresh_token",
     refresh_token: stored.refresh_token,
     client_id: stored.client_id,
+    resource: stored.resource_url,
   });
   if (stored.client_secret) params.set("client_secret", stored.client_secret);
 
@@ -326,6 +336,7 @@ async function runFullOAuthFlow(
     code_challenge: pkce.challenge,
     code_challenge_method: "S256",
     state,
+    resource: serverUrl,
   });
   if (resourceMeta.scopes_supported?.length) {
     params.set("scope", resourceMeta.scopes_supported.join(" "));
@@ -346,7 +357,7 @@ async function runFullOAuthFlow(
     throw new Error(`OAuth: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  const tokens = await exchangeCode(asMeta.token_endpoint, clientId, code, redirectUri, pkce.verifier, clientSecret);
+  const tokens = await exchangeCode(asMeta.token_endpoint, clientId, code, redirectUri, pkce.verifier, serverUrl, clientSecret);
 
   const auth: StoredAuth = {
     access_token: tokens.access_token,

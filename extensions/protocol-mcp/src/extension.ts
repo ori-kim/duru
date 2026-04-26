@@ -1,5 +1,5 @@
 import { getAuthStatus, resolveAuthDir } from "@clip/auth";
-import { addTarget, die, subProfiles, subRecord } from "@clip/core";
+import { addTarget, die, subProfiles, subRecord, updateTarget } from "@clip/core";
 import type { AddArgs, ClipExtension, ExecutorContext, ListOpts, NormalizeCtx, TargetResult } from "@clip/core";
 import { executeMcp } from "./http.ts";
 import {
@@ -117,6 +117,7 @@ export const extension: ClipExtension = {
         if (t.transport === "stdio") throw new Error(`"${name}" is a STDIO MCP target. OAuth only applies to HTTP/SSE MCP targets.`);
         const url = (t as McpHttpTarget | McpSseTarget).url;
         await forceLogin(name, url, resolveAuthDir(name, "mcp"));
+        await updateTarget(name, (raw) => ({ ...raw, auth: "oauth" }));
       },
     });
   },
