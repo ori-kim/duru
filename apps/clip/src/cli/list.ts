@@ -73,17 +73,21 @@ export async function runList(registry: Registry, phase1Verbs?: Set<string>): Pr
   if (extensions.length > 0) {
     if (!first) console.log();
     first = false;
-    console.log(c("35", "── extensions ──"));
-    for (const v of extensions) console.log(`  ${c("35", v)}`);
+    const cx = (text: string) => c("38;2;180;141;173", text);
+    console.log(cx("── extensions ──"));
+    for (const v of extensions) {
+      const desc = registry.getInternalCommandDesc(v) ?? "";
+      console.log(`  ${cx(v.padEnd(16))}${desc}`);
+    }
   }
 
   if (builtin.length > 0) {
     if (!first) console.log();
     first = false;
-    console.log(c("35", "── builtin ──"));
+    console.log("── builtin ──");
     for (const v of builtin) {
       const desc = BUILTIN_DESC[v] ?? "";
-      console.log(`  ${c("35", v.padEnd(16))}${desc}`);
+      console.log(`  ${v.padEnd(16)}${desc}`);
     }
   }
 

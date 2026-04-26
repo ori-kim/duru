@@ -113,6 +113,12 @@ ${extArrayDecl}
 
   local target="\${words[2]}"
 
+  # extension internal commands: delegate to per-verb helper function
+  if typeset -f "${fn}_ext_\${target//-/_}" > /dev/null 2>&1; then
+    "${fn}_ext_\${target//-/_}"
+    return
+  fi
+
   # cli: delegate to the original command's completion
   if [[ -f "$gtdir/cli/$target/config.yml" ]]; then
     local orig_cmd
@@ -179,6 +185,11 @@ export function buildZshCompletion(
       if (!builtinTypes.has(contribution.type) && contribution.completionContributor) {
         extraContribs += "\n" + contribution.completionContributor();
       }
+    }
+    for (const { verb, fn: contributor } of registry.listInternalCommandCompletions()) {
+      const extFnName = `${fn}_ext_${verb.replace(/-/g, "_")}`;
+      const body = contributor();
+      extraContribs += `\n${extFnName}() {\n${body}\n}`;
     }
   }
 

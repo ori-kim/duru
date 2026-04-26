@@ -61,23 +61,61 @@ inputs:
 
 ## 커맨드
 
+### 레지스트리
+
 | 커맨드 | 설명 |
 |--------|------|
 | `clip skills add <name> [--description <d>] [--tag a,b]` | 스킬 스캐폴드 생성 |
+| `clip skills pull <path> [<name>]` | 외부 스킬을 레지스트리로 이동, 원본 위치에 symlink 생성 |
 | `clip skills list [--json]` | 전체 스킬 목록 |
 | `clip skills show <name>` | SKILL.md 원문 출력 |
 | `clip skills get <name> [--input k=v ...]` | inputs 치환 후 렌더링 |
 | `clip skills rm <name>` | 스킬 삭제 |
+
+### 에이전트 설치
+
+| 커맨드 | 설명 |
+|--------|------|
 | `clip skills install <name> --to <agent> [--mode symlink\|copy] [--force]` | 에이전트에 설치 |
 | `clip skills uninstall <name> [--from <agent>]` | 에이전트에서 제거 |
+
+### 그룹
+
+| 커맨드 | 설명 |
+|--------|------|
+| `clip skills group create <name> [skill ...] [--description <d>]` | 그룹 생성 |
+| `clip skills group list` | 전체 그룹 목록 |
+| `clip skills group show <name>` | 그룹 내 스킬 목록 |
+| `clip skills group add <name> <skill> [...]` | 그룹에 스킬 추가 |
+| `clip skills group rm <name> <skill> [...]` | 그룹에서 스킬 제거 |
+| `clip skills group delete <name>` | 그룹 정의 삭제 |
+| `clip skills group activate <name> --to <agent> [--force]` | 그룹 스킬을 에이전트에 symlink |
+| `clip skills group deactivate <name> [--from <agent>]` | 그룹 symlink 제거 |
 
 ## 디렉터리 구조
 
 ```
 ~/.clip/
   skills/
-    <name>/
+    <name>/         ← 스킬 하나당 디렉터리
       SKILL.md
+    groups.yml      ← 전체 그룹 정의
+```
+
+## 외부 스킬 가져오기 (`pull`)
+
+`pull`은 외부 스킬 디렉터리를 레지스트리로 이동시키고 원본 경로에 역방향 symlink를 남겨 기존 참조를 유지합니다:
+
+```sh
+clip skills pull ~/dotfiles/skills/my-skill
+# → ~/.clip/skills/my-skill/  (실제 파일, 이동됨)
+# → ~/dotfiles/skills/my-skill → ~/.clip/skills/my-skill  (symlink)
+```
+
+두 번째 인자로 레지스트리 이름을 지정할 수 있습니다:
+
+```sh
+clip skills pull ~/dotfiles/skills/my-skill renamed-skill
 ```
 
 ## 에이전트 설치
@@ -93,6 +131,43 @@ clip skills uninstall my-skill --from claude-code
 기본 모드는 `symlink` — 원본 SKILL.md를 수정하면 모든 에이전트에 즉시 반영됩니다. `--mode copy`는 변경 없는 스냅샷이 필요할 때 사용합니다.
 
 `clip skills list`의 AGENTS 컬럼에 설치된 에이전트가 브랜드 컬러 아이콘으로 표시됩니다. clip이 설치하지 않은 기존 경로를 덮어쓰려면 `--force`를 사용하세요.
+
+## 그룹
+
+그룹은 스킬 집합에 이름을 부여하고 에이전트에 일괄 적용·해제하는 기능입니다. 모든 그룹 정의는 `~/.clip/skills/groups.yml` 단일 파일에 저장되며 직접 편집할 수 있습니다.
+
+```yaml
+# ~/.clip/skills/groups.yml
+groups:
+  work:
+    description: 업무용 스킬
+    skills:
+      - linear-feature
+      - slack
+  personal:
+    skills:
+      - recap
+```
+
+```sh
+# 생성 및 구성
+clip skills group create work linear-feature slack --description "업무 스킬"
+clip skills group add work notion
+clip skills group rm  work slack
+
+# 에이전트에 적용 (스킬별 symlink 생성)
+clip skills group activate work --to claude-code
+
+# 그룹 교체
+clip skills group deactivate work --from claude-code
+clip skills group activate personal --to claude-code
+
+# 확인
+clip skills group list
+clip skills group show work
+```
+
+`activate` 시 레지스트리에 없는 스킬은 경고 후 건너뜁니다.
 
 ## inputs 렌더링
 

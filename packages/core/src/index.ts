@@ -22,6 +22,7 @@ export type {
   ErrorReturn,
   InternalCommandHandler,
   InternalCommandCtx,
+  InternalCommandOpts,
   Executor,
   Logger,
 } from "./extension.ts";

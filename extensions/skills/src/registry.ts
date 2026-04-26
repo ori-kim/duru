@@ -1,8 +1,57 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "fs";
 import { join } from "path";
+import { parse as yamlParse, stringify as dumpYAML } from "yaml";
 import { CONFIG_DIR } from "@clip/core";
 import { parseSkillFile } from "./frontmatter.ts";
 import type { SkillFrontmatter } from "./frontmatter.ts";
+
+// ─── Groups ───
+
+const GROUPS_FILE = join(CONFIG_DIR, "skills", "groups.yml");
+
+export type GroupDef = {
+  skills: string[];
+  description?: string;
+};
+
+type GroupsFile = { groups: Record<string, GroupDef> };
+
+function loadGroupsFile(): GroupsFile {
+  try {
+    const parsed = yamlParse(readFileSync(GROUPS_FILE, "utf8")) as GroupsFile | null;
+    if (!parsed || typeof parsed.groups !== "object") return { groups: {} };
+    return parsed;
+  } catch {
+    return { groups: {} };
+  }
+}
+
+function saveGroupsFile(data: GroupsFile): void {
+  mkdirSync(join(CONFIG_DIR, "skills"), { recursive: true });
+  Bun.write(GROUPS_FILE, dumpYAML(data));
+}
+
+export function listGroupNames(): string[] {
+  return Object.keys(loadGroupsFile().groups).sort();
+}
+
+export function loadGroup(name: string): GroupDef | null {
+  return loadGroupsFile().groups[name] ?? null;
+}
+
+export function saveGroup(name: string, def: GroupDef): void {
+  const data = loadGroupsFile();
+  data.groups[name] = def;
+  saveGroupsFile(data);
+}
+
+export function deleteGroup(name: string): boolean {
+  const data = loadGroupsFile();
+  if (!(name in data.groups)) return false;
+  delete data.groups[name];
+  saveGroupsFile(data);
+  return true;
+}
 
 const SKILLS_DIR = join(CONFIG_DIR, "skills");
 

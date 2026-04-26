@@ -328,6 +328,22 @@ export const extension = {
       const isJson = args.includes("--json");
       const key = args.slice(1).find((a) => !a.startsWith("--"));
       printResult(renderRecap(first, key, isJson));
+    }, {
+      description: "query and manage stored tacit knowledge",
+      completion: () => `
+  if (( CURRENT == 3 )); then
+    local recap_dir="\${CLIP_HOME:-$HOME/.clip}/recap"
+    local -a rtargets=()
+    for d in "$recap_dir/"*(N/); do
+      rtargets+=("\${d:t}")
+    done
+    local -a subcmds=(
+      'list:list entries (all or for a target)'
+      'search:search across all entries'
+    )
+    (( \${#rtargets} )) && _describe -t recap-targets 'recap targets' rtargets
+    _describe -t recap-commands 'recap commands' subcmds
+  fi`,
     });
 
     api.registerHook("beforeExecute", (ctx) => {

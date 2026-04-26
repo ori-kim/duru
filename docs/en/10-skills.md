@@ -61,23 +61,61 @@ Reference inputs in the body with `{{ inputs.key }}`.
 
 ## Commands
 
+### Registry
+
 | Command | Description |
 |---------|-------------|
 | `clip skills add <name> [--description <d>] [--tag a,b]` | Create scaffold |
+| `clip skills pull <path> [<name>]` | Move external skill into registry + leave symlink at origin |
 | `clip skills list [--json]` | List all skills |
 | `clip skills show <name>` | Print raw SKILL.md |
 | `clip skills get <name> [--input k=v ...]` | Render with inputs |
 | `clip skills rm <name>` | Remove skill |
+
+### Agent install
+
+| Command | Description |
+|---------|-------------|
 | `clip skills install <name> --to <agent> [--mode symlink\|copy] [--force]` | Install to agent |
 | `clip skills uninstall <name> [--from <agent>]` | Remove from agent |
+
+### Groups
+
+| Command | Description |
+|---------|-------------|
+| `clip skills group create <name> [skill ...] [--description <d>]` | Create a group |
+| `clip skills group list` | List all groups |
+| `clip skills group show <name>` | Show skills in group |
+| `clip skills group add <name> <skill> [...]` | Add skills to group |
+| `clip skills group rm <name> <skill> [...]` | Remove skills from group |
+| `clip skills group delete <name>` | Delete group definition |
+| `clip skills group activate <name> --to <agent> [--force]` | Symlink group skills to agent |
+| `clip skills group deactivate <name> [--from <agent>]` | Remove group symlinks from agent |
 
 ## Directory layout
 
 ```
 ~/.clip/
   skills/
-    <name>/
+    <name>/         ← one directory per skill
       SKILL.md
+    groups.yml      ← all group definitions
+```
+
+## Importing an existing skill (`pull`)
+
+`pull` moves an external skill directory into the registry and replaces the original path with a symlink so existing references keep working:
+
+```sh
+clip skills pull ~/dotfiles/skills/my-skill
+# → ~/.clip/skills/my-skill/  (actual files, moved here)
+# → ~/dotfiles/skills/my-skill → ~/.clip/skills/my-skill  (symlink)
+```
+
+Pass a second argument to override the registry name:
+
+```sh
+clip skills pull ~/dotfiles/skills/my-skill renamed-skill
 ```
 
 ## Agent install
@@ -95,6 +133,43 @@ clip skills uninstall my-skill --from claude-code
 Default mode is `symlink` — edits to the original SKILL.md are immediately reflected in all agents. Use `--mode copy` for a frozen snapshot.
 
 `clip skills list` shows installed agents in the AGENTS column with colored brand icons. Use `--force` to overwrite an existing path that was not installed by clip.
+
+## Groups
+
+Groups let you define named sets of skills and activate or deactivate them as a batch. All group definitions live in a single `~/.clip/skills/groups.yml` file that can be edited directly.
+
+```yaml
+# ~/.clip/skills/groups.yml
+groups:
+  work:
+    description: Work-related skills
+    skills:
+      - linear-feature
+      - slack
+  personal:
+    skills:
+      - recap
+```
+
+```sh
+# create and populate
+clip skills group create work linear-feature slack --description "Work skills"
+clip skills group add work notion
+clip skills group rm  work slack
+
+# deploy to an agent (symlinks each skill)
+clip skills group activate work --to claude-code
+
+# swap to another group
+clip skills group deactivate work --from claude-code
+clip skills group activate personal --to claude-code
+
+# inspect
+clip skills group list
+clip skills group show work
+```
+
+Skills not found in the registry are skipped with a warning during `activate`.
 
 ## Rendering inputs
 

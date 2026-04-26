@@ -189,6 +189,9 @@ function extractVerb(argv: string[]): string | undefined {
  *   실제 target type이 확정된 뒤 initMatchingType()에서 별도 처리한다.
  * - 그 외 → skip
  */
+// Verbs that need full extension metadata (descriptions, completion contributors, etc.)
+const METADATA_VERBS = new Set(["list", "completion"]);
+
 function shouldInit(
   entry: ExtensionEntry,
   argv: string[] | undefined,
@@ -197,7 +200,10 @@ function shouldInit(
   if (hasHooks) return true;
 
   const verb = argv ? extractVerb(argv) : undefined;
-  if (!verb) return false; // 아무 인자도 없음 → skip
+  if (!verb) return false;
+
+  // list / completion need all extension metadata — init everything
+  if (METADATA_VERBS.has(verb)) return true;
 
   const cmds = entry.contributes?.internalCommands ?? [];
   if (cmds.includes(verb)) {

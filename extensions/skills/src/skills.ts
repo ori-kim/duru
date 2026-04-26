@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, copyFileSync } from "fs";
-import { join } from "path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, copyFileSync } from "fs";
+import { join, basename, resolve } from "path";
 import { homedir } from "os";
 import { die } from "@clip/core";
 import { renderPrompt, parseSkillFile } from "./frontmatter.ts";
@@ -10,7 +10,12 @@ import {
   loadAllSkillsSafe,
   removeSkill,
   writeSkill,
+  listGroupNames,
+  loadGroup,
+  saveGroup,
+  deleteGroup,
 } from "./registry.ts";
+import type { GroupDef } from "./registry.ts";
 
 const NAME_RE = /^[a-zA-Z0-9_-]+$/;
 
@@ -24,22 +29,22 @@ function buildScaffold(name: string, description: string, tags: string[]): strin
   return `---
 name: ${name}
 description: ${JSON.stringify(description)}${tagLine}
-# inputs:                     # 선택 사항 — 입력 파라미터 선언
+# inputs:                     # optional — input parameter declarations
 #   my_param:
-#     description: 파라미터 설명
+#     description: parameter description
 #     required: true
 #   optional_param:
-#     default: "기본값"
+#     default: "default value"
 ---
 
 # ${name}
 
-<!-- 에이전트에게 전달할 단계별 지시서를 여기에 작성하세요.
-     inputs 선언 후 본문에서 {{ inputs.my_param }} 으로 참조합니다. -->
+<!-- Write step-by-step instructions for the agent here.
+     Reference declared inputs with {{ inputs.my_param }} in the body. -->
 `;
 }
 
-// --- 서브커맨드 핸들러 ---
+// --- subcommand handlers ---
 
 async function cmdAdd(args: string[]): Promise<void> {
   const name = args[0];
@@ -129,7 +134,7 @@ function cmdList(args: string[]): void {
   const dim = (s: string) => (tty ? `\x1b[2m${s}\x1b[0m` : s);
   const bold = (s: string) => (tty ? `\x1b[1m${s}\x1b[0m` : s);
 
-  // 범례: 설치된 에이전트 중 실제 등장하는 것만 표시
+  // legend: only show agents that appear in the installed skill list
   const usedAgents = [...new Set(withAgents.flatMap(({ agents }) => agents))];
   if (usedAgents.length) {
     const legend = usedAgents.map((a) => `${agentColored(a, tty)} ${a}`).join("   ");
@@ -137,7 +142,7 @@ function cmdList(args: string[]): void {
     console.log("");
   }
 
-  // CJK/Hangul 등 wide 문자는 터미널에서 2칸 차지 → display width로 보정
+  // CJK/Hangul wide chars occupy 2 terminal columns — compensate with display width
   const charW = (ch: string) => {
     const cp = ch.codePointAt(0) ?? 0;
     return cp >= 0x1100 && (cp <= 0xFFEF || (cp >= 0x20000 && cp <= 0x2FFFD) || (cp >= 0x30000 && cp <= 0x3FFFD)) ? 2 : 1;
@@ -274,7 +279,7 @@ const AGENT_PRESETS: Record<string, string> = {
   cursor: join(HOME, ".cursor", "skills"),
 };
 
-// 각 에이전트의 브랜드 RGB 색상
+// brand RGB colors per agent
 const AGENT_COLORS: Record<string, [number, number, number]> = {
   "claude-code": [217, 119,  87], // Anthropic orange-salmon
   codex:         [ 16, 163, 127], // OpenAI green
@@ -456,7 +461,219 @@ function cmdUninstall(args: string[]): void {
   if (removed === 0) console.log(`Skill "${name}" was not installed in any specified agent.`);
 }
 
-// --- 라우팅 ---
+// --- group subcommands ---
+
+function cmdGroupCreate(args: string[]): void {
+  const name = args[0];
+  if (!name) die("Usage: clip skills group create <name> [--description <d>] [skill ...]");
+  if (loadGroup(name)) die(`Group "${name}" already exists.`);
+
+  let description: string | undefined;
+  const skills: string[] = [];
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === "--description" || a === "-d") description = args[++i] ?? die("--description requires a value");
+    else if (a.startsWith("--description=")) description = a.slice("--description=".length);
+    else skills.push(a);
+  }
+
+  const def: GroupDef = { skills, ...(description ? { description } : {}) };
+  saveGroup(name, def);
+  console.log(`Created group "${name}"${skills.length ? ` with: ${skills.join(", ")}` : ""}`);
+}
+
+function cmdGroupList(_args: string[]): void {
+  const names = listGroupNames();
+  if (!names.length) {
+    console.log("No groups found.\n\nCreate one: clip skills group create <name> [skill ...]");
+    return;
+  }
+  const nameW = Math.max(5, ...names.map((n) => n.length));
+  console.log(`${"GROUP".padEnd(nameW)}  SKILLS`);
+  for (const n of names) {
+    const g = loadGroup(n)!;
+    const desc = g.description ? `  # ${g.description}` : "";
+    console.log(`${n.padEnd(nameW)}  ${g.skills.join(", ") || "(empty)"}${desc}`);
+  }
+}
+
+function cmdGroupShow(args: string[]): void {
+  const name = args[0];
+  if (!name) die("Usage: clip skills group show <name>");
+  const g = loadGroup(name);
+  if (!g) die(`Group "${name}" not found.`);
+  console.log(`Group: ${name}${g.description ? `  — ${g.description}` : ""}`);
+  if (!g.skills.length) { console.log("  (no skills)"); return; }
+  for (const s of g.skills) console.log(`  • ${s}`);
+}
+
+function cmdGroupAdd(args: string[]): void {
+  const [name, ...skills] = args;
+  if (!name || !skills.length) die("Usage: clip skills group add <group> <skill> [skill ...]");
+  const g = loadGroup(name);
+  if (!g) die(`Group "${name}" not found.`);
+  for (const s of skills) { if (!g.skills.includes(s)) g.skills.push(s); }
+  saveGroup(name, g);
+  console.log(`Updated "${name}": ${g.skills.join(", ")}`);
+}
+
+function cmdGroupRm(args: string[]): void {
+  const [name, ...skills] = args;
+  if (!name || !skills.length) die("Usage: clip skills group rm <group> <skill> [skill ...]");
+  const g = loadGroup(name);
+  if (!g) die(`Group "${name}" not found.`);
+  g.skills = g.skills.filter((s) => !skills.includes(s));
+  saveGroup(name, g);
+  console.log(`Updated "${name}": ${g.skills.join(", ") || "(empty)"}`);
+}
+
+function cmdGroupDelete(args: string[]): void {
+  const name = args[0];
+  if (!name) die("Usage: clip skills group delete <name>");
+  if (!deleteGroup(name)) die(`Group "${name}" not found.`);
+  console.log(`Deleted group "${name}".`);
+}
+
+async function cmdGroupActivate(args: string[]): Promise<void> {
+  const name = args[0];
+  if (!name) die("Usage: clip skills group activate <name> --to <agent> [--force]");
+  const g = loadGroup(name);
+  if (!g) die(`Group "${name}" not found.`);
+
+  const targets: string[] = [];
+  let force = false;
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === "--to")               targets.push(args[++i] ?? die("--to requires a value"));
+    else if (a.startsWith("--to=")) targets.push(a.slice(5));
+    else if (a === "--force")       force = true;
+    else die(`Unknown option: ${a}`);
+  }
+  if (!targets.length)
+    die(`Specify at least one --to <agent>\nAvailable: ${Object.keys(AGENT_PRESETS).join(", ")}`);
+
+  for (const preset of targets) {
+    const agentSkillsDir = AGENT_PRESETS[preset];
+    if (!agentSkillsDir) die(`Unknown agent: "${preset}"\nAvailable: ${Object.keys(AGENT_PRESETS).join(", ")}`);
+    for (const skillName of g.skills) {
+      const sourceDir = findSkillDir(skillName);
+      if (!sourceDir) {
+        process.stderr.write(`  ⚠ skill "${skillName}" not found in registry, skipping\n`);
+        continue;
+      }
+      installToAgent(skillName, sourceDir, agentSkillsDir, "symlink", force);
+      console.log(`  ✓ ${preset}: linked ${skillName}`);
+    }
+  }
+}
+
+function cmdGroupDeactivate(args: string[]): void {
+  const name = args[0];
+  if (!name) die("Usage: clip skills group deactivate <name> [--from <agent>] [--force]");
+  const g = loadGroup(name);
+  if (!g) die(`Group "${name}" not found.`);
+
+  const froms: string[] = [];
+  let force = false;
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === "--from")                froms.push(args[++i] ?? die("--from requires a value"));
+    else if (a.startsWith("--from="))  froms.push(a.slice(7));
+    else if (a === "--force")          force = true;
+    else die(`Unknown option: ${a}`);
+  }
+  const targets = froms.length ? froms : Object.keys(AGENT_PRESETS);
+
+  for (const preset of targets) {
+    const agentSkillsDir = AGENT_PRESETS[preset];
+    if (!agentSkillsDir) { process.stderr.write(`Unknown preset: ${preset}\n`); continue; }
+    for (const skillName of g.skills) {
+      const destPath = join(agentSkillsDir, skillName);
+      if (!existsSync(destPath)) continue;
+      const marker = readMarker(agentSkillsDir, skillName);
+      if (!marker && !force) {
+        process.stderr.write(`  ✗ ${preset}/${skillName}: not installed by clip (use --force)\n`);
+        continue;
+      }
+      rmSync(destPath, { recursive: true, force: true });
+      removeMarker(agentSkillsDir, skillName);
+      console.log(`  ✓ ${preset}: unlinked ${skillName}`);
+    }
+  }
+}
+
+async function cmdGroup(args: string[]): Promise<void> {
+  const sub = args[0];
+  const rest = args.slice(1);
+  switch (sub) {
+    case "create":     cmdGroupCreate(rest); break;
+    case "list":       cmdGroupList(rest); break;
+    case "show":       cmdGroupShow(rest); break;
+    case "add":        cmdGroupAdd(rest); break;
+    case "rm":
+    case "remove":     cmdGroupRm(rest); break;
+    case "delete":     cmdGroupDelete(rest); break;
+    case "activate":   await cmdGroupActivate(rest); break;
+    case "deactivate": cmdGroupDeactivate(rest); break;
+    default:
+      die(
+        [
+          "Usage: clip skills group <subcommand>",
+          "",
+          "  create <name> [skill ...]               Create a group",
+          "  list                                    List all groups  (groups.yml)",
+          "  show <name>                             Show skills in group",
+          "  add <name> <skill> [skill ...]          Add skills to group",
+          "  rm <name> <skill> [skill ...]           Remove skills from group",
+          "  delete <name>                           Delete group definition",
+          "  activate <name> --to <agent> [--force]  Symlink group skills to agent",
+          "  deactivate <name> [--from <agent>]      Remove group symlinks from agent",
+          "",
+          `Agent presets: ${Object.keys(AGENT_PRESETS).join(", ")}`,
+        ].join("\n"),
+      );
+  }
+}
+
+// --- pull command ---
+
+async function cmdPull(args: string[]): Promise<void> {
+  const srcArg = args[0];
+  if (!srcArg) die("Usage: clip skills pull <path> [<name>]");
+
+  const srcPath = resolve(srcArg);
+  if (!existsSync(srcPath)) die(`Path not found: ${srcPath}`);
+  if (!existsSync(join(srcPath, "SKILL.md"))) die(`No SKILL.md found in: ${srcPath}`);
+
+  const name = args[1] ?? basename(srcPath);
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) die(`Invalid skill name: "${name}"`);
+
+  const destDir = join(getSkillsDir(), name);
+  if (existsSync(destDir)) die(`Skill "${name}" already exists in registry.\nUse --force to overwrite (not yet supported).`);
+
+  // move srcPath → registry
+  mkdirSync(getSkillsDir(), { recursive: true });
+  try {
+    renameSync(srcPath, destDir);
+  } catch (e: unknown) {
+    // cross-device: fallback to copy + remove
+    if ((e as NodeJS.ErrnoException).code === "EXDEV") {
+      copyDir(srcPath, destDir);
+      rmSync(srcPath, { recursive: true, force: true });
+    } else {
+      throw e;
+    }
+  }
+
+  // reverse symlink at original path
+  symlinkSync(destDir, srcPath);
+
+  console.log(`Pulled: ${srcPath}`);
+  console.log(`  → registry: ${destDir}`);
+  console.log(`  → symlink:  ${srcPath} → ${destDir}`);
+}
+
+// --- routing ---
 
 export async function runSkillsCmd(args: string[]): Promise<void> {
   const sub = args[0];
@@ -485,6 +702,12 @@ export async function runSkillsCmd(args: string[]): Promise<void> {
     case "uninstall":
       cmdUninstall(rest);
       break;
+    case "group":
+      await cmdGroup(rest);
+      break;
+    case "pull":
+      await cmdPull(rest);
+      break;
     default:
       die(
         [
@@ -492,6 +715,7 @@ export async function runSkillsCmd(args: string[]): Promise<void> {
           "",
           "Registry:",
           "  add <name>                        Create a new skill scaffold",
+          "  pull <path> [<name>]              Move external skill into registry + leave symlink",
           "  list [--json]                     List all skills",
           "  show <name>                       Print SKILL.md verbatim",
           "  get <name> [--input k=v ...]      Render skill with inputs substituted",
@@ -500,6 +724,13 @@ export async function runSkillsCmd(args: string[]): Promise<void> {
           "Agent install:",
           "  install <name> --to <agent> ...   Install to agent (symlink by default)",
           "  uninstall <name> [--from <agent>] Remove from agent",
+          "",
+          "Groups  (~/.clip/skills/groups.yml):",
+          "  group create <name> [skill ...]   Create a group",
+          "  group list                        List all groups",
+          "  group activate <name> --to <agent>   Symlink group skills to agent",
+          "  group deactivate <name>           Remove group symlinks from agent",
+          "  group add/rm/show/delete ...      Manage group contents",
           "",
           `Agent presets: ${Object.keys(AGENT_PRESETS).join(", ")}`,
         ].join("\n"),

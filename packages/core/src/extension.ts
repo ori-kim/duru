@@ -149,6 +149,11 @@ export type InternalCommandCtx = {
 
 export type InternalCommandHandler = (ctx: InternalCommandCtx) => Promise<void>;
 
+export type InternalCommandOpts = {
+  description?: string;
+  completion?: () => string;
+};
+
 export type HookOpts = {
   priority?: number;
   match?: {
@@ -170,7 +175,7 @@ import type { OutputRenderer, ResultPresenter } from "./utils/output.ts";
 export type ExtensionApi = {
   registerTargetType<T>(def: TargetTypeDef<T>): void;
   registerContribution(contribution: TargetTypeContribution): void;
-  registerInternalCommand(verb: string, handler: InternalCommandHandler): void;
+  registerInternalCommand(verb: string, handler: InternalCommandHandler, opts?: InternalCommandOpts): void;
   registerHook(phase: HookPhase, fn: HookFn, opts?: HookOpts): void;
   registerErrorHandler(fn: ErrorHandler, opts?: HookOpts): void;
   registerResultPresenter(presenter: ResultPresenter): void;
@@ -237,6 +242,8 @@ export class Registry {
   private readonly _contributions = new Map<string, TargetTypeContribution>();
   private readonly _contributionOverrides = new Map<string, Partial<TargetTypeContribution>>();
   private readonly _internalCommands = new Map<string, InternalCommandHandler>();
+  private readonly _internalCommandDescs = new Map<string, string>();
+  private readonly _internalCommandCompletions = new Map<string, () => string>();
   private readonly _hooks: Map<HookPhase, RegisteredHook[]> = new Map([
     ["toolcall", []],
     ["beforeExecute", []],
@@ -335,7 +342,7 @@ export class Registry {
         }
         this._contributions.set(contribution.type, contribution);
       },
-      registerInternalCommand: (verb: string, handler: InternalCommandHandler): void => {
+      registerInternalCommand: (verb: string, handler: InternalCommandHandler, opts?: InternalCommandOpts): void => {
         const isBuiltin = this._currentExtName.startsWith("builtin:");
         if (this._builtinVerbOwners.has(verb)) {
           // builtin이 이미 소유: 사용자 extension은 manifest override 허가 없이 탈취 불가
@@ -351,6 +358,8 @@ export class Registry {
         }
         if (isBuiltin) this._builtinVerbOwners.add(verb);
         this._internalCommands.set(verb, handler);
+        if (opts?.description) this._internalCommandDescs.set(verb, opts.description);
+        if (opts?.completion) this._internalCommandCompletions.set(verb, opts.completion);
       },
       registerHook: (phase, fn, opts = {}): void => {
         (this._hooks.get(phase) ?? []).push({ fn, opts: { priority: 100, ...opts } });
@@ -478,6 +487,14 @@ export class Registry {
 
   listUserInternalVerbs(): string[] {
     return [...this._internalCommands.keys()].filter((v) => !this._builtinVerbOwners.has(v));
+  }
+
+  getInternalCommandDesc(verb: string): string | undefined {
+    return this._internalCommandDescs.get(verb);
+  }
+
+  listInternalCommandCompletions(): Array<{ verb: string; fn: () => string }> {
+    return [...this._internalCommandCompletions.entries()].map(([verb, fn]) => ({ verb, fn }));
   }
 
   async runHooks(phase: HookPhase, ctx: HookCtx): Promise<HookReturn | null> {
