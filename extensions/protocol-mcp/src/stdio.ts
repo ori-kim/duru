@@ -184,7 +184,11 @@ export async function executeMcpStdio(target: McpStdioTarget, ctx: ExecutorConte
       return formatToolHelp(tool);
     }
 
-    const text = tools.map((t) => `  ${t.name.padEnd(30)} ${t.description}`).join("\n");
+    const text = tools.map((t) => {
+      const firstLine = (t.description ?? "").split("\n")[0] ?? "";
+      const desc = firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
+      return `  ${t.name.padEnd(30)} ${desc}`;
+    }).join("\n");
     const scripts = buildAliasSection(target);
     return {
       stdout: tools.length ? `Tools:\n${text}\n${scripts}` : `No tools available.${scripts}`,

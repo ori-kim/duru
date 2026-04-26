@@ -258,7 +258,8 @@ export async function executeMcpSse(target: McpSseTarget, ctx: ExecutorContext):
       const scripts = buildAliasSection(target);
       if (tools.length === 0) return { exitCode: 0, stdout: `No tools available.${scripts}\n`, stderr: "" };
       const lines = tools.map((t) => {
-        const desc = t.description.length > 60 ? `${t.description.slice(0, 57)}...` : t.description;
+        const firstLine = (t.description ?? "").split("\n")[0] ?? "";
+        const desc = firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
         return `  ${t.name.padEnd(24)} ${desc}`;
       });
       return { exitCode: 0, stdout: `Tools:\n${lines.join("\n")}\n${scripts}`, stderr: "" };
