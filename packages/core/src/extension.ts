@@ -476,6 +476,10 @@ export class Registry {
     return [...this._internalCommands.keys()];
   }
 
+  listUserInternalVerbs(): string[] {
+    return [...this._internalCommands.keys()].filter((v) => !this._builtinVerbOwners.has(v));
+  }
+
   async runHooks(phase: HookPhase, ctx: HookCtx): Promise<HookReturn | null> {
     const base = (this._hooks.get(phase) ?? [])
       .filter((h) => matchesHook(h.opts, ctx))

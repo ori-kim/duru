@@ -1,8 +1,28 @@
 import type { Registry } from "@clip/core";
 import { die } from "@clip/core";
+import { classifyInternalVerbs, BUILTIN_DESC } from "../cli/internal-verbs.ts";
 
-function buildZshCompletionCore(cmd = "clip"): string {
+function zshArrayItems(verbs: string[], descMap?: Record<string, string>): string {
+  return verbs
+    .map((v) => {
+      const d = descMap?.[v] ?? "";
+      const safe = d.replace(/'/g, "'\\''");
+      return `    '${v}${safe ? ":" + safe : ""}'`;
+    })
+    .join("\n");
+}
+
+function buildZshCompletionCore(
+  cmd: string,
+  builtinVerbs: string[],
+  extVerbs: string[],
+): string {
   const fn = "_" + cmd.replace(/-/g, "_");
+  const builtinItems = zshArrayItems(builtinVerbs, BUILTIN_DESC);
+  const extItems = zshArrayItems(extVerbs);
+  const extArrayDecl = extVerbs.length > 0
+    ? `    local -a extensions=(\n${extItems}\n    )`
+    : `    local -a extensions=()`;
   return `\
 zmodload zsh/complist 2>/dev/null
 
@@ -20,6 +40,7 @@ zstyle ':completion:*:*:${cmd}:*:api-targets'     format '%F{cyan}── %d ─�
 zstyle ':completion:*:*:${cmd}:*:grpc-targets'    format '%B%F{blue}── %d ──%f%b'
 zstyle ':completion:*:*:${cmd}:*:graphql-targets' format '%F{205}── %d ──%f'
 zstyle ':completion:*:*:${cmd}:*:script-targets'  format '%F{245}── %d ──%f'
+zstyle ':completion:*:*:${cmd}:*:extensions'      format '%F{99}── %d ──%f'
 zstyle ':completion:*:*:${cmd}:*:builtins'        format '── %d ──'
 zstyle ':completion:*:*:${cmd}:*:tools'           format '%F{246}── %d ──%f'
 
@@ -30,6 +51,7 @@ zstyle ':completion:*:*:${cmd}:*:api-targets'     list-colors '=*=36'
 zstyle ':completion:*:*:${cmd}:*:grpc-targets'    list-colors '=*=34;1'
 zstyle ':completion:*:*:${cmd}:*:graphql-targets' list-colors '=*=38;5;205'
 zstyle ':completion:*:*:${cmd}:*:script-targets'  list-colors '=*=38;5;245'
+zstyle ':completion:*:*:${cmd}:*:extensions'      list-colors '=*=38;5;99'
 
 ${fn}_cache_policy() {
   local -a outdated
@@ -42,18 +64,9 @@ ${fn}() {
 
   if (( CURRENT == 2 )); then
     local -a builtins=(
-      'list:list all registered targets'
-      'add:register a new CLI / MCP / API target'
-      'remove:unregister a target'
-      'refresh:re-fetch OpenAPI spec for an API target'
-      'login:OAuth login for an MCP / API target'
-      'logout:remove stored OAuth tokens'
-      'bind:create a native command shim for a target'
-      'unbind:remove a native command shim'
-      'binds:list currently bound targets'
-      'skills:install AI agent integration (claude-code, gemini, ...)'
-      'completion:generate shell completion script'
+${builtinItems}
     )
+${extArrayDecl}
     local -a cli_targets=() mcp_targets=() api_targets=() grpc_targets=() graphql_targets=() script_targets=()
     local t name detail
     for t in "$gtdir/cli/"*(N/); do
@@ -86,13 +99,14 @@ ${fn}() {
       detail=$(awk '/^description:/{sub(/^description: */, ""); print; exit}' "$t/config.yml" 2>/dev/null)
       script_targets+=("$name:$detail")
     done
-    # targets first, built-ins last
+    # targets first, extensions second, built-ins last
     (( \${#cli_targets} ))     && _describe -t cli-targets     'cli'     cli_targets
     (( \${#mcp_targets} ))     && _describe -t mcp-targets     'mcp'     mcp_targets
     (( \${#api_targets} ))     && _describe -t api-targets     'api'     api_targets
     (( \${#grpc_targets} ))    && _describe -t grpc-targets    'grpc'    grpc_targets
     (( \${#graphql_targets} )) && _describe -t graphql-targets 'graphql' graphql_targets
     (( \${#script_targets} ))  && _describe -t script-targets  'script'  script_targets
+    (( \${#extensions} ))      && _describe -t extensions      'extensions' extensions
     _describe -t builtins 'built-in' builtins
     return
   fi
@@ -142,8 +156,22 @@ ${fn}() {
 }
 
 // For eval "$(clip completion zsh)" in .zshrc
-export function buildZshCompletion(registry?: Registry, cmd = "clip"): string {
+export function buildZshCompletion(
+  registry?: Registry,
+  cmd = "clip",
+  phase1Verbs?: Set<string>,
+): string {
   const fn = "_" + cmd.replace(/-/g, "_");
+
+  let builtinVerbs: string[] = [];
+  let extVerbs: string[] = [];
+
+  if (registry) {
+    const classified = classifyInternalVerbs(registry, phase1Verbs);
+    builtinVerbs = classified.builtin;
+    extVerbs = classified.extensions;
+  }
+
   let extraContribs = "";
   if (registry) {
     const builtinTypes = new Set(["cli", "mcp", "api", "grpc", "graphql", "script"]);
@@ -158,12 +186,16 @@ export function buildZshCompletion(registry?: Registry, cmd = "clip"): string {
 # Add to ~/.zshrc:  eval "$(${cmd} completion zsh)"
 # Inline hints:     ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 
-${buildZshCompletionCore(cmd)}${extraContribs}
+${buildZshCompletionCore(cmd, builtinVerbs, extVerbs)}${extraContribs}
 compdef ${fn} ${cmd}
 `;
 }
 
-export async function runCompletionCmd(args: string[], registry?: Registry): Promise<void> {
+export async function runCompletionCmd(
+  args: string[],
+  registry?: Registry,
+  phase1Verbs?: Set<string>,
+): Promise<void> {
   let shell: string | undefined;
   let cmd = "clip";
   const nameIdx = args.indexOf("--name");
@@ -171,7 +203,7 @@ export async function runCompletionCmd(args: string[], registry?: Registry): Pro
   shell = args.find((a) => !a.startsWith("-") && a !== args[nameIdx + 1]);
 
   if (!shell || shell === "zsh") {
-    process.stdout.write(buildZshCompletion(registry, cmd));
+    process.stdout.write(buildZshCompletion(registry, cmd, phase1Verbs));
     return;
   }
 

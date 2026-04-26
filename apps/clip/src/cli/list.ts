@@ -1,8 +1,9 @@
 import { listBound } from "../commands/bind.ts";
 import type { Registry } from "@clip/core";
 import { loadConfig } from "@clip/core";
+import { classifyInternalVerbs, BUILTIN_DESC } from "./internal-verbs.ts";
 
-export async function runList(registry: Registry): Promise<void> {
+export async function runList(registry: Registry, phase1Verbs?: Set<string>): Promise<void> {
   const config = await loadConfig(registry);
   const bound = new Set(await listBound());
   const tty = process.stdout.isTTY;
@@ -64,6 +65,25 @@ export async function runList(registry: Registry): Promise<void> {
           ? ` — ${(cfg as { description: string }).description}`
           : "";
       console.log(`  ${c("35", name.padEnd(16))}${desc}${bind(name)}`);
+    }
+  }
+
+  const { builtin, extensions } = classifyInternalVerbs(registry, phase1Verbs);
+
+  if (extensions.length > 0) {
+    if (!first) console.log();
+    first = false;
+    console.log(c("35", "── extensions ──"));
+    for (const v of extensions) console.log(`  ${c("35", v)}`);
+  }
+
+  if (builtin.length > 0) {
+    if (!first) console.log();
+    first = false;
+    console.log(c("35", "── builtin ──"));
+    for (const v of builtin) {
+      const desc = BUILTIN_DESC[v] ?? "";
+      console.log(`  ${c("35", v.padEnd(16))}${desc}`);
     }
   }
 

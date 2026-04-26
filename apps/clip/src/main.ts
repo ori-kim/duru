@@ -43,13 +43,13 @@ function registerInternalCommands(reg: Registry): void {
     name: "builtin:internal-commands",
     init(api) {
       api.registerInternalCommand("config",     async ({ args }) => { await runConfigCmd(args, reg); });
-      api.registerInternalCommand("list",       async () => { await runList(reg); });
+      api.registerInternalCommand("list",       async () => { await runList(reg, _extLoader?.phase1InternalVerbs); });
       api.registerInternalCommand("add",        async ({ args }) => { await runAdd(args, reg); });
       api.registerInternalCommand("remove",     async ({ args }) => { await runRemove(args); });
       api.registerInternalCommand("bind",       async ({ args }) => { await runBind(args); });
       api.registerInternalCommand("unbind",     async ({ args }) => { await runUnbind(args); });
       api.registerInternalCommand("binds",      async () => { await runBinds(); });
-      api.registerInternalCommand("completion", async ({ args }) => { await runCompletionCmd(args, reg); });
+      api.registerInternalCommand("completion", async ({ args }) => { await runCompletionCmd(args, reg, _extLoader?.phase1InternalVerbs); });
       api.registerInternalCommand("profile",    async ({ args }) => { await runProfileCmd(args); });
       api.registerInternalCommand("alias",      async ({ args }) => { await runAliasCmd(args); });
       api.registerInternalCommand("refresh",    async ({ args }) => { await runRefresh(args, reg); });
