@@ -110,12 +110,20 @@ async function fetchResourceMetadata(serverUrl: string, hintUrl?: string): Promi
     }
   }
 
-  const origin = new URL(serverUrl).origin;
-  const resp = await fetch(`${origin}/.well-known/oauth-protected-resource`);
-  if (!resp.ok) {
-    throw new Error(`Failed to discover OAuth protected resource metadata for ${serverUrl}`);
+  const { origin, pathname } = new URL(serverUrl);
+  const candidates = [`${origin}/.well-known/oauth-protected-resource`];
+  if (pathname && pathname !== "/") {
+    candidates.unshift(`${origin}/.well-known/oauth-protected-resource${pathname}`);
   }
-  return (await resp.json()) as ResourceMetadata;
+  for (const url of candidates) {
+    try {
+      const resp = await fetch(url);
+      if (resp.ok) return (await resp.json()) as ResourceMetadata;
+    } catch {
+      // try next
+    }
+  }
+  throw new Error(`Failed to discover OAuth protected resource metadata for ${serverUrl}`);
 }
 
 async function fetchASMetadata(authServer: string): Promise<ASMetadata> {
