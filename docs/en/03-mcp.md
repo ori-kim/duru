@@ -68,7 +68,18 @@ clip notion --help search_pages   # --help position is flexible
 clip notion search_pages --query "sprint retro"
 clip notion get_page --page_id abc123
 clip notion create_page --parent_id def456 --title "New page"
+
+# Pass multiple arguments as a single JSON object
+clip notion search_pages --args '{"query":"sprint retro","page_size":5}'
+
+# --args is the base; individual --flags override (position-independent)
+clip notion search_pages --args '{"query":"sprint retro","page_size":5}' --page_size 10
+# → arguments: { query: "sprint retro", page_size: 10 }
 ```
+
+`--args` accepts a JSON object and spreads its keys into the tool's `arguments`. Individual `--flag value` pairs always take precedence over `--args`, regardless of order. `--args` must be a JSON object (not array, null, or primitive) — invalid JSON or wrong type throws an error immediately.
+
+> Note: clip uses a single `arguments` object (MCP spec). Unlike REST CLIs such as `gws` that split `--params` (query) from `--json` (body), clip has no query/body distinction — `--args` covers the full tool input.
 
 Tool schemas are cached in `~/.clip/target/mcp/notion/tools.json` after the first `tools` or `tools/call` request. Subsequent `--help` calls are instant and require no network or authentication.
 

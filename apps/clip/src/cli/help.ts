@@ -10,7 +10,7 @@ export const HELP = `
 clip — CLI proxy for MCP servers and CLI tools
 
 Usage:
-  clip [--json] [--pipe] <target> <subcommand> [...args]
+  clip [--json-output] [--pipe] <target> <subcommand> [...args]
   clip add <name> <command-or-url> [--allow x,y] [--deny z]
   clip add <name> <https://...openapi.json> [--api]
   clip add <name> <https://...> --sse
@@ -38,7 +38,8 @@ Usage:
   clip <target> --help
 
 Global flags:
-  --json        Output as JSON (unwraps MCP content, wraps CLI stdout)
+  --json-output Output as JSON (unwraps MCP content, wraps CLI stdout)
+  --args        Pass tool input as a JSON object (spread into arguments; individual --flags override)
   --pipe        Force buffered mode even in a TTY (disables passthrough)
   --dry-run     Print equivalent curl command instead of executing (API targets only)
   --help, -h    Show this help
@@ -65,11 +66,11 @@ Examples:
   clip add grpcserver grpc.example.com:443 --grpc
   clip add localgrpc localhost:50051 --grpc --plaintext
   clip add gh https://api.github.com/graphql --graphql
-  clip login notion      # OAuth 인증
-  clip logout notion     # 토큰 삭제
-  clip refresh petstore  # OpenAPI spec 재fetch
-  clip refresh grpcserver  # gRPC schema 캐시 갱신
-  clip refresh gh          # GraphQL schema 재fetch
+  clip login notion      # OAuth flow
+  clip logout notion     # Remove token
+  clip refresh petstore  # Re-fetch OpenAPI spec
+  clip refresh grpcserver  # Re-fetch gRPC schema
+  clip refresh gh          # Re-fetch GraphQL schema
   clip list
   clip notion tools
   clip petstore tools
@@ -81,18 +82,18 @@ Examples:
   clip gh describe User
   clip gh viewer '{ login bio }'
   clip gh repository --owner foo --name bar --select name,stargazerCount
-  clip --json gh pr list
+  clip --json-output gh pr list
   clip gh issue list
-  clip bind gh            # 이후 "gh pr list" 가 clip을 통해 실행됨
+  clip bind gh            # after this, "gh pr list" routes through clip
   clip unbind gh
   clip alias add slack send-me --subcommand chat.postMessage --input-json '{"channel":"U123","text":"$1"}' --description "Send DM to me"
   clip slack send-me "hello"
   clip alias add gh my-prs --subcommand pr --arg list --arg --author --arg @me
   clip gh my-prs
-  # script target — bash/file 조합 명령
-  clip lag lag my-group    # ~/.clip/target/script/lag/ 에 정의된 스크립트 실행
+  # script target — runs a shell/file command
+  clip lag lag my-group    # script defined in ~/.clip/target/script/lag/
 
-Tree ACL (~/.clip/target/cli/gh/config.yml 직접 편집):
+Tree ACL (edit ~/.clip/target/cli/gh/config.yml directly):
   command: gh
   acl:
     pr:

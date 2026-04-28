@@ -8,11 +8,60 @@ export function extractHelpFlag(args: string[]): { help: boolean; rest: string[]
 }
 
 export function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
   const props = (inputSchema["properties"] as Record<string, { type?: string | string[] }> | undefined) ?? {};
+
+  // --args '{...}' spreads a JSON object as the base, individual --flags override.
+  // Bypass when the tool schema explicitly defines an "args" property.
+  const argsSchemaBypass = "args" in props;
+  const baseFromArgs: Record<string, unknown> = {};
+
+  if (!argsSchemaBypass) {
+    for (let j = 0; j < rawArgs.length; j++) {
+      const arg = rawArgs[j] ?? "";
+      let rawVal: string | undefined;
+
+      if (arg === "--args") {
+        const next = rawArgs[j + 1];
+        if (!next || next.startsWith("--")) {
+          throw new Error("--args requires a JSON object value");
+        }
+        rawVal = next;
+        j++;
+      } else if (arg.startsWith("--args=")) {
+        rawVal = arg.slice("--args=".length);
+      } else {
+        continue;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(rawVal);
+      } catch (e) {
+        throw new Error(`Invalid JSON in --args: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("--args must be a plain JSON object (not array, null, or primitive)");
+      }
+      Object.assign(baseFromArgs, parsed as Record<string, unknown>);
+    }
+  }
+
+  const result: Record<string, unknown> = {};
 
   let i = 0;
   while (i < rawArgs.length) {
+    // Skip --args tokens (already processed above)
+    if (!argsSchemaBypass) {
+      const arg0 = rawArgs[i] ?? "";
+      if (arg0 === "--args") {
+        i += 2;
+        continue;
+      }
+      if (arg0.startsWith("--args=")) {
+        i++;
+        continue;
+      }
+    }
     const arg = rawArgs[i] ?? "";
 
     const eqIdx = arg.indexOf("=");
@@ -68,7 +117,7 @@ export function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unk
     }
   }
 
-  return result;
+  return Object.assign(baseFromArgs, result);
 }
 
 export function formatToolHelp(tool: Tool): TargetResult {
@@ -89,6 +138,9 @@ export function formatToolHelp(tool: Tool): TargetResult {
       lines.push(`  --${name.padEnd(22)} ${type}${req}${def}`);
     }
   }
+
+  lines.push("", "Flags:");
+  lines.push(`  --args '{"key":"value"}'   Pass all inputs as a JSON object (individual --flags override)`);
 
   return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
 }

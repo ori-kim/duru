@@ -68,7 +68,18 @@ clip notion --help search_pages   # --help 위치 자유
 clip notion search_pages --query "스프린트 회고"
 clip notion get_page --page_id abc123
 clip notion create_page --parent_id def456 --title "새 페이지"
+
+# 여러 인자를 JSON 객체로 한 번에 전달
+clip notion search_pages --args '{"query":"스프린트 회고","page_size":5}'
+
+# --args가 base, 개별 --flag가 override (위치 무관)
+clip notion search_pages --args '{"query":"스프린트 회고","page_size":5}' --page_size 10
+# → arguments: { query: "스프린트 회고", page_size: 10 }
 ```
+
+`--args`는 JSON 객체를 받아 도구의 `arguments`에 키를 풀어 넣습니다. 개별 `--flag value`는 `--args`보다 항상 우선합니다(위치 무관). `--args`는 반드시 JSON object여야 하며(array, null, 기본형 불가), 잘못된 JSON이나 타입 오류는 즉시 에러로 처리됩니다.
+
+> 참고: clip은 단일 `arguments` 객체를 사용하는 MCP 게이트웨이입니다. `gws` 같은 REST CLI가 `--params`(query)와 `--json`(body)을 구분하는 것과 달리, clip에는 query/body 구분이 없습니다. `--args` 하나로 도구 입력 전체를 표현합니다.
 
 tool schema는 최초 `tools` 조회 또는 `tools/call` 시 `~/.clip/target/mcp/notion/tools.json`에 캐시됩니다. 이후 `--help` 호출은 네트워크·인증 없이 즉시 응답합니다.
 
