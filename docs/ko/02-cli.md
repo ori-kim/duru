@@ -57,7 +57,7 @@ clip gh pr list --pipe
 clip gh pr list | jq '.[0].number'
 
 # JSON 출력 — stdout을 JSON으로 래핑
-clip gh pr list --json
+clip gh pr list --json-output
 ```
 
 ## ACL

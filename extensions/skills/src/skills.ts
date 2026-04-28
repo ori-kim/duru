@@ -94,7 +94,7 @@ function getInstalledAgents(name: string, sourceDir: string): string[] {
 function cmdList(args: string[]): void {
   let json = false;
   for (const a of args) {
-    if (a === "--json") json = true;
+    if (a === "--json-output") json = true;
   }
 
   const { entries, errors } = loadAllSkillsSafe();
@@ -202,7 +202,7 @@ function cmdShow(args: string[]): void {
 
 function cmdGet(args: string[]): void {
   const name = args[0];
-  if (!name) die("Usage: clip skills get <name> [--input k=v ...] [--json]");
+  if (!name) die("Usage: clip skills get <name> [--input k=v ...] [--json-output]");
 
   const found = findSkillDir(name);
   if (!found) die(`Skill "${name}" not found.\nRun: clip skills list`);
@@ -212,7 +212,7 @@ function cmdGet(args: string[]): void {
 
   for (let i = 1; i < args.length; i++) {
     const a = args[i]!;
-    if (a === "--json") {
+    if (a === "--json-output") {
       json = true;
     } else if (a === "--input" || a === "-i") {
       const pair = args[++i] ?? die("--input requires k=v");
@@ -716,7 +716,7 @@ export async function runSkillsCmd(args: string[]): Promise<void> {
           "Registry:",
           "  add <name>                        Create a new skill scaffold",
           "  pull <path> [<name>]              Move external skill into registry + leave symlink",
-          "  list [--json]                     List all skills",
+          "  list [--json-output]               List all skills",
           "  show <name>                       Print SKILL.md verbatim",
           "  get <name> [--input k=v ...]      Render skill with inputs substituted",
           "  rm <name>                         Remove from registry",

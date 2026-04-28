@@ -162,13 +162,13 @@ clip profile remove mygh personal
 These flags can be placed anywhere in a command:
 
 ```sh
-clip gh pr list --json              # JSON output
+clip gh pr list --json-output              # JSON output
 clip notion search_pages --dry-run  # Preview request without executing
 clip gh pr list --pipe              # Force buffered mode even in a TTY
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--json` | Format output as JSON |
+| `--json-output` | Format output as JSON |
 | `--pipe` | Force buffered mode, disabling TTY passthrough |
 | `--dry-run` | Print the equivalent curl/command without executing |

@@ -18,7 +18,7 @@ Entry bodies stored in `~/.clip/recap/`. If someone else or a previous session h
 - `clip recap` — list all groups (Targets / Bundles)
 - `clip recap <name>` — list entries in a group
 - `clip recap <name> <key>` — read entry body
-- `clip recap <name> <key> --json` — JSON mode
+- `clip recap <name> <key> --json-output` — JSON mode
 - `clip recap search <kw>` — search across meta and body
 
 If the group has an `overview` entry, start there.

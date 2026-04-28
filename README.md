@@ -127,9 +127,9 @@ clip gql query --query '{ users { id name } }'
 | `npx skills add ori-kim/cli-proxy` | Install agent skill via skills.sh |
 | `clip completion zsh` | Print zsh completion |
 
-**Global flags:** `--json`, `--pipe`, `--dry-run`, `--help`, `--version`
+**Global flags:** `--json-output`, `--pipe`, `--dry-run`, `--help`, `--version`
 
-Flags can be placed anywhere: `clip gh pr list --json`, `clip petstore getPetById --petId 1 --dry-run`
+Flags can be placed anywhere: `clip gh pr list --json-output`, `clip petstore getPetById --petId 1 --dry-run`
 
 ## Extensions
 

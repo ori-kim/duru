@@ -162,13 +162,13 @@ clip profile remove mygh personal
 모든 target 실행 시 어디에든 붙일 수 있습니다:
 
 ```sh
-clip gh pr list --json              # JSON 출력
+clip gh pr list --json-output              # JSON 출력
 clip notion search_pages --dry-run  # curl 미리 확인
 clip gh pr list --pipe              # TTY라도 버퍼 모드 강제
 ```
 
 | 플래그 | 설명 |
 |--------|------|
-| `--json` | 출력을 JSON으로 변환 |
+| `--json-output` | 출력을 JSON으로 변환 |
 | `--pipe` | TTY 환경에서도 버퍼 모드 강제 (passthrough 비활성화) |
 | `--dry-run` | 실제 실행 없이 나가는 요청/명령어 미리 출력 |

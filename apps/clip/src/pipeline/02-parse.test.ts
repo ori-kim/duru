@@ -34,7 +34,7 @@ describe("empty argv", () => {
 
 describe("global flags", () => {
   test("--json before target", () => {
-    const p = parse(["--json", "slack", "list"]);
+    const p = parse(["--json-output", "slack", "list"]);
     expect(p.lateFlags.jsonMode).toBe(true);
     expect(p.baseName).toBe("slack");
     expect(p.userArgs).toEqual(["list"]);
@@ -53,7 +53,7 @@ describe("global flags", () => {
   });
 
   test("multiple global flags combined", () => {
-    const p = parse(["--json", "--pipe", "--dry-run", "slack", "list"]);
+    const p = parse(["--json-output", "--pipe", "--dry-run", "slack", "list"]);
     expect(p.lateFlags).toEqual({ jsonMode: true, pipeMode: true, dryRun: true });
     expect(p.baseName).toBe("slack");
   });
@@ -131,7 +131,7 @@ describe("@profile split", () => {
   });
 
   test("global flags + @profile", () => {
-    const p = parse(["--json", "slack@bot", "tools"]);
+    const p = parse(["--json-output", "slack@bot", "tools"]);
     expect(p.lateFlags.jsonMode).toBe(true);
     expect(p.baseName).toBe("slack");
     expect(p.explicitProfile).toBe("bot");
@@ -143,7 +143,7 @@ describe("@profile split", () => {
 
 describe("late flags in target args", () => {
   test("--json in target args merged", () => {
-    const p = parse(["slack", "list", "--json"]);
+    const p = parse(["slack", "list", "--json-output"]);
     expect(p.lateFlags.jsonMode).toBe(true);
     expect(p.userArgs).toEqual(["list"]);
   });
@@ -161,14 +161,14 @@ describe("late flags in target args", () => {
   });
 
   test("late flags removed from userArgs", () => {
-    const p = parse(["slack", "tools", "--json", "--pipe"]);
+    const p = parse(["slack", "tools", "--json-output", "--pipe"]);
     expect(p.lateFlags.jsonMode).toBe(true);
     expect(p.lateFlags.pipeMode).toBe(true);
     expect(p.userArgs).toEqual(["tools"]);
   });
 
   test("global --json OR'd with late --json", () => {
-    const p = parse(["--json", "slack", "list", "--json"]);
+    const p = parse(["--json-output", "slack", "list", "--json-output"]);
     expect(p.lateFlags.jsonMode).toBe(true);
     expect(p.userArgs).toEqual(["list"]);
   });
@@ -231,7 +231,7 @@ describe("internal verbs", () => {
   });
 
   test("config with global flag before it", () => {
-    const p = parse(["--json", "config"]);
+    const p = parse(["--json-output", "config"]);
     expect(p.internalVerb).toBe("config");
     expect(p.lateFlags.jsonMode).toBe(true);
   });
@@ -247,7 +247,7 @@ describe("--help in target args passthrough", () => {
   });
 
   test("foo -h mytool --json: -h remains, --json filtered", () => {
-    const p = parse(["foo", "-h", "mytool", "--json"]);
+    const p = parse(["foo", "-h", "mytool", "--json-output"]);
     expect(p.lateFlags.jsonMode).toBe(true);
     expect(p.userArgs).toEqual(["-h", "mytool"]);
   });

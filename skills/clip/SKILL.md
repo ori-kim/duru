@@ -37,18 +37,18 @@ Call `clip <target> <subcommand>` directly. If you get an auth error or "target 
 
 | Flag | Effect |
 |---|---|
-| `--json` | Output as JSON (unwraps MCP content, wraps CLI stdout) |
+| `--json-output` | Output as JSON (unwraps MCP content, wraps CLI stdout) |
 | `--pipe` | Force buffered mode (disables passthrough) |
 | `--dry-run` | Print the equivalent curl/command without executing |
 
-Flags can appear anywhere: `clip gh pr list --json`, `clip --dry-run petstore getPetById --petId 1`
+Flags can appear anywhere: `clip gh pr list --json-output`, `clip --dry-run petstore getPetById --petId 1`
 
 ## Target types
 
 **CLI** — wraps a local command with ACL rules
 ```sh
 clip gh issue list
-clip gh pr list --json
+clip gh pr list --json-output
 ```
 
 **MCP** — HTTP (Streamable HTTP), SSE, or STDIO MCP server (OAuth supported)

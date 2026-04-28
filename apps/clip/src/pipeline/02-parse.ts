@@ -30,7 +30,7 @@ export function setInternalVerbSet(verbs: Set<string>): void {
   _internalVerbSet = verbs;
 }
 
-const LATE_FLAG_SET = new Set(["--dry-run", "--json", "--pipe", "--debug", "--format"]);
+const LATE_FLAG_SET = new Set(["--dry-run", "--json-output", "--pipe", "--debug", "--format"]);
 
 // cli/parser.ts re-export 호환용 — process.exit 포함 기존 동작 유지
 export function parseGlobalFlags(argv: string[]): {
@@ -48,7 +48,7 @@ export function parseGlobalFlags(argv: string[]): {
 
   while (i < argv.length) {
     const a = argv[i] ?? "";
-    if (a === "--json") {
+    if (a === "--json-output") {
       jsonMode = true;
       i++;
     } else if (a === "--pipe") {
@@ -91,7 +91,7 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
   // global flags 스캔 (argv 선두)
   while (i < argvArr.length) {
     const a = argvArr[i] ?? "";
-    if (a === "--json") {
+    if (a === "--json-output") {
       jsonMode = true;
       i++;
     } else if (a === "--pipe") {
@@ -154,7 +154,7 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
     const a = rawTargetArgs[i] ?? "";
     if (a === "--dry-run") {
       effectiveDryRun = true;
-    } else if (a === "--json") {
+    } else if (a === "--json-output") {
       effectiveJsonMode = true;
     } else if (a === "--pipe") {
       effectivePipeMode = true;

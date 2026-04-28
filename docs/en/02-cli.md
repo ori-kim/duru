@@ -57,7 +57,7 @@ clip gh pr list --pipe
 clip gh pr list | jq '.[0].number'
 
 # JSON output — wraps stdout in a JSON envelope
-clip gh pr list --json
+clip gh pr list --json-output
 ```
 
 ## ACL

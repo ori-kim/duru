@@ -67,7 +67,7 @@ Reference inputs in the body with `{{ inputs.key }}`.
 |---------|-------------|
 | `clip skills add <name> [--description <d>] [--tag a,b]` | Create scaffold |
 | `clip skills pull <path> [<name>]` | Move external skill into registry + leave symlink at origin |
-| `clip skills list [--json]` | List all skills |
+| `clip skills list [--json-output]` | List all skills |
 | `clip skills show <name>` | Print raw SKILL.md |
 | `clip skills get <name> [--input k=v ...]` | Render with inputs |
 | `clip skills rm <name>` | Remove skill |
@@ -177,4 +177,4 @@ Skills not found in the registry are skipped with a warning during `activate`.
 clip skills get my-skill --input ticket=ENG-123 --input branch=feature/x
 ```
 
-Missing `required` inputs cause an error. Missing optional inputs fall back to `default`. Use `--json` to get the rendered text plus frontmatter as JSON.
+Missing `required` inputs cause an error. Missing optional inputs fall back to `default`. Use `--json-output` to get the rendered text plus frontmatter as JSON.

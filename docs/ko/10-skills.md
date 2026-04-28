@@ -67,7 +67,7 @@ inputs:
 |--------|------|
 | `clip skills add <name> [--description <d>] [--tag a,b]` | 스킬 스캐폴드 생성 |
 | `clip skills pull <path> [<name>]` | 외부 스킬을 레지스트리로 이동, 원본 위치에 symlink 생성 |
-| `clip skills list [--json]` | 전체 스킬 목록 |
+| `clip skills list [--json-output]` | 전체 스킬 목록 |
 | `clip skills show <name>` | SKILL.md 원문 출력 |
 | `clip skills get <name> [--input k=v ...]` | inputs 치환 후 렌더링 |
 | `clip skills rm <name>` | 스킬 삭제 |
@@ -175,4 +175,4 @@ clip skills group show work
 clip skills get my-skill --input ticket=ENG-123 --input branch=feature/x
 ```
 
-`required` 입력이 누락되면 에러가 발생하고, 선택 입력은 `default` 값으로 대체됩니다. `--json` 플래그를 사용하면 렌더링된 텍스트와 frontmatter를 JSON으로 출력합니다.
+`required` 입력이 누락되면 에러가 발생하고, 선택 입력은 `default` 값으로 대체됩니다. `--json-output` 플래그를 사용하면 렌더링된 텍스트와 frontmatter를 JSON으로 출력합니다.

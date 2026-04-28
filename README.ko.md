@@ -126,9 +126,9 @@ clip gql query --query '{ users { id name } }'
 | `npx skills add ori-kim/cli-proxy` | skills.sh로 에이전트 스킬 설치 |
 | `clip completion zsh` | zsh 자동완성 스크립트 출력 |
 
-**글로벌 플래그:** `--json`, `--pipe`, `--dry-run`, `--help`, `--version`
+**글로벌 플래그:** `--json-output`, `--pipe`, `--dry-run`, `--help`, `--version`
 
-플래그는 명령어 어디에든 붙일 수 있습니다: `clip gh pr list --json`, `clip petstore getPetById --petId 1 --dry-run`
+플래그는 명령어 어디에든 붙일 수 있습니다: `clip gh pr list --json-output`, `clip petstore getPetById --petId 1 --dry-run`
 
 ## 문서
 

@@ -14,7 +14,7 @@ clip <target> describe <op>            # show method/type details
 clip <target> types                    # list types (gRPC/GraphQL)
 ```
 
-Global flags: `--json`, `--pipe`, `--dry-run` — can appear anywhere in the command.
+Global flags: `--json-output`, `--pipe`, `--dry-run` — can appear anywhere in the command.
 
 ## Target types
 
@@ -59,7 +59,7 @@ Running:
 ```sh
 clip gh pr list                     # passthrough (TTY)
 clip gh pr list --pipe              # buffered
-clip gh pr list --json              # JSON output
+clip gh pr list --json-output              # JSON output
 clip gh pr list --label bug --dry-run   # preview command
 ```
 

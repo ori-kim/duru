@@ -217,7 +217,7 @@ function handleList(targetName: string | undefined) {
 
 function handleShow(targetName: string, args: string[]) {
   const resolved = resolveTarget(targetName);
-  const isJson = args.includes("--json");
+  const isJson = args.includes("--json-output");
   const key = args.find((a, i) => i === 0 && !a.startsWith("--")) || args.find((a) => !a.startsWith("--"));
   return renderRecap(targetName, key, isJson);
 }
@@ -325,7 +325,7 @@ export const extension = {
       }
 
       // clip recap <target> [key] [--json]
-      const isJson = args.includes("--json");
+      const isJson = args.includes("--json-output");
       const key = args.slice(1).find((a) => !a.startsWith("--"));
       printResult(renderRecap(first, key, isJson));
     }, {
@@ -354,7 +354,7 @@ export const extension = {
 
       // Default: show recap for this target
       if (args.length === 0 || args[0].startsWith("--")) {
-        const isJson = args.includes("--json");
+        const isJson = args.includes("--json-output");
         const key = args.find((a) => !a.startsWith("--"));
         return renderRecap(targetName, key, isJson);
       }
