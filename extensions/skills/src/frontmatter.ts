@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { parse as yamlParse } from "yaml";
-import { die } from "@clip/core";
+import { IDENTIFIER_RE, die } from "@clip/core";
 
 const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 
@@ -12,7 +12,7 @@ const InputSchema = z.object({
 });
 
 export const SkillFrontmatterSchema = z.object({
-  name: z.string(),
+  name: z.string().regex(IDENTIFIER_RE, "Skill name may only contain letters, digits, _ and -"),
   description: z.string(),
   tags: z.array(z.string()).optional(),
   inputs: z.record(InputSchema).optional(),

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "fs";
 import { join } from "path";
 import { parse as yamlParse, stringify as dumpYAML } from "yaml";
-import { CONFIG_DIR } from "@clip/core";
+import { CONFIG_DIR, validateIdentifier } from "@clip/core";
 import { parseSkillFile } from "./frontmatter.ts";
 import type { SkillFrontmatter } from "./frontmatter.ts";
 
@@ -69,6 +69,7 @@ export function getSkillsDir(): string {
 }
 
 export function findSkillDir(name: string): string | null {
+  validateIdentifier(name, "Skill name");
   const skillDir = join(SKILLS_DIR, name);
   if (existsSync(join(skillDir, "SKILL.md"))) return skillDir;
   return null;
@@ -128,6 +129,7 @@ export function loadAllSkillsSafe(): { entries: SkillEntry[]; errors: { file: st
 }
 
 export async function writeSkill(name: string, content: string): Promise<void> {
+  validateIdentifier(name, "Skill name");
   const skillDir = join(SKILLS_DIR, name);
   mkdirSync(skillDir, { recursive: true });
   await Bun.write(join(skillDir, "SKILL.md"), content);

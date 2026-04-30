@@ -1,6 +1,7 @@
 import {
   type AliasDef,
   type HasAliases,
+  validateIdentifier,
   buildAliasSection,
   formatAliasDef,
   listAliases,
@@ -35,6 +36,7 @@ async function runAliasAdd(args: string[]): Promise<void> {
       "Usage: clip alias add <target> <name> --subcommand <sub> [--arg X ...] [--args-json '[...]'] [--input-json '{...}'] [--description \"...\"]",
     );
   }
+  validateIdentifier(aliasName, "Alias name");
   if (RESERVED_ALIAS_NAMES.has(aliasName)) {
     die(`"${aliasName}" is a reserved built-in name and cannot be used as an alias name.`);
   }

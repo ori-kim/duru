@@ -113,3 +113,18 @@ describe("parseToolArgs — regression: --params not spread (nested as before)",
     });
   });
 });
+
+describe("parseToolArgs — agent input hardening", () => {
+  test("rejects control characters", () => {
+    expect(() => parseToolArgs(["--title", "hello\u0000world"], {})).toThrow("control characters");
+  });
+
+  test("rejects query params in resource ids", () => {
+    const schema = { properties: { fileId: { type: "string" } } };
+    expect(() => parseToolArgs(["--fileId", "abc?fields=name"], schema)).toThrow("resource identifiers");
+  });
+
+  test("rejects pre-encoded resource ids from --args", () => {
+    expect(() => parseToolArgs(["--args", '{"page_id":"%2e%2e"}'], {})).toThrow("resource identifiers");
+  });
+});
