@@ -1,0 +1,12 @@
+{
+  "name": "@clip/ext-sanitizer",
+  "version": "0.9.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@clip/core": "workspace:*"
+  }
+}

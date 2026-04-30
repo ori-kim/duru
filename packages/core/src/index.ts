@@ -85,7 +85,6 @@ export { parseToolArgs, formatToolHelp, extractHelpFlag } from "./utils/tool-arg
 
 // Agent input safety
 export { IDENTIFIER_RE, validateIdentifier, hardenAgentInput, hardenToolInput } from "./utils/agent-safety.ts";
-export { sanitizeTargetResult } from "./utils/sanitize.ts";
 
 // Target schema helpers — extension schema 정의에서 사용
 export { aclFields, aliasFields, profileFields, commonTargetFields } from "./utils/target-schema.ts";
