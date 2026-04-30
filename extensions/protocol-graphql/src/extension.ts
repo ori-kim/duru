@@ -38,6 +38,28 @@ export const extension: ClipExtension = {
         identifyFlags: ["graphql"],
       },
       displayHint: { headerColor: "38;5;205" },
+      listRowRenderer: async (name, target, opts: ListOpts) => {
+        const t = target as GraphqlTarget;
+        const configDir = resolveAuthDir(name, "graphql");
+        const authStatus = t.oauth ? await getAuthStatus(configDir) : null;
+        const headers = t.headers as Record<string, string> | undefined;
+        const status = authStatus
+          ? authStatus
+          : t.oauth
+            ? "not authenticated"
+            : headers?.["authorization"]
+              ? "api key"
+              : "no auth";
+        return {
+          name,
+          nameColor: "38;5;205",
+          subject: t.endpoint,
+          profile: (t as Record<string, unknown>).active ? `@${(t as Record<string, unknown>).active}` : undefined,
+          detail: formatAcl(t as Record<string, unknown>).trim() || undefined,
+          status,
+          markers: opts.bound.has(name) ? ["bind"] : undefined,
+        };
+      },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as GraphqlTarget;
         const { color, bind } = opts;
@@ -47,9 +69,11 @@ export const extension: ClipExtension = {
         const headers = t.headers as Record<string, string> | undefined;
         const statusTag = authStatus
           ? color("2", `  [${authStatus}]`)
-          : t.oauth ? color("2", "  [not authenticated]")
-          : headers?.["authorization"] ? color("2", "  [api key]")
-          : color("2", "  [no auth]");
+          : t.oauth
+            ? color("2", "  [not authenticated]")
+            : headers?.["authorization"]
+              ? color("2", "  [api key]")
+              : color("2", "  [no auth]");
         const profileTag = (t as Record<string, unknown>).active ? ` @${(t as Record<string, unknown>).active}` : "";
         const aclStr = formatAcl(t as Record<string, unknown>);
         return `  ${nm} ${t.endpoint}${profileTag}${aclStr}${statusTag}${bind(name)}`;
@@ -58,7 +82,8 @@ export const extension: ClipExtension = {
       addHandler: async (args: AddArgs) => {
         const { name, positionals, flags, allow, deny } = args;
         const endpoint = flags["endpoint"] ?? positionals[0];
-        if (!endpoint) die("GraphQL target requires an endpoint URL (e.g. clip add gh https://api.github.com/graphql --graphql)");
+        if (!endpoint)
+          die("GraphQL target requires an endpoint URL (e.g. clip add gh https://api.github.com/graphql --graphql)");
         await addTarget(name, "graphql", { endpoint, allow, deny });
         console.log(`Added GraphQL target "${name}" → ${endpoint}`);
       },

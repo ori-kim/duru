@@ -37,6 +37,28 @@ export const extension: ClipExtension = {
         identifyFlags: ["api"],
       },
       displayHint: { headerColor: "36" },
+      listRowRenderer: async (name, target, opts: ListOpts) => {
+        const t = target as ApiTarget;
+        const configDir = resolveAuthDir(name, "api");
+        const authStatus = await getAuthStatus(configDir);
+        const auth = t.auth;
+        const status = authStatus
+          ? authStatus
+          : auth === "oauth"
+            ? "not authenticated"
+            : auth === "apikey"
+              ? "api key"
+              : "no auth";
+        return {
+          name,
+          nameColor: "36",
+          subject: (t.baseUrl ?? t.openapiUrl ?? "") as string,
+          profile: (t as Record<string, unknown>).active ? `@${(t as Record<string, unknown>).active}` : undefined,
+          detail: formatAcl(t as Record<string, unknown>).trim() || undefined,
+          status,
+          markers: opts.bound.has(name) ? ["bind"] : undefined,
+        };
+      },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as ApiTarget;
         const { color, bind } = opts;
@@ -46,9 +68,11 @@ export const extension: ClipExtension = {
         const auth = t.auth;
         const statusTag = authStatus
           ? color("2", `  [${authStatus}]`)
-          : auth === "oauth" ? color("2", "  [not authenticated]")
-          : auth === "apikey" ? color("2", "  [api key]")
-          : color("2", "  [no auth]");
+          : auth === "oauth"
+            ? color("2", "  [not authenticated]")
+            : auth === "apikey"
+              ? color("2", "  [api key]")
+              : color("2", "  [no auth]");
         const profileTag = (t as Record<string, unknown>).active ? ` @${(t as Record<string, unknown>).active}` : "";
         const url = (t.baseUrl ?? t.openapiUrl ?? "") as string;
         const aclStr = formatAcl(t as Record<string, unknown>);
@@ -85,7 +109,9 @@ export const extension: ClipExtension = {
               );
             }
           }
-        } catch { /* silent */ }
+        } catch {
+          /* silent */
+        }
       },
       helpRenderer: async (_name, target) => {
         const t = target as ApiTarget;

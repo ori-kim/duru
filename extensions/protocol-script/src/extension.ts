@@ -46,6 +46,21 @@ export const extension: ClipExtension = {
         passthrough: true,
       },
       displayHint: { headerColor: "38;5;245" },
+      listRowRenderer: async (name, target, opts: ListOpts) => {
+        const t = target as ScriptTarget;
+        const commands = t.commands as Record<string, unknown> | undefined;
+        const cmdCount = Object.keys(commands ?? {}).length;
+        const detail = [t.description ? `- ${t.description}` : "", formatAcl(t as Record<string, unknown>).trim()]
+          .filter(Boolean)
+          .join(" ");
+        return {
+          name,
+          nameColor: "38;5;245",
+          subject: `${cmdCount} command(s)`,
+          detail: detail || undefined,
+          markers: opts.bound.has(name) ? ["bind"] : undefined,
+        };
+      },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as ScriptTarget;
         const { color, bind } = opts;

@@ -23,6 +23,17 @@ export const extension: ClipExtension = {
         passthrough: true,
       },
       displayHint: { headerColor: "32" },
+      listRowRenderer: async (name, target, opts: ListOpts) => {
+        const t = target as CliTarget;
+        return {
+          name,
+          nameColor: "32",
+          subject: t.command,
+          profile: t.active ? `@${t.active}` : undefined,
+          detail: formatAcl(t as Record<string, unknown>).trim() || undefined,
+          markers: opts.bound.has(name) ? ["bind"] : undefined,
+        };
+      },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as CliTarget;
         const { color, bind } = opts;
