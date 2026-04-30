@@ -126,7 +126,6 @@ async function loadSchema(
   targetName: string,
   forceRefresh = false,
   authHeaders: Record<string, string> = {},
-  opts: { cacheOnly?: boolean } = {},
 ): Promise<GrpcSchemaCache> {
   const cachePath = schemaCachePath(targetName);
   const cacheFile = Bun.file(cachePath);
@@ -135,17 +134,11 @@ async function loadSchema(
     try {
       return JSON.parse(await cacheFile.text()) as GrpcSchemaCache;
     } catch {
-      if (opts.cacheOnly) {
-        die(`Cached schema for "${targetName}" is invalid. Run: clip refresh ${targetName}`);
-      }
       /* 손상 → 재로드 */
     }
   }
 
-  if (opts.cacheOnly) {
-    die(`Dry run for "${targetName}" requires a cached schema. Run: clip refresh ${targetName}`);
-  }
-
+  await ensureGrpcurl();
   warnMetadata(target.metadata);
   warnMetadata(target.reflectMetadata);
 
@@ -269,8 +262,7 @@ export function buildGrpcurlCommand(args: string[]): string {
 export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Promise<TargetResult> {
   const { subcommand, args: rawArgs, targetName, headers: ctxHeaders, dryRun } = ctx;
   const forceRefresh = subcommand === "refresh";
-  const cacheOnly = dryRun && subcommand !== "refresh";
-  if (!cacheOnly) await ensureGrpcurl();
+  if (!dryRun || forceRefresh) await ensureGrpcurl();
   validateTls(target);
 
   if (subcommand === "refresh") {
@@ -283,7 +275,7 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
     };
   }
 
-  const schema = await loadSchema(target, targetName, forceRefresh, ctxHeaders, { cacheOnly });
+  const schema = await loadSchema(target, targetName, forceRefresh, ctxHeaders);
 
   if (subcommand === "tools") {
     const visible = schema.services.filter((s) => !HIDDEN_SERVICES.has(s.name));

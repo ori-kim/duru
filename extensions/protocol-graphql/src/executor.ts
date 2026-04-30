@@ -75,7 +75,6 @@ async function loadSchema(
   targetName: string,
   forceRefresh = false,
   extraHeaders: Record<string, string> = {},
-  opts: { cacheOnly?: boolean } = {},
 ): Promise<GqlSpec> {
   const cachePath = schemaCachePath(targetName);
   const cacheFile = Bun.file(cachePath);
@@ -85,15 +84,8 @@ async function loadSchema(
       const raw = JSON.parse(await cacheFile.text()) as Record<string, unknown>;
       return parseIntrospection(raw);
     } catch {
-      if (opts.cacheOnly) {
-        die(`Cached schema for "${targetName}" is invalid. Run: clip refresh ${targetName}`);
-      }
       /* 손상 → 재fetch */
     }
-  }
-
-  if (opts.cacheOnly) {
-    die(`Dry run for "${targetName}" requires a cached schema. Run: clip refresh ${targetName}`);
   }
 
   if (target.introspect === false) {
@@ -263,7 +255,7 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
     return executeQuery(target, targetName, rawQuery, variables, undefined, ctxHeaders);
   }
 
-  const spec = await loadSchema(target, targetName, forceRefresh, ctxHeaders, { cacheOnly: dryRun });
+  const spec = await loadSchema(target, targetName, forceRefresh, ctxHeaders);
 
   if (subcommand === "tools") {
     const scripts = buildAliasSection(target);
