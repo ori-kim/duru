@@ -27,6 +27,11 @@ type GrpcSchemaCache = {
   services: GrpcService[];
 };
 
+function shellQuote(arg: string): string {
+  if (/^[a-zA-Z0-9._\-/:=@,+{}[\]",]+$/.test(arg)) return arg;
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 function schemaCachePath(targetName: string): string {
   const dir = findTargetConfigDir(targetName, "grpc") ?? join(CONFIG_DIR, "target", "grpc", targetName);
   return join(dir, "schema.json");
@@ -121,6 +126,7 @@ async function loadSchema(
   targetName: string,
   forceRefresh = false,
   authHeaders: Record<string, string> = {},
+  opts: { cacheOnly?: boolean } = {},
 ): Promise<GrpcSchemaCache> {
   const cachePath = schemaCachePath(targetName);
   const cacheFile = Bun.file(cachePath);
@@ -129,8 +135,15 @@ async function loadSchema(
     try {
       return JSON.parse(await cacheFile.text()) as GrpcSchemaCache;
     } catch {
+      if (opts.cacheOnly) {
+        die(`Cached schema for "${targetName}" is invalid. Run: clip refresh ${targetName}`);
+      }
       /* 손상 → 재로드 */
     }
+  }
+
+  if (opts.cacheOnly) {
+    die(`Dry run for "${targetName}" requires a cached schema. Run: clip refresh ${targetName}`);
   }
 
   warnMetadata(target.metadata);
@@ -249,10 +262,15 @@ function toolDisplayName(svc: GrpcService, method: GrpcMethod, multiService: boo
   return `${svc.name.split(".").pop()}.${method.name}`;
 }
 
+export function buildGrpcurlCommand(args: string[]): string {
+  return `grpcurl ${args.map(shellQuote).join(" ")}\n`;
+}
+
 export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Promise<TargetResult> {
-  const { subcommand, args: rawArgs, targetName, headers: ctxHeaders } = ctx;
+  const { subcommand, args: rawArgs, targetName, headers: ctxHeaders, dryRun } = ctx;
   const forceRefresh = subcommand === "refresh";
-  await ensureGrpcurl();
+  const cacheOnly = dryRun && subcommand !== "refresh";
+  if (!cacheOnly) await ensureGrpcurl();
   validateTls(target);
 
   if (subcommand === "refresh") {
@@ -265,7 +283,7 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
     };
   }
 
-  const schema = await loadSchema(target, targetName, forceRefresh, ctxHeaders);
+  const schema = await loadSchema(target, targetName, forceRefresh, ctxHeaders, { cacheOnly });
 
   if (subcommand === "tools") {
     const visible = schema.services.filter((s) => !HIDDEN_SERVICES.has(s.name));
@@ -368,8 +386,13 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
   const token = tokenFromHeaders(ctxHeaders);
   const baseFlags = makeBaseFlags(target);
   const rpcFlags = makeRpcFlags(target, token);
+  const callArgs = [...baseFlags, ...rpcFlags, "-d", JSON.stringify(body), target.address, fqn];
 
-  const result = await spawnGrpcurl([...baseFlags, ...rpcFlags, "-d", JSON.stringify(body), target.address, fqn]);
+  if (dryRun) {
+    return { exitCode: 0, stdout: buildGrpcurlCommand(callArgs), stderr: "" };
+  }
+
+  const result = await spawnGrpcurl(callArgs);
 
   if (result.exitCode === 0) {
     let stdout: string;
@@ -414,7 +437,9 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
         "  Option 1: Add to config.yml:",
         "    metadata:",
         '      authorization: "Bearer <token>"',
-        "  Option 2: Store token in " + (findTargetConfigDir(targetName, "grpc") ?? join(CONFIG_DIR, "target", "grpc", targetName)) + "/auth.json",
+        "  Option 2: Store token in " +
+          (findTargetConfigDir(targetName, "grpc") ?? join(CONFIG_DIR, "target", "grpc", targetName)) +
+          "/auth.json",
         "",
         result.stderr,
       ].join("\n"),
@@ -428,7 +453,11 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
   };
 }
 
-export async function describeGrpcTools(target: GrpcTarget, targetName: string, authHeaders: Record<string, string> = {}): Promise<Tool[]> {
+export async function describeGrpcTools(
+  target: GrpcTarget,
+  targetName: string,
+  authHeaders: Record<string, string> = {},
+): Promise<Tool[]> {
   await ensureGrpcurl();
   validateTls(target);
   const schema = await loadSchema(target, targetName, false, authHeaders);

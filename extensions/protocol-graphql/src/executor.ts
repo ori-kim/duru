@@ -18,6 +18,8 @@ import type { GraphqlTarget } from "./schema.ts";
 
 const BUILTIN_SCALARS = new Set(["Boolean", "String", "Int", "Float", "ID"]);
 
+const sq = (s: string) => s.replace(/'/g, "'\\''");
+
 function schemaCachePath(targetName: string): string {
   const dir = findTargetConfigDir(targetName, "graphql") ?? join(CONFIG_DIR, "target", "graphql", targetName);
   return join(dir, "schema.json");
@@ -73,6 +75,7 @@ async function loadSchema(
   targetName: string,
   forceRefresh = false,
   extraHeaders: Record<string, string> = {},
+  opts: { cacheOnly?: boolean } = {},
 ): Promise<GqlSpec> {
   const cachePath = schemaCachePath(targetName);
   const cacheFile = Bun.file(cachePath);
@@ -82,8 +85,15 @@ async function loadSchema(
       const raw = JSON.parse(await cacheFile.text()) as Record<string, unknown>;
       return parseIntrospection(raw);
     } catch {
+      if (opts.cacheOnly) {
+        die(`Cached schema for "${targetName}" is invalid. Run: clip refresh ${targetName}`);
+      }
       /* 손상 → 재fetch */
     }
+  }
+
+  if (opts.cacheOnly) {
+    die(`Dry run for "${targetName}" requires a cached schema. Run: clip refresh ${targetName}`);
   }
 
   if (target.introspect === false) {
@@ -117,6 +127,29 @@ async function loadSchema(
   return parseIntrospection(schemaObj as Record<string, unknown>);
 }
 
+export function buildGraphqlCurlCommand(
+  endpoint: string,
+  headers: Record<string, string>,
+  body: Record<string, unknown>,
+): string {
+  const parts = [`curl -X POST '${sq(endpoint)}'`];
+  for (const [k, v] of Object.entries(headers)) {
+    parts.push(`  -H '${sq(k)}: ${sq(v)}'`);
+  }
+  parts.push(`  -d '${sq(JSON.stringify(body))}'`);
+  return `${parts.join(" \\\n")}\n`;
+}
+
+function buildGraphqlBody(
+  query: string,
+  variables: Record<string, unknown>,
+  operationName?: string,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { query, variables };
+  if (operationName) body["operationName"] = operationName;
+  return body;
+}
+
 function formatToolsLine(tool: GqlTool, prefix: string): string {
   const argStr = tool.args.length > 0 ? `(${tool.args.map((a) => a.name).join(", ")})` : "";
   return `  ${(prefix + tool.rootField + argStr).padEnd(40)} ${gqlTypeToString(tool.returnType)}`;
@@ -147,8 +180,7 @@ async function executeQuery(
   operationName?: string,
   extraHeaders: Record<string, string> = {},
 ): Promise<TargetResult> {
-  const body: Record<string, unknown> = { query, variables };
-  if (operationName) body["operationName"] = operationName;
+  const body = buildGraphqlBody(query, variables, operationName);
 
   const { resp, json } = await postGraphql(target, targetName, body, buildHeaders(target, extraHeaders));
 
@@ -183,7 +215,7 @@ async function executeQuery(
 }
 
 export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext): Promise<TargetResult> {
-  const { subcommand, args: rawArgs, targetName, headers: ctxHeaders } = ctx;
+  const { subcommand, args: rawArgs, targetName, headers: ctxHeaders, dryRun } = ctx;
   const forceRefresh = subcommand === "refresh";
 
   if (subcommand === "refresh") {
@@ -199,7 +231,39 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
     };
   }
 
-  const spec = await loadSchema(target, targetName, forceRefresh, ctxHeaders);
+  if (subcommand === "query") {
+    const rawQuery = rawArgs[0];
+    if (!rawQuery) {
+      return {
+        exitCode: 1,
+        stdout: "",
+        stderr: `Usage: clip ${targetName} query '<graphql query>' [--variables '{"key": "val"}']\n`,
+      };
+    }
+    let variables: Record<string, unknown> = {};
+    const varIdx = rawArgs.indexOf("--variables");
+    if (varIdx !== -1 && rawArgs[varIdx + 1]) {
+      try {
+        variables = JSON.parse(rawArgs[varIdx + 1]!) as Record<string, unknown>;
+      } catch {
+        return { exitCode: 1, stdout: "", stderr: `Invalid JSON in --variables\n` };
+      }
+    }
+    if (dryRun) {
+      return {
+        exitCode: 0,
+        stdout: buildGraphqlCurlCommand(
+          target.endpoint,
+          buildHeaders(target, ctxHeaders),
+          buildGraphqlBody(rawQuery, variables),
+        ),
+        stderr: "",
+      };
+    }
+    return executeQuery(target, targetName, rawQuery, variables, undefined, ctxHeaders);
+  }
+
+  const spec = await loadSchema(target, targetName, forceRefresh, ctxHeaders, { cacheOnly: dryRun });
 
   if (subcommand === "tools") {
     const scripts = buildAliasSection(target);
@@ -271,27 +335,6 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
     return { exitCode: 0, stdout: describeType(type) + "\n", stderr: "" };
   }
 
-  if (subcommand === "query") {
-    const rawQuery = rawArgs[0];
-    if (!rawQuery) {
-      return {
-        exitCode: 1,
-        stdout: "",
-        stderr: `Usage: clip ${targetName} query '<graphql query>' [--variables '{"key": "val"}']\n`,
-      };
-    }
-    let variables: Record<string, unknown> = {};
-    const varIdx = rawArgs.indexOf("--variables");
-    if (varIdx !== -1 && rawArgs[varIdx + 1]) {
-      try {
-        variables = JSON.parse(rawArgs[varIdx + 1]!) as Record<string, unknown>;
-      } catch {
-        return { exitCode: 1, stdout: "", stderr: `Invalid JSON in --variables\n` };
-      }
-    }
-    return executeQuery(target, targetName, rawQuery, variables, undefined, ctxHeaders);
-  }
-
   // RPC 도구 호출
   const tool = findTool(spec, subcommand);
   if (!tool) {
@@ -334,10 +377,26 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
   const opName = `${tool.operationType === "query" ? "q" : "m"}_${tool.rootField}`;
   const query = buildOperation(tool, variables, selection);
 
+  if (dryRun) {
+    return {
+      exitCode: 0,
+      stdout: buildGraphqlCurlCommand(
+        target.endpoint,
+        buildHeaders(target, ctxHeaders),
+        buildGraphqlBody(query, variables, opName),
+      ),
+      stderr: "",
+    };
+  }
+
   return executeQuery(target, targetName, query, variables, opName, ctxHeaders);
 }
 
-export async function describeGraphqlTools(target: GraphqlTarget, targetName: string, extraHeaders: Record<string, string> = {}): Promise<Tool[]> {
+export async function describeGraphqlTools(
+  target: GraphqlTarget,
+  targetName: string,
+  extraHeaders: Record<string, string> = {},
+): Promise<Tool[]> {
   const spec = await loadSchema(target, targetName, false, extraHeaders);
   return spec.tools.map((t) => ({
     name: t.name,
