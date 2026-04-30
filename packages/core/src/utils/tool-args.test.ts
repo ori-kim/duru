@@ -128,3 +128,59 @@ describe("parseToolArgs — agent input hardening", () => {
     expect(() => parseToolArgs(["--args", '{"page_id":"%2e%2e"}'], {})).toThrow("resource identifiers");
   });
 });
+
+describe("parseToolArgs — schema validation", () => {
+  test("rejects missing required arguments", () => {
+    const schema = { required: ["limit"], properties: { limit: { type: "number" } } };
+    expect(() => parseToolArgs([], schema)).toThrow("Missing required argument: args.limit");
+  });
+
+  test("rejects invalid integer values", () => {
+    const schema = { properties: { limit: { type: "integer" } } };
+    expect(() => parseToolArgs(["--limit", "1.5"], schema)).toThrow('Invalid --limit: expected integer, got "1.5"');
+  });
+
+  test("rejects invalid boolean values", () => {
+    const schema = { properties: { active: { type: "boolean" } } };
+    expect(() => parseToolArgs(["--active", "yes"], schema)).toThrow('Invalid --active: expected boolean, got "yes"');
+  });
+
+  test("rejects invalid object JSON", () => {
+    const schema = { properties: { payload: { type: "object" } } };
+    expect(() => parseToolArgs(["--payload", "not-json"], schema)).toThrow("Invalid JSON for --payload");
+  });
+
+  test("rejects enum values outside the schema", () => {
+    const schema = { properties: { state: { enum: ["open", "closed"] } } };
+    expect(() => parseToolArgs(["--state", "maybe"], schema)).toThrow(
+      'Invalid args.state: expected one of "open", "closed"',
+    );
+  });
+
+  test("rejects unknown arguments when additionalProperties is false", () => {
+    const schema = { additionalProperties: false, properties: { title: { type: "string" } } };
+    expect(() => parseToolArgs(["--title", "ok", "--extra", "nope"], schema)).toThrow("Unknown argument: args.extra");
+  });
+
+  test("validates --args JSON without string coercion", () => {
+    const schema = { properties: { limit: { type: "number" } } };
+    expect(() => parseToolArgs(["--args", '{"limit":"10"}'], schema)).toThrow(
+      "Invalid args.limit: expected number, got string",
+    );
+  });
+
+  test("validates nested array items", () => {
+    const schema = {
+      properties: {
+        ids: {
+          type: "array",
+          items: { type: "integer" },
+        },
+      },
+    };
+
+    expect(() => parseToolArgs(["--ids", "[1,2.5]"], schema)).toThrow(
+      "Invalid args.ids[1]: expected integer, got number",
+    );
+  });
+});

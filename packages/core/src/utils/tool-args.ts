@@ -3,13 +3,120 @@ import { hardenToolInput } from "./agent-safety.ts";
 
 export type { Tool };
 
+type JsonSchema = {
+  type?: string | string[];
+  enum?: unknown[];
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  additionalProperties?: boolean | JsonSchema;
+  items?: JsonSchema;
+};
+
 export function extractHelpFlag(args: string[]): { help: boolean; rest: string[] } {
   const rest = args.filter((a) => a !== "--help" && a !== "-h");
   return { help: rest.length < args.length, rest };
 }
 
+function schemaType(schema: JsonSchema | undefined): string | undefined {
+  const t = schema?.type;
+  return Array.isArray(t) ? t.find((v) => v !== "null") : t;
+}
+
+function parseJsonValue(rawVal: string | undefined, key: string): unknown {
+  try {
+    return JSON.parse(rawVal ?? "");
+  } catch (e) {
+    throw new Error(`Invalid JSON for --${key}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+function parseBoolean(rawVal: string | undefined, key: string): boolean {
+  if (rawVal === undefined) return true;
+  if (rawVal === "true" || rawVal === "1") return true;
+  if (rawVal === "false" || rawVal === "0") return false;
+  throw new Error(`Invalid --${key}: expected boolean, got ${JSON.stringify(rawVal)}`);
+}
+
+function parseNumber(rawVal: string | undefined, key: string, integer: boolean): number {
+  const n = Number(rawVal);
+  if (!Number.isFinite(n) || (integer && !Number.isInteger(n))) {
+    throw new Error(`Invalid --${key}: expected ${integer ? "integer" : "number"}, got ${JSON.stringify(rawVal)}`);
+  }
+  return n;
+}
+
+function coerceArgValue(key: string, rawVal: string | undefined, propDef: JsonSchema | undefined): unknown {
+  const propType = schemaType(propDef);
+
+  if (propType === "number" || propType === "integer") {
+    return parseNumber(rawVal, key, propType === "integer");
+  }
+  if (propType === "boolean") {
+    return parseBoolean(rawVal, key);
+  }
+  if (propType === "string") {
+    return rawVal;
+  }
+  if (propType === "object" || propType === "array") {
+    return parseJsonValue(rawVal, key);
+  }
+
+  try {
+    return JSON.parse(rawVal ?? "");
+  } catch {
+    return rawVal;
+  }
+}
+
+function hasSchemaType(schema: JsonSchema, type: string): boolean {
+  const t = schema.type;
+  if (!t) return true;
+  return Array.isArray(t) ? t.includes(type) : t === type;
+}
+
+function valueType(value: unknown): string {
+  if (Array.isArray(value)) return "array";
+  if (value === null) return "null";
+  if (Number.isInteger(value)) return "integer";
+  return typeof value;
+}
+
+function validateAgainstSchema(value: unknown, schema: JsonSchema, path: string): void {
+  if (schema.enum && !schema.enum.some((item) => Object.is(item, value))) {
+    throw new Error(`Invalid ${path}: expected one of ${schema.enum.map((v) => JSON.stringify(v)).join(", ")}`);
+  }
+
+  const actual = valueType(value);
+  if (!hasSchemaType(schema, actual) && !(actual === "integer" && hasSchemaType(schema, "number"))) {
+    const expected = Array.isArray(schema.type) ? schema.type.join("|") : schema.type;
+    throw new Error(`Invalid ${path}: expected ${expected}, got ${actual}`);
+  }
+
+  if (actual === "object") {
+    const obj = value as Record<string, unknown>;
+    const props = schema.properties ?? {};
+    for (const requiredKey of schema.required ?? []) {
+      if (!(requiredKey in obj)) throw new Error(`Missing required argument: ${path}.${requiredKey}`);
+    }
+    if (schema.additionalProperties === false) {
+      for (const key of Object.keys(obj)) {
+        if (!(key in props)) throw new Error(`Unknown argument: ${path}.${key}`);
+      }
+    }
+    for (const [key, childSchema] of Object.entries(props)) {
+      if (key in obj) validateAgainstSchema(obj[key], childSchema, `${path}.${key}`);
+    }
+  }
+
+  if (actual === "array" && schema.items) {
+    const itemSchema = schema.items;
+    (value as unknown[]).forEach((item, index) => validateAgainstSchema(item, itemSchema, `${path}[${index}]`));
+  }
+}
+
 export function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unknown>): Record<string, unknown> {
-  const props = (inputSchema["properties"] as Record<string, { type?: string | string[] }> | undefined) ?? {};
+  const schema = inputSchema as JsonSchema;
+  const props = schema.properties ?? {};
 
   // --args '{...}' spreads a JSON object as the base, individual --flags override.
   // Bypass when the tool schema explicitly defines an "args" property.
@@ -94,31 +201,12 @@ export function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unk
       continue;
     }
 
-    const propDef = props[key];
-    const propType = Array.isArray(propDef?.type) ? propDef.type[0] : propDef?.type;
-
-    if (propType === "number" || propType === "integer") {
-      result[key] = Number(rawVal);
-    } else if (propType === "boolean") {
-      result[key] = rawVal === "true" || rawVal === "1";
-    } else if (propType === "string") {
-      result[key] = rawVal;
-    } else if (propType === "object" || propType === "array") {
-      try {
-        result[key] = JSON.parse(rawVal);
-      } catch {
-        result[key] = rawVal;
-      }
-    } else {
-      try {
-        result[key] = JSON.parse(rawVal);
-      } catch {
-        result[key] = rawVal;
-      }
-    }
+    result[key] = coerceArgValue(key, rawVal, props[key]);
   }
 
-  return hardenToolInput(Object.assign(baseFromArgs, result));
+  const merged = hardenToolInput(Object.assign(baseFromArgs, result));
+  validateAgainstSchema(merged, schema, "args");
+  return merged;
 }
 
 export function formatToolHelp(tool: Tool): TargetResult {
