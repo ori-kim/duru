@@ -69,11 +69,22 @@ export { die, ClipError, printAndExit } from "./utils/errors.ts";
 export { subRecord, subProfiles } from "./utils/env-sub.ts";
 
 // Alias — extension executor의 tools 출력에서 사용
-export { buildAliasSection, listAliases, resolveAlias, expandArgs, expandInput, flattenInput, formatAliasDef } from "./alias.ts";
+export {
+  buildAliasSection,
+  listAliases,
+  resolveAlias,
+  expandArgs,
+  expandInput,
+  flattenInput,
+  formatAliasDef,
+} from "./alias.ts";
 export type { HasAliases } from "./alias.ts";
 
 // Tool args — extension executor에서 공통 사용
 export { parseToolArgs, formatToolHelp, extractHelpFlag } from "./utils/tool-args.ts";
+
+// Agent input safety
+export { IDENTIFIER_RE, validateIdentifier, hardenAgentInput, hardenToolInput } from "./utils/agent-safety.ts";
 
 // Target schema helpers — extension schema 정의에서 사용
 export { aclFields, aliasFields, profileFields, commonTargetFields } from "./utils/target-schema.ts";

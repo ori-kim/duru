@@ -1,4 +1,4 @@
-import { type ProfileOverride, getTarget, loadConfig, updateTarget } from "@clip/core";
+import { type ProfileOverride, getTarget, loadConfig, updateTarget, validateIdentifier } from "@clip/core";
 import { die } from "@clip/core";
 
 // --- Types ---
@@ -41,6 +41,7 @@ async function runProfileAdd(args: string[]): Promise<void> {
   const [targetName, profileName, ...rest] = args;
   if (!targetName || !profileName)
     die("Usage: clip profile add <target> <profile> [--args a,b] [--url ...] [--env K=V ...]");
+  validateIdentifier(profileName, "Profile name");
 
   const flags: Record<string, string | string[] | Record<string, string>> = {};
   for (let i = 0; i < rest.length; i++) {
@@ -98,6 +99,7 @@ async function runProfileAdd(args: string[]): Promise<void> {
 async function runProfileRemove(args: string[]): Promise<void> {
   const [targetName, profileName] = args;
   if (!targetName || !profileName) die("Usage: clip profile remove <target> <profile>");
+  validateIdentifier(profileName, "Profile name");
 
   await updateTarget(targetName, (raw) => {
     const profiles = (raw["profiles"] as Record<string, unknown> | undefined) ?? {};
@@ -139,6 +141,7 @@ async function runProfileList(args: string[]): Promise<void> {
 async function runProfileUse(args: string[]): Promise<void> {
   const [targetName, profileName] = args;
   if (!targetName || !profileName) die("Usage: clip profile use <target> <profile>");
+  validateIdentifier(profileName, "Profile name");
 
   await updateTarget(targetName, (raw) => {
     const profiles = (raw["profiles"] as Record<string, unknown> | undefined) ?? {};

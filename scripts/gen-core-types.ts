@@ -25,6 +25,7 @@ const FILES: Array<{ path: string; src: string }> = [
   { path: "src/utils/errors.ts",            src: "src/utils/errors.ts" },
   { path: "src/utils/env-sub.ts",           src: "src/utils/env-sub.ts" },
   { path: "src/utils/output.ts",            src: "src/utils/output.ts" },
+  { path: "src/utils/agent-safety.ts",      src: "src/utils/agent-safety.ts" },
   { path: "src/utils/target-schema.ts",     src: "src/utils/target-schema.ts" },
   { path: "src/utils/tool-args.ts",         src: "src/utils/tool-args.ts" },
 ];

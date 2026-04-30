@@ -1,5 +1,5 @@
 import type { Registry } from "@clip/core";
-import { die } from "@clip/core";
+import { die, validateIdentifier } from "@clip/core";
 
 const RESERVED_VALUE_FLAGS = new Set(["allow", "deny", "type"]);
 
@@ -8,6 +8,7 @@ export async function runAdd(args: string[], registry: Registry): Promise<void> 
   if (!name || name.startsWith("--")) {
     die("Usage: clip add <name> <command-or-url> [--allow x,y] [--deny z]");
   }
+  validateIdentifier(name, "Target name");
 
   const reservedNames = new Set(registry.listInternalVerbs());
   if (reservedNames.has(name)) {

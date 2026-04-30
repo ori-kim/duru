@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, copyFileSync } from "fs";
 import { join, basename, resolve } from "path";
 import { homedir } from "os";
-import { die } from "@clip/core";
+import { die, validateIdentifier } from "@clip/core";
 import { renderPrompt, parseSkillFile } from "./frontmatter.ts";
 import {
   RESERVED_SKILL_NAMES,
@@ -17,10 +17,8 @@ import {
 } from "./registry.ts";
 import type { GroupDef } from "./registry.ts";
 
-const NAME_RE = /^[a-zA-Z0-9_-]+$/;
-
 function validateSkillName(name: string): void {
-  if (!NAME_RE.test(name)) die(`Skill name may only contain letters, digits, _ and -`);
+  validateIdentifier(name, "Skill name");
   if (RESERVED_SKILL_NAMES.has(name)) die(`"${name}" is a reserved skill name`);
 }
 

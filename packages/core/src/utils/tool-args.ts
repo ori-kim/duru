@@ -1,4 +1,5 @@
 import type { TargetResult, Tool } from "./output.ts";
+import { hardenToolInput } from "./agent-safety.ts";
 
 export type { Tool };
 
@@ -117,7 +118,7 @@ export function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unk
     }
   }
 
-  return Object.assign(baseFromArgs, result);
+  return hardenToolInput(Object.assign(baseFromArgs, result));
 }
 
 export function formatToolHelp(tool: Tool): TargetResult {

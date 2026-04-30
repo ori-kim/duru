@@ -3,6 +3,7 @@ import { homedir } from "os";
 import { join } from "path";
 import YAML from "yaml";
 import type { NormalizeCtx, TargetResult, TargetTypeDef } from "./extension.ts";
+import { validateIdentifier } from "./utils/agent-safety.ts";
 import { die } from "./utils/errors.ts";
 import {
   type AclNode,
@@ -148,9 +149,10 @@ export async function addTarget(
   type: string,
   target: Record<string, unknown>,
 ): Promise<void> {
+  validateIdentifier(name, "Target name");
   const config = await loadConfig();
   const allNames = getAllTargetNames(config);
-  if (allNames.has(name) && !(config.targets[type]?.[name])) {
+  if (allNames.has(name) && !config.targets[type]?.[name]) {
     die(`Target name "${name}" is already used by another type. Choose a different name.`);
   }
 
@@ -163,6 +165,7 @@ export async function updateTarget(
   name: string,
   updater: (raw: Record<string, unknown>) => Record<string, unknown>,
 ): Promise<void> {
+  validateIdentifier(name, "Target name");
   let typeDirs: string[];
   try {
     typeDirs = readdirSync(TARGET_DIR, { withFileTypes: true })
@@ -183,6 +186,7 @@ export async function updateTarget(
 }
 
 export async function removeTarget(name: string): Promise<void> {
+  validateIdentifier(name, "Target name");
   let typeDirs: string[];
   try {
     typeDirs = readdirSync(TARGET_DIR, { withFileTypes: true })
