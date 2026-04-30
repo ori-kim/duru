@@ -9,16 +9,7 @@
  * skills entry를 선언해야 `clip skills` 동작.
  */
 import "./virtual-modules.ts";
-import {
-  checkAcl,
-  dispatch,
-  loadConfig,
-  getTarget,
-  outputRegistry,
-  printAndExit,
-  formatToolHelp,
-  sanitizeTargetResult,
-} from "@clip/core";
+import { checkAcl, dispatch, loadConfig, getTarget, outputRegistry, printAndExit, formatToolHelp } from "@clip/core";
 import type { ClipExtension, HasAliases, ResolvedTarget } from "@clip/core";
 import { Registry } from "@clip/core";
 import { createDefaultRegistry } from "./builtin-loader.ts";
@@ -122,7 +113,7 @@ async function main(): Promise<number> {
   if (matched.kind !== "target") return 0;
   const { invocation } = matched;
   const { baseName, subcommand: rawSubcommand, targetArgs } = invocation;
-  const { jsonMode, pipeMode, dryRun, sanitize = false } = invocation.lateFlags;
+  const { jsonMode, pipeMode, dryRun } = invocation.lateFlags;
 
   const config = await loadConfig(registry);
 
@@ -150,10 +141,8 @@ async function main(): Promise<number> {
   const effectiveDryRun = dryRun;
   const effectiveJsonMode = jsonMode;
   const effectivePipeMode = pipeMode;
-  const effectiveSanitize = sanitize;
   const supportsPassthrough = registry.getArgSpec(type)?.passthrough ?? false;
-  const effectivePassthrough =
-    supportsPassthrough && !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode && !effectiveSanitize;
+  const effectivePassthrough = supportsPassthrough && !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode;
 
   const hasHelpFlag = lateFiltered.includes("--help") || lateFiltered.includes("-h");
   if (hasHelpFlag && rawSubcommand !== "tools") {
@@ -204,7 +193,7 @@ async function main(): Promise<number> {
     }
   }
 
-  let result = await dispatch(
+  const result = await dispatch(
     config,
     {
       targetName: invocation.token,
@@ -223,10 +212,6 @@ async function main(): Promise<number> {
   const shouldPassthrough = effectivePassthrough && !effectiveDryRun;
   if (shouldPassthrough) {
     return result.exitCode;
-  }
-
-  if (effectiveSanitize) {
-    result = sanitizeTargetResult(result);
   }
 
   const lateFlags = invocation.lateFlags;

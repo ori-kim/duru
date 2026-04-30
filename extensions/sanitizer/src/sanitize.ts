@@ -1,4 +1,4 @@
-import type { TargetResult } from "./output.ts";
+import type { TargetResult } from "@clip/core";
 
 const SECRET_KEY_PATTERN =
   /((?:["']?\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|passwd|pwd|token)\b["']?\s*[:=]\s*)["']?)([^"',}\s]{4,})(["']?)/gi;
@@ -72,10 +72,13 @@ export function sanitizeTargetResult(result: TargetResult): TargetResult {
   let nextStderr = stderr.text;
 
   if (stdout.redactions + stderr.redactions > 0) {
-    nextStderr = appendWarning(nextStderr, "[clip:sanitize] redacted sensitive-looking output");
+    nextStderr = appendWarning(nextStderr, "[clip:sanitizer] redacted sensitive-looking output");
   }
   if (stdout.promptInjection || stderr.promptInjection) {
-    nextStderr = appendWarning(nextStderr, "[clip:sanitize] potential prompt-injection text detected in target output");
+    nextStderr = appendWarning(
+      nextStderr,
+      "[clip:sanitizer] potential prompt-injection text detected in target output",
+    );
   }
 
   return {

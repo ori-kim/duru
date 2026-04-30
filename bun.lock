@@ -95,6 +95,13 @@
         "zod": "^3.24.0",
       },
     },
+    "extensions/sanitizer": {
+      "name": "@clip/ext-sanitizer",
+      "version": "0.9.0",
+      "dependencies": {
+        "@clip/core": "workspace:*",
+      },
+    },
     "extensions/skills": {
       "name": "@clip/ext-skills",
       "version": "0.8.0",
@@ -141,6 +148,8 @@
     "@clip/clip-minimal": ["@clip/clip-minimal@workspace:apps/clip-minimal"],
 
     "@clip/core": ["@clip/core@workspace:packages/core"],
+
+    "@clip/ext-sanitizer": ["@clip/ext-sanitizer@workspace:extensions/sanitizer"],
 
     "@clip/ext-skills": ["@clip/ext-skills@workspace:extensions/skills"],
 

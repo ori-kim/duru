@@ -30,21 +30,19 @@ export function setInternalVerbSet(verbs: Set<string>): void {
   _internalVerbSet = verbs;
 }
 
-const LATE_FLAG_SET = new Set(["--dry-run", "--json-output", "--pipe", "--sanitize", "--debug", "--format"]);
+const LATE_FLAG_SET = new Set(["--dry-run", "--json-output", "--pipe", "--debug", "--format"]);
 
 // cli/parser.ts re-export 호환용 — process.exit 포함 기존 동작 유지
 export function parseGlobalFlags(argv: string[]): {
   jsonMode: boolean;
   pipeMode: boolean;
   dryRun: boolean;
-  sanitize: boolean;
   configPath: string | undefined;
   rest: string[];
 } {
   let jsonMode = false;
   let pipeMode = false;
   let dryRun = false;
-  let sanitize = false;
   let configPath: string | undefined;
   let i = 0;
 
@@ -58,9 +56,6 @@ export function parseGlobalFlags(argv: string[]): {
       i++;
     } else if (a === "--dry-run") {
       dryRun = true;
-      i++;
-    } else if (a === "--sanitize") {
-      sanitize = true;
       i++;
     } else if (a === "--debug") {
       process.env["CLIP_EXT_TRACE"] = "1";
@@ -79,7 +74,7 @@ export function parseGlobalFlags(argv: string[]): {
     }
   }
 
-  return { jsonMode, pipeMode, dryRun, sanitize, configPath, rest: argv.slice(i) };
+  return { jsonMode, pipeMode, dryRun, configPath, rest: argv.slice(i) };
 }
 
 export function parseInvocation(raw: RawInvocation): ParsedInvocation {
@@ -89,7 +84,6 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
   let jsonMode = false;
   let pipeMode = false;
   let dryRun = false;
-  let sanitize = false;
   let configPath: string | undefined;
   let internalVerb: string | undefined;
   let i = 0;
@@ -105,9 +99,6 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
       i++;
     } else if (a === "--dry-run") {
       dryRun = true;
-      i++;
-    } else if (a === "--sanitize") {
-      sanitize = true;
       i++;
     } else if (a === "--debug") {
       process.env["CLIP_EXT_TRACE"] = "1";
@@ -156,7 +147,6 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
   let effectiveDryRun = dryRun;
   let effectiveJsonMode = jsonMode;
   let effectivePipeMode = pipeMode;
-  let effectiveSanitize = sanitize;
   let effectiveFormat: string | undefined;
   const filteredArgs: string[] = [];
 
@@ -168,8 +158,6 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
       effectiveJsonMode = true;
     } else if (a === "--pipe") {
       effectivePipeMode = true;
-    } else if (a === "--sanitize") {
-      effectiveSanitize = true;
     } else if (a === "--debug") {
       process.env["CLIP_EXT_TRACE"] = "1";
     } else if (a === "--format") {
@@ -191,7 +179,6 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
       jsonMode: effectiveJsonMode,
       pipeMode: effectivePipeMode,
       dryRun: effectiveDryRun,
-      sanitize: effectiveSanitize,
       ...(effectiveFormat !== undefined ? { format: effectiveFormat } : {}),
     },
     configPath,

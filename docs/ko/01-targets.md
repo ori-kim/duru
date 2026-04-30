@@ -165,7 +165,6 @@ clip profile remove mygh personal
 clip gh pr list --json-output              # JSON 출력
 clip notion search_pages --dry-run  # curl 미리 확인
 clip gh pr list --pipe              # TTY라도 버퍼 모드 강제
-clip gh pr view 1 --sanitize        # 민감해 보이는 출력 마스킹
 ```
 
 | 플래그 | 설명 |
@@ -173,4 +172,3 @@ clip gh pr view 1 --sanitize        # 민감해 보이는 출력 마스킹
 | `--json-output` | 출력을 JSON으로 변환 |
 | `--pipe` | TTY 환경에서도 버퍼 모드 강제 (passthrough 비활성화) |
 | `--dry-run` | 실제 실행 없이 나가는 요청/명령어 미리 출력 |
-| `--sanitize` | 민감해 보이는 출력을 마스킹하고 프롬프트 인젝션 의심 문구 경고 |
