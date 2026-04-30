@@ -39,6 +39,28 @@ export const extension: ClipExtension = {
         identifyFlags: ["grpc"],
       },
       displayHint: { headerColor: "1;34" },
+      listRowRenderer: async (name, target, opts: ListOpts) => {
+        const t = target as GrpcTarget;
+        const configDir = resolveAuthDir(name, "grpc");
+        const authStatus = t.oauth ? await getAuthStatus(configDir) : null;
+        const metadata = t.metadata as Record<string, string> | undefined;
+        const status = authStatus
+          ? authStatus
+          : t.oauth
+            ? "not authenticated"
+            : metadata?.["authorization"]
+              ? "api key"
+              : "no auth";
+        return {
+          name,
+          nameColor: "1;34",
+          subject: t.address,
+          profile: (t as Record<string, unknown>).active ? `@${(t as Record<string, unknown>).active}` : undefined,
+          detail: formatAcl(t as Record<string, unknown>).trim() || undefined,
+          status,
+          markers: opts.bound.has(name) ? ["bind"] : undefined,
+        };
+      },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as GrpcTarget;
         const { color, bind } = opts;
@@ -48,9 +70,11 @@ export const extension: ClipExtension = {
         const metadata = t.metadata as Record<string, string> | undefined;
         const statusTag = authStatus
           ? color("2", `  [${authStatus}]`)
-          : t.oauth ? color("2", "  [not authenticated]")
-          : metadata?.["authorization"] ? color("2", "  [api key]")
-          : color("2", "  [no auth]");
+          : t.oauth
+            ? color("2", "  [not authenticated]")
+            : metadata?.["authorization"]
+              ? color("2", "  [api key]")
+              : color("2", "  [no auth]");
         const profileTag = (t as Record<string, unknown>).active ? ` @${(t as Record<string, unknown>).active}` : "";
         const aclStr = formatAcl(t as Record<string, unknown>);
         return `  ${nm} ${t.address}${profileTag}${aclStr}${statusTag}${bind(name)}`;

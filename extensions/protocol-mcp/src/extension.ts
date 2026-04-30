@@ -54,6 +54,34 @@ export const extension: ClipExtension = {
         identifyFlags: ["stdio", "sse", "url"],
       },
       displayHint: { headerColor: "33" },
+      listRowRenderer: async (name, target, opts: ListOpts) => {
+        const t = target as McpTarget;
+        const subject =
+          t.transport === "stdio"
+            ? `stdio: ${(t as McpStdioTarget).command}`
+            : `${t.transport === "sse" ? "sse: " : ""}${(t as McpHttpTarget | McpSseTarget).url}`;
+        const authStatus = t.transport === "stdio" ? null : await getAuthStatus(resolveAuthDir(name, "mcp"));
+        const auth = (t as Record<string, unknown>).auth;
+        const status =
+          t.transport === "stdio"
+            ? undefined
+            : authStatus
+              ? authStatus
+              : auth === "oauth"
+                ? "not authenticated"
+                : auth === "apikey"
+                  ? "api key"
+                  : "no auth";
+        return {
+          name,
+          nameColor: "33",
+          subject,
+          profile: (t as Record<string, unknown>).active ? `@${(t as Record<string, unknown>).active}` : undefined,
+          detail: formatMcpAcl(t as Record<string, unknown>).trim() || undefined,
+          status,
+          markers: opts.bound.has(name) ? ["bind"] : undefined,
+        };
+      },
       listRenderer: async (name, target, opts: ListOpts) => {
         const t = target as McpTarget;
         const { color, bind } = opts;
@@ -68,9 +96,11 @@ export const extension: ClipExtension = {
         const auth = (t as Record<string, unknown>).auth;
         const statusTag = authStatus
           ? color("2", `  [${authStatus}]`)
-          : auth === "oauth" ? color("2", "  [not authenticated]")
-          : auth === "apikey" ? color("2", "  [api key]")
-          : color("2", "  [no auth]");
+          : auth === "oauth"
+            ? color("2", "  [not authenticated]")
+            : auth === "apikey"
+              ? color("2", "  [api key]")
+              : color("2", "  [no auth]");
         const transportLabel = t.transport === "sse" ? "sse: " : "";
         return `  ${nm} ${transportLabel}${http.url}${profileTag}${aclStr}${statusTag}${bind(name)}`;
       },
@@ -87,10 +117,15 @@ export const extension: ClipExtension = {
         const { name, positionals, flags, allow, deny } = args;
         if (flags["stdio"]) {
           const command = flags["command"] ?? positionals[0];
-          if (!command) die("STDIO MCP target requires a command (e.g. clip add fs --stdio npx -y @modelcontextprotocol/server-filesystem /)");
+          if (!command)
+            die(
+              "STDIO MCP target requires a command (e.g. clip add fs --stdio npx -y @modelcontextprotocol/server-filesystem /)",
+            );
           const prependArgs = flags["args"]
             ? flags["args"].split(",").map((s) => s.trim())
-            : positionals.slice(1).length > 0 ? positionals.slice(1) : undefined;
+            : positionals.slice(1).length > 0
+              ? positionals.slice(1)
+              : undefined;
           await addTarget(name, "mcp", { transport: "stdio", command, args: prependArgs, allow, deny });
           console.log(`Added STDIO MCP target "${name}" → ${command}${prependArgs ? " " + prependArgs.join(" ") : ""}`);
         } else if (flags["sse"]) {
@@ -114,7 +149,8 @@ export const extension: ClipExtension = {
       loginHandler: async (name, target) => {
         const { forceLogin } = await import("@clip/auth");
         const t = target as McpTarget;
-        if (t.transport === "stdio") throw new Error(`"${name}" is a STDIO MCP target. OAuth only applies to HTTP/SSE MCP targets.`);
+        if (t.transport === "stdio")
+          throw new Error(`"${name}" is a STDIO MCP target. OAuth only applies to HTTP/SSE MCP targets.`);
         const url = (t as McpHttpTarget | McpSseTarget).url;
         await forceLogin(name, url, resolveAuthDir(name, "mcp"));
         await updateTarget(name, (raw) => ({ ...raw, auth: "oauth" }));

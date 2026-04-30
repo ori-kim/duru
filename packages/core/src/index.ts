@@ -28,7 +28,7 @@ export type {
 } from "./extension.ts";
 
 // Extension 시스템 — 피드백 요청 추가 타입
-export type { AddArgs, ListOpts, ArgSpec, DisplayHint, TargetTypeManifestSpec } from "./extension.ts";
+export type { AddArgs, ListOpts, ListRow, ArgSpec, DisplayHint, TargetTypeManifestSpec } from "./extension.ts";
 
 // Registry 클래스
 export { Registry } from "./extension.ts";

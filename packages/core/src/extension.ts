@@ -110,6 +110,16 @@ export type ListOpts = {
   bind: (name: string) => string;
 };
 
+export type ListRow = {
+  name: string;
+  nameColor?: string;
+  subject?: string;
+  profile?: string;
+  detail?: string;
+  status?: string;
+  markers?: string[];
+};
+
 export type AddArgs = {
   name: string;
   positionals: string[];
@@ -127,7 +137,9 @@ export type TargetTypeContribution = {
   dispatchPriority?: number;
   argSpec?: ArgSpec;
   displayHint?: DisplayHint;
-  /** clip list — 해당 타입의 target 한 줄 렌더링 */
+  /** clip list — structured target row for aligned rendering */
+  listRowRenderer?: (name: string, target: unknown, opts: ListOpts) => Promise<ListRow>;
+  /** clip list — legacy target line renderer */
   listRenderer?: (name: string, target: unknown, opts: ListOpts) => Promise<string>;
   /** clip add — URL이 이 타입에 해당하는지 판단 */
   urlHeuristic?: (url: string) => boolean;
@@ -309,7 +321,6 @@ export class Registry {
     registerResultPresenter(p: ResultPresenter): void;
     registerOutputRenderer(r: OutputRenderer): void;
   }): Promise<void> {
-
     const api: ExtensionApi = {
       registerTargetType: <T>(def: TargetTypeDef<T>): void => {
         const isBuiltin = this._currentExtName.startsWith("builtin:");
@@ -318,7 +329,7 @@ export class Registry {
           if (!isBuiltin && !this._allowedTypeOverrides.has(def.type)) {
             throw new Error(
               `Target type "${def.type}" is owned by a builtin extension and cannot be overridden. ` +
-              `To override, disable the builtin entry in your extensions manifest.`,
+                `To override, disable the builtin entry in your extensions manifest.`,
             );
           }
           if (!isBuiltin) {
@@ -349,7 +360,7 @@ export class Registry {
           if (!isBuiltin && !this._allowedVerbOverrides.has(verb)) {
             throw new Error(
               `Internal command "${verb}" is owned by a builtin extension and cannot be overridden. ` +
-              `To override, disable the builtin entry in your extensions manifest.`,
+                `To override, disable the builtin entry in your extensions manifest.`,
             );
           }
           if (!isBuiltin) {
