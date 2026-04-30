@@ -8,7 +8,7 @@ type P = {
   baseName: string | undefined;
   explicitProfile: string | undefined;
   userArgs: readonly string[];
-  lateFlags: { jsonMode: boolean; pipeMode: boolean; dryRun: boolean; format?: string };
+  lateFlags: { jsonMode: boolean; pipeMode: boolean; dryRun: boolean; sanitize: boolean; format?: string };
   configPath: string | undefined;
   internalVerb: string | undefined;
 };
@@ -54,8 +54,15 @@ describe("global flags", () => {
 
   test("multiple global flags combined", () => {
     const p = parse(["--json-output", "--pipe", "--dry-run", "slack", "list"]);
-    expect(p.lateFlags).toEqual({ jsonMode: true, pipeMode: true, dryRun: true });
+    expect(p.lateFlags).toEqual({ jsonMode: true, pipeMode: true, dryRun: true, sanitize: false });
     expect(p.baseName).toBe("slack");
+  });
+
+  test("--sanitize before target", () => {
+    const p = parse(["--sanitize", "slack", "list"]);
+    expect(p.lateFlags.sanitize).toBe(true);
+    expect(p.baseName).toBe("slack");
+    expect(p.userArgs).toEqual(["list"]);
   });
 
   test("--config sets configPath", () => {
@@ -160,10 +167,17 @@ describe("late flags in target args", () => {
     expect(p.userArgs).toEqual(["run"]);
   });
 
+  test("--sanitize in target args merged", () => {
+    const p = parse(["slack", "list", "--sanitize"]);
+    expect(p.lateFlags.sanitize).toBe(true);
+    expect(p.userArgs).toEqual(["list"]);
+  });
+
   test("late flags removed from userArgs", () => {
-    const p = parse(["slack", "tools", "--json-output", "--pipe"]);
+    const p = parse(["slack", "tools", "--json-output", "--pipe", "--sanitize"]);
     expect(p.lateFlags.jsonMode).toBe(true);
     expect(p.lateFlags.pipeMode).toBe(true);
+    expect(p.lateFlags.sanitize).toBe(true);
     expect(p.userArgs).toEqual(["tools"]);
   });
 

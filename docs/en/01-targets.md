@@ -165,6 +165,7 @@ These flags can be placed anywhere in a command:
 clip gh pr list --json-output              # JSON output
 clip notion search_pages --dry-run  # Preview request without executing
 clip gh pr list --pipe              # Force buffered mode even in a TTY
+clip gh pr view 1 --sanitize        # Redact sensitive-looking output
 ```
 
 | Flag | Description |
@@ -172,3 +173,4 @@ clip gh pr list --pipe              # Force buffered mode even in a TTY
 | `--json-output` | Format output as JSON |
 | `--pipe` | Force buffered mode, disabling TTY passthrough |
 | `--dry-run` | Print the equivalent curl/command without executing |
+| `--sanitize` | Redact sensitive-looking output and warn on prompt-injection text |

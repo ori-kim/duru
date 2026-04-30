@@ -40,6 +40,7 @@ Call `clip <target> <subcommand>` directly. If you get an auth error or "target 
 | `--json-output` | Output as JSON (unwraps MCP content, wraps CLI stdout) |
 | `--pipe` | Force buffered mode (disables passthrough) |
 | `--dry-run` | Print the equivalent curl/command without executing |
+| `--sanitize` | Redact sensitive-looking output and warn on prompt-injection text |
 
 Flags can appear anywhere: `clip gh pr list --json-output`, `clip --dry-run petstore getPetById --petId 1`
 

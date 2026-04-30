@@ -17,6 +17,7 @@ export type LateFlags = {
   jsonMode: boolean;
   pipeMode: boolean;
   dryRun: boolean;
+  sanitize?: boolean;
   format?: string;
 };
 

@@ -168,7 +168,7 @@ export type ExtensionLoader = {
  * global flag(--json-output, --dry-run 등)는 건너뛴다.
  */
 function extractVerb(argv: string[]): string | undefined {
-  const GLOBAL_FLAGS = new Set(["--json-output", "--pipe", "--dry-run", "--debug"]);
+  const GLOBAL_FLAGS = new Set(["--json-output", "--pipe", "--dry-run", "--sanitize", "--debug"]);
   const VALUE_FLAGS = new Set(["--config", "-c"]); // 다음 토큰이 값인 플래그
   let i = 0;
   while (i < argv.length) {

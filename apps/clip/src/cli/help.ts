@@ -10,7 +10,7 @@ export const HELP = `
 clip — CLI proxy for MCP servers and CLI tools
 
 Usage:
-  clip [--json-output] [--pipe] <target> <subcommand> [...args]
+  clip [--json-output] [--pipe] [--sanitize] <target> <subcommand> [...args]
   clip add <name> <command-or-url> [--allow x,y] [--deny z]
   clip add <name> <https://...openapi.json> [--api]
   clip add <name> <https://...> --sse
@@ -42,6 +42,7 @@ Global flags:
   --args        Pass tool input as a JSON object (spread into arguments; individual --flags override)
   --pipe        Force buffered mode even in a TTY (disables passthrough)
   --dry-run     Print equivalent curl command instead of executing (API targets only)
+  --sanitize    Redact sensitive-looking output and warn on prompt-injection text
   --help, -h    Show this help
   --version, -v Show version
 

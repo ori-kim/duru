@@ -14,7 +14,7 @@ clip <target> describe <op>            # show method/type details
 clip <target> types                    # list types (gRPC/GraphQL)
 ```
 
-Global flags: `--json-output`, `--pipe`, `--dry-run` — can appear anywhere in the command.
+Global flags: `--json-output`, `--pipe`, `--dry-run`, `--sanitize` — can appear anywhere in the command.
 
 ## Agent safety rules
 
