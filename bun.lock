@@ -14,8 +14,9 @@
     },
     "apps/clip": {
       "name": "clip",
-      "version": "0.2617.90",
+      "version": "0.2619.116",
       "dependencies": {
+        "@clack/prompts": "^1.3.0",
         "@clip/auth": "workspace:*",
         "@clip/core": "workspace:*",
         "@clip/protocol-api": "workspace:*",

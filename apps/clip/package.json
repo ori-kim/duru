@@ -11,11 +11,12 @@
     "@clip/protocol-graphql": "workspace:*",
     "@clip/protocol-grpc": "workspace:*",
     "@clip/protocol-mcp": "workspace:*",
-    "@clip/protocol-script": "workspace:*"
+    "@clip/protocol-script": "workspace:*",
+    "@clack/prompts": "^1.3.0"
   },
   "scripts": {
     "build:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 ./src/main.ts --outfile=../../dist/clip-darwin-arm64",
-    "build:darwin-x64":   "bun build --compile --target=bun-darwin-x64   ./src/main.ts --outfile=../../dist/clip-darwin-x64",
+    "build:darwin-x64": "bun build --compile --target=bun-darwin-x64   ./src/main.ts --outfile=../../dist/clip-darwin-x64",
     "build": "bun run build:darwin-arm64 && bun run build:darwin-x64"
   }
 }
