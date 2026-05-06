@@ -235,6 +235,14 @@ api.registerErrorHandler(async (ctx) => {
 ## clip ext 커맨드
 
 ```sh
+clip ext install github:owner/repo                 # .clip/extension-index.yaml을 읽고 선택 설치
+clip ext install github:owner/repo --all --yes
+clip ext install github:owner/repo --select myext --yes
+clip ext install github:owner/repo --dir extensions/myext --yes
+clip ext install https://github.com/owner/repo/tree/main/extensions/myext --yes
+clip ext update <name>      # 기록된 upstream source에서 재설치
+clip ext uninstall <name> --yes
+clip ext info <name>        # 설치 메타데이터 출력
 clip ext scaffold <name>   # 새 확장 스캐폴드 (폴더·진입점·tsconfig·manifest entry 자동 생성)
 clip ext types             # @clip/core 타입 파일만 CLIP_HOME/types/에 재배포 (IDE 지원)
 clip ext list              # 등록된 전체 확장 표시 (builtin + user, disabled 포함)
@@ -249,6 +257,52 @@ protocol-cli      builtin  enabled   types=[cli]
 protocol-mcp      builtin  enabled   types=[mcp]
 user-sqlite       user     enabled   types=[sqlite]
 my-audit          user     disabled  hooks=[toolcall]
+```
+
+### GitHub에서 설치
+
+repo는 `.clip/extension-index.yaml` installable extension index를 제공할 수 있습니다.
+
+```yaml
+extensions:
+  - name: myext
+    dir: extensions/myext
+    description: myext command 추가
+```
+
+index에 여러 extension이 있으면 `clip ext install github:owner/repo`가 인터랙티브 checklist 스타일 선택 프롬프트를 엽니다. non-interactive 환경에서는 `--all` 또는 `--select name[,name]`을 넘깁니다.
+
+하위 호환을 위해 `.clip/extensions.yaml`, `.clip/extensions.yml`, `.clip/extensions.json`, `clip/extensions.yaml`, `clip/extensions.yml`, `clip/extensions.json`도 repo-level index 경로로 허용합니다.
+
+각 설치 가능한 upstream 폴더는 extension metadata를 포함해야 합니다. 표준 경로는 `clip/extension.yaml`입니다. `clip/extension.yml`, `clip/extension.json`, legacy `clip-extension.json`도 fallback으로 허용합니다.
+
+```yaml
+name: myext
+version: 0.1.0
+entry: src/extension.ts
+contributes:
+  internalCommands: [myext]
+  targetTypes: []
+  hooks: []
+runtime:
+  dependencies: {}
+```
+
+`clip ext install`은 선택한 GitHub 폴더를 `$CLIP_HOME/extensions/<name>/` 운영본으로 복사하고, `runtime.dependencies` 기준으로 runtime `package.json`을 생성합니다. dependency가 있으면 `npm install --omit=dev`를 실행하고, `extensions.yml`에는 `path: <name>` 형태로 등록합니다.
+
+설치 시 `$CLIP_HOME/extensions/<name>/.clip-install.json`에 GitHub source와 resolved commit을 저장합니다. `clip ext update <name>`은 이 기록을 사용해 같은 upstream 폴더에서 재설치합니다.
+
+manifest는 source checkout이 아니라 설치된 운영본을 가리켜야 합니다.
+
+```yaml
+extensions:
+  - name: myext
+    path: myext
+    entry: src/extension.ts
+    contributes:
+      internalCommands: [myext]
+      targetTypes: []
+      hooks: []
 ```
 
 ---

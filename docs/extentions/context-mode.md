@@ -30,6 +30,14 @@ extensions:
       hooks: [beforeExecute, afterExecute]
 ```
 
+With the extension installer, the runtime copy can be created from this repo source:
+
+```sh
+clip ext install github:<owner>/<repo> --select clip-context-mode --yes
+```
+
+This repository exposes `.clip/extension-index.yaml`, and this extension folder exposes `clip/extension.yaml`.
+
 Install runtime dependencies in the user copy:
 
 ```sh

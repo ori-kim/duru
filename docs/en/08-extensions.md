@@ -235,6 +235,14 @@ api.registerErrorHandler(async (ctx) => {
 ## clip ext commands
 
 ```sh
+clip ext install github:owner/repo                 # read .clip/extension-index.yaml and select extensions
+clip ext install github:owner/repo --all --yes
+clip ext install github:owner/repo --select myext --yes
+clip ext install github:owner/repo --dir extensions/myext --yes
+clip ext install https://github.com/owner/repo/tree/main/extensions/myext --yes
+clip ext update <name>      # reinstall from recorded upstream source
+clip ext uninstall <name> --yes
+clip ext info <name>        # show recorded install metadata
 clip ext scaffold <name>   # scaffold a new extension (folder, entry, tsconfig, manifest entry)
 clip ext types             # deploy @clip/core type files to CLIP_HOME/types/ (IDE support)
 clip ext list              # show all extensions (builtin + user, including disabled)
@@ -249,6 +257,52 @@ protocol-cli      builtin  enabled   types=[cli]
 protocol-mcp      builtin  enabled   types=[mcp]
 user-sqlite       user     enabled   types=[sqlite]
 my-audit          user     disabled  hooks=[toolcall]
+```
+
+### Installing From GitHub
+
+Repositories can expose an installable extension index at `.clip/extension-index.yaml`:
+
+```yaml
+extensions:
+  - name: myext
+    dir: extensions/myext
+    description: Adds the myext command
+```
+
+When an index has more than one extension, `clip ext install github:owner/repo` opens an interactive checklist-style prompt. In non-interactive environments, pass `--all` or `--select name[,name]`.
+
+For backward compatibility, `.clip/extensions.yaml`, `.clip/extensions.yml`, `.clip/extensions.json`, `clip/extensions.yaml`, `clip/extensions.yml`, and `clip/extensions.json` are also accepted as repo-level index paths.
+
+Each installable upstream folder must include extension metadata. The preferred path is `clip/extension.yaml`; `clip/extension.yml`, `clip/extension.json`, and legacy `clip-extension.json` are also accepted.
+
+```yaml
+name: myext
+version: 0.1.0
+entry: src/extension.ts
+contributes:
+  internalCommands: [myext]
+  targetTypes: []
+  hooks: []
+runtime:
+  dependencies: {}
+```
+
+`clip ext install` copies the selected GitHub folder into `$CLIP_HOME/extensions/<name>/`, writes a runtime `package.json` from `runtime.dependencies`, runs `npm install --omit=dev` when dependencies are present, and updates `extensions.yml` with `path: <name>`.
+
+The installer also writes `$CLIP_HOME/extensions/<name>/.clip-install.json` with the GitHub source and resolved commit. `clip ext update <name>` uses that record to reinstall from the same upstream folder.
+
+The manifest should point to the installed runtime copy, not to a source checkout:
+
+```yaml
+extensions:
+  - name: myext
+    path: myext
+    entry: src/extension.ts
+    contributes:
+      internalCommands: [myext]
+      targetTypes: []
+      hooks: []
 ```
 
 ---
