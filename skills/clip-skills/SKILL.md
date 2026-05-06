@@ -1,112 +1,44 @@
 ---
 name: clip-skills
-description: Manage reusable prompt-template skills stored in the clip registry. Use to create, list, install to agents, import external skills, or compose skills into groups for batch activation.
+description: Manage reusable prompt-template skills stored in the clip registry. Use to create, list, install to agents, import external skills, or compose skills into groups for batch activation. Route by use case and read the relevant reference for create, install, groups, or import.
 ---
 
-# clip-skills — Skill registry and agent install
+# clip-skills
 
-## What skills are
+Skills are reusable prompt templates stored at `~/.clip/skills/<name>/SKILL.md`. They can be rendered with inputs and installed into agent skill directories.
 
-Skills are named Markdown files with YAML frontmatter stored at `~/.clip/skills/<name>/SKILL.md`. They are reusable prompt templates that can be rendered with dynamic inputs and installed into AI agent skills directories (Claude Code, Codex, Gemini, Pi, Cursor).
+## Route By Use Case
 
-## Core commands
+Read only the reference file needed for the request:
+
+| User intent | Read |
+|---|---|
+| Create a new skill, inspect format, render inputs, show/list/remove | `references/create.md` |
+| Install or uninstall a skill to an agent | `references/install.md` |
+| Create, activate, deactivate, or edit skill groups | `references/groups.md` |
+| Import an external skill directory into the registry | `references/import.md` |
+
+If the request spans multiple areas, inspect with `clip skills list` first, then read the specific workflow reference.
+
+## Core Commands
 
 ```sh
-# Create a new skill scaffold
-clip skills add my-skill --description "Does something useful"
-
-# Import an external skill directory (move + leave symlink at origin)
-clip skills pull ~/dotfiles/skills/my-skill
-
-# List all skills (shows which agents have each skill installed)
 clip skills list
-
-# Render a skill with inputs substituted
-clip skills get my-skill --input key=value
-
-# Print raw SKILL.md
-clip skills show my-skill
-
-# Remove from registry
-clip skills rm my-skill
-```
-
-## Agent install
-
-```sh
-# Install (symlink by default)
-clip skills install my-skill --to claude-code
-clip skills install my-skill --to codex --mode copy   # frozen copy
-
-# Remove
-clip skills uninstall my-skill --from claude-code
-```
-
-**Agents:** `claude-code`, `codex`, `gemini`, `pi`, `cursor`
-
-## Groups
-
-Groups are named sets of skills that can be activated/deactivated as a batch. Stored in `~/.clip/skills/groups.yml`.
-
-```sh
-# Define a group
-clip skills group create work linear-feature slack notion --description "Work skills"
-
-# Activate: symlink all group skills to an agent
-clip skills group activate work --to claude-code
-
-# Swap to another group
-clip skills group deactivate work --from claude-code
-clip skills group activate personal --to claude-code
-
-# Manage group contents
-clip skills group add work jira
-clip skills group rm  work slack
+clip skills add <name> --description "Does something useful"
+clip skills show <name>
+clip skills get <name> --input key=value
+clip skills install <name> --to codex
 clip skills group list
-clip skills group show work
-clip skills group delete work
 ```
 
-`groups.yml` can be edited directly:
+Supported agents: `claude-code`, `codex`, `gemini`, `pi`, `cursor`.
 
-```yaml
-groups:
-  work:
-    description: Work-related skills
-    skills:
-      - linear-feature
-      - slack
-  personal:
-    skills:
-      - recap
-```
+## Directory Layout
 
-## pull — Import external skill
-
-Moves an external directory into the registry and creates a reverse symlink at the original path:
-
-```sh
-clip skills pull ~/dotfiles/skills/my-skill
-# real files → ~/.clip/skills/my-skill/
-# symlink    → ~/dotfiles/skills/my-skill → ~/.clip/skills/my-skill
-```
-
-Optional second argument overrides the registry name.
-
-## SKILL.md format
-
-```markdown
----
-name: skill-name
-description: "Short description"
-tags: [domain, tool]
-inputs:
-  param:
-    description: What this input controls
-    required: true
-  optional_param:
-    default: "fallback value"
----
-
-Body text with {{ inputs.param }} substitution.
+```text
+~/.clip/
+  skills/
+    <name>/
+      SKILL.md
+    groups.yml
 ```
