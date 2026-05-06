@@ -1,29 +1,30 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 /**
  * clip ext — extension 관리 서브커맨드
  *
  *   clip ext list              — 내장 + 사용자 선언 전체 표시
+ *   clip ext install <source>  — GitHub source folder를 사용자 extension으로 설치
+ *   clip ext update <name>     — 설치 메타데이터 기준으로 extension 업데이트
+ *   clip ext uninstall <name>  — extension 운영본과 manifest entry 제거
  *   clip ext enable <name>     — manifest entry enabled: true
  *   clip ext disable <name>    — manifest entry enabled: false
  *   clip ext scaffold <name>   — extension 폴더 + tsconfig 스캐폴드 생성
  *   clip ext types             — IDE 타입 파일을 CLIP_HOME/types/@clip/core/ 에 배포
  *   clip ext reload <name>     — import 캐시 무효화 (개발 편의)
  */
-import { die, CONFIG_DIR, type Registry } from "@clip/core";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { CONFIG_DIR, type Registry, die } from "@clip/core";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
-import {
-  setExtensionEnabled,
-  type ExtensionEntry,
-} from "../extension-loader.ts";
 import { deriveBuiltinEntries } from "../builtin-loader.ts";
+import { type ExtensionEntry, setExtensionEnabled } from "../extension-loader.ts";
+import { cmdInfo, cmdInstall, cmdUninstall, cmdUpdate } from "./ext-install.ts";
 
 // ---------------------------------------------------------------------------
 // manifest 직접 읽기 (loader context 없는 경우를 위한 fallback)
 // ---------------------------------------------------------------------------
 
 function getManifestPath(): string {
-  return process.env["CLIP_EXT_MANIFEST"] ?? join(CONFIG_DIR, "extensions", "extensions.yml");
+  return process.env.CLIP_EXT_MANIFEST ?? join(CONFIG_DIR, "extensions", "extensions.yml");
 }
 
 function readUserEntries(): ExtensionEntry[] {
@@ -78,17 +79,16 @@ function cmdList(registry: Registry): void {
       contributes.push(`cmds=[${e.contributes.internalCommands.join(",")}]`);
     }
     if (e.contributes?.targetTypes?.length) {
-      const typeNames = (e.contributes.targetTypes as Array<string | { name: string }>)
-        .map((t) => (typeof t === "string" ? t : t.name));
+      const typeNames = (e.contributes.targetTypes as Array<string | { name: string }>).map((t) =>
+        typeof t === "string" ? t : t.name,
+      );
       contributes.push(`types=[${typeNames.join(",")}]`);
     }
     if (e.contributes?.hooks?.length) {
       contributes.push(`hooks=[${e.contributes.hooks.join(",")}]`);
     }
 
-    console.log(
-      `${e.name.padEnd(nameW)}  ${kind.padEnd(kindW)}  ${statusPad}  ${dim(contributes.join(" ") || "—")}`,
-    );
+    console.log(`${e.name.padEnd(nameW)}  ${kind.padEnd(kindW)}  ${statusPad}  ${dim(contributes.join(" ") || "—")}`);
   }
 
   if (userEntries.length === 0) {
@@ -118,8 +118,8 @@ function cmdReload(args: string[]): void {
   // Bun은 require.cache 같은 명시적 모듈 캐시 무효화 API가 없음.
   // 성공 코드로 종료하면 자동화 스크립트가 상태 변경이 일어난 것으로 오인하므로 비0 종료.
   process.stderr.write(
-    `clip: ext reload is not supported. Bun does not expose an import cache flush API.\n` +
-    `To apply changes, restart clip.\n`,
+    "clip: ext reload is not supported. Bun does not expose an import cache flush API.\n" +
+      "To apply changes, restart clip.\n",
   );
   process.exit(1);
 }
@@ -140,11 +140,17 @@ async function deployTypes(): Promise<void> {
 async function cmdTypes(): Promise<void> {
   await deployTypes();
   console.log(`\nTo use in your extension's tsconfig.json:`);
-  console.log(JSON.stringify({
-    compilerOptions: {
-      paths: { "@clip/core": [`${join(CONFIG_DIR, "types", "@clip", "core", "src", "index.ts")}`] },
-    },
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        compilerOptions: {
+          paths: { "@clip/core": [`${join(CONFIG_DIR, "types", "@clip", "core", "src", "index.ts")}`] },
+        },
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 const EXTENSION_SCAFFOLD = `import type { ClipExtension } from "@clip/core";
@@ -191,7 +197,7 @@ async function cmdScaffold(args: string[]): Promise<void> {
       die(`Cannot read manifest at ${manifestPath}: ${e}`);
     }
     try {
-      const parsed = yamlParse(raw!) as typeof manifest;
+      const parsed = yamlParse(raw) as typeof manifest;
       if (parsed != null && typeof parsed !== "object") die(`Manifest at ${manifestPath} is not a valid YAML object`);
       if (parsed != null) manifest = parsed;
     } catch (e) {
@@ -225,11 +231,11 @@ async function cmdScaffold(args: string[]): Promise<void> {
       paths: { "@clip/core": [typesAbsPath] },
     },
   };
-  writeFileSync(join(extDir, "tsconfig.json"), JSON.stringify(tsconfig, null, 2) + "\n", "utf8");
+  writeFileSync(join(extDir, "tsconfig.json"), `${JSON.stringify(tsconfig, null, 2)}\n`, "utf8");
 
   // package.json — yaml/zod 트랜지티브 타입을 에디터가 resolve할 수 있도록 devDeps 명시
   const pkgJson = { private: true, devDependencies: { yaml: "*", zod: "*" } };
-  writeFileSync(join(extDir, "package.json"), JSON.stringify(pkgJson, null, 2) + "\n", "utf8");
+  writeFileSync(join(extDir, "package.json"), `${JSON.stringify(pkgJson, null, 2)}\n`, "utf8");
 
   // extensions.yml에 entry 추가
   if (!alreadyExists) {
@@ -259,6 +265,18 @@ export async function runExtCmd(args: string[], registry: Registry): Promise<voi
     case "list":
       cmdList(registry);
       break;
+    case "install":
+      await cmdInstall(getManifestPath(), rest);
+      break;
+    case "update":
+      await cmdUpdate(getManifestPath(), rest);
+      break;
+    case "uninstall":
+      await cmdUninstall(getManifestPath(), rest);
+      break;
+    case "info":
+      cmdInfo(getManifestPath(), rest);
+      break;
     case "enable":
       cmdEnable(rest);
       break;
@@ -280,13 +298,17 @@ export async function runExtCmd(args: string[], registry: Registry): Promise<voi
           "Usage: clip ext <subcommand> [args]",
           "",
           "  list               Show all extensions (builtin + user declared)",
+          "  install <source>   Install a GitHub extension folder into CLIP_HOME/extensions/",
+          "  update <name>      Reinstall from the recorded upstream source",
+          "  uninstall <name>   Remove installed extension files and manifest entry",
+          "  info <name>        Show recorded install metadata",
           "  enable <name>      Set entry enabled: true in manifest",
           "  disable <name>     Set entry disabled in manifest",
           "  scaffold <name>    Create extension folder + tsconfig scaffold",
           "  types              Deploy @clip/core types to CLIP_HOME/types/",
           "  reload <name>      Flush import cache (development helper)",
           "",
-          "Manifest location: " + getManifestPath(),
+          `Manifest location: ${getManifestPath()}`,
         ].join("\n"),
       );
   }
