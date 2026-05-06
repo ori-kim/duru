@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, r
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { isCancel, multiselect } from "@clack/prompts";
 import { die } from "@clip/core";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 import type { ContributesSpec, ExtensionEntry } from "../extension-loader.ts";
@@ -373,32 +374,27 @@ async function selectCatalogEntries(catalog: ExtensionCatalog, parsed: ParsedArg
     die("Repository extension index has multiple extensions. Re-run with --all or --select <name[,name]>.");
   }
 
-  process.stderr.write("Available extensions:\n");
-  catalog.extensions.forEach((entry, index) => {
-    const description = entry.description ? ` - ${entry.description}` : "";
-    process.stderr.write(`  [ ] ${index + 1}. ${entry.name}${description}\n`);
+  const selectedNames = await multiselect<string>({
+    message: "Select extensions to install",
+    options: catalog.extensions.map((entry, index) => ({
+      value: entry.name,
+      label: `${index + 1}. ${entry.name}`,
+      ...(entry.description ? { hint: entry.description } : {}),
+    })),
+    required: true,
+    input: process.stdin,
+    output: process.stderr,
   });
 
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
-  try {
-    const answer = await rl.question("Select extensions by number/name/comma, or 'all': ");
-    const value = answer.trim();
-    if (!value) die("No extensions selected.");
-    if (value.toLowerCase() === "all") return catalog.extensions;
+  if (isCancel(selectedNames)) die("Cancelled.");
+  if (selectedNames.length === 0) die("No extensions selected.");
 
-    const entries = value
-      .split(",")
-      .map((token) => token.trim())
-      .filter(Boolean)
-      .map((token) => {
-        const entry = findCatalogEntry(catalog, token);
-        if (!entry) die(`Extension "${token}" not found in index`);
-        return entry;
-      });
-    return [...new Map(entries.map((entry) => [entry.name, entry])).values()];
-  } finally {
-    rl.close();
-  }
+  const byName = new Map(catalog.extensions.map((entry) => [entry.name, entry]));
+  return selectedNames.map((name) => {
+    const entry = byName.get(name);
+    if (!entry) die(`Extension "${name}" not found in index`);
+    return entry;
+  });
 }
 
 function printInstallSummary(params: {
