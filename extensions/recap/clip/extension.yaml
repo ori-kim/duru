@@ -1,0 +1,12 @@
+name: recap
+version: 0.1.0
+description: Query and manage stored tacit knowledge for clip targets and bundles.
+entry: extension.ts
+contributes:
+  internalCommands:
+    - recap
+  targetTypes: []
+  hooks:
+    - beforeExecute
+runtime:
+  dependencies: {}

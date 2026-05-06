@@ -1,0 +1,11 @@
+name: sanitizer
+version: 0.1.0
+description: Redact sensitive-looking output and warn on prompt-injection text.
+entry: src/extension.ts
+contributes:
+  internalCommands: []
+  targetTypes: []
+  hooks:
+    - afterExecute
+runtime:
+  dependencies: {}

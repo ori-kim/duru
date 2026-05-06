@@ -5,6 +5,8 @@ dist/
 .env
 .env.*
 *.local
-.clip/
+.clip/*
+!.clip/
+!.clip/extension-index.yaml
 .claude/
 apps/clip/src/core-type-bundle.generated.ts

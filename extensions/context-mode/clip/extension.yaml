@@ -1,0 +1,15 @@
+name: clip-context-mode
+version: 0.1.0
+description: Index large clip target output through upstream context-mode MCP.
+entry: src/extension.ts
+contributes:
+  internalCommands:
+    - context
+    - ctx
+  targetTypes: []
+  hooks:
+    - beforeExecute
+    - afterExecute
+runtime:
+  dependencies:
+    context-mode: ^1.0.104
