@@ -1,7 +1,8 @@
-import { buildAliasSection, die, formatToolHelp, parseToolArgs as parseToolArgsTyped } from "@clip/core";
+import { die, formatToolHelp, parseToolArgs as parseToolArgsTyped } from "@clip/core";
 import type { ExecutorContext, TargetResult } from "@clip/core";
+import { isMcpIntrospectionSubcommand, maybeFormatMcpIntrospection } from "./introspection.ts";
 import type { McpStdioTarget } from "./schema.ts";
-import { writeToolsCache } from "./tools-cache.ts";
+import { readToolsCache, writeToolsCache } from "./tools-cache.ts";
 
 // --- JSON-RPC 타입 ---
 
@@ -148,11 +149,13 @@ async function runStdioSession<T>(target: McpStdioTarget, action: (send: SendFn)
 // --- 공개 API ---
 
 export async function executeMcpStdio(target: McpStdioTarget, ctx: ExecutorContext): Promise<TargetResult> {
-  const { subcommand, args, dryRun, targetName } = ctx;
+  const { subcommand, args, dryRun, targetName, jsonMode } = ctx;
   const hasHelp = args.includes("--help") || args.includes("-h");
 
-  if (dryRun && subcommand !== "tools" && subcommand !== "refresh") {
-    const toolArgs = parseToolArgsTyped(args, {});
+  if (dryRun && !isMcpIntrospectionSubcommand(subcommand)) {
+    const cachedTools = await readToolsCache(targetName).catch(() => null);
+    const cachedTool = cachedTools?.find((tool) => tool.name === subcommand);
+    const toolArgs = parseToolArgsTyped(args, cachedTool?.inputSchema ?? {});
     const payload = JSON.stringify({
       jsonrpc: "2.0",
       id: 1,
@@ -163,18 +166,15 @@ export async function executeMcpStdio(target: McpStdioTarget, ctx: ExecutorConte
     return { exitCode: 0, stdout: `echo '${payload.replace(/'/g, "'\\''")}' | ${cmd}\n`, stderr: "" };
   }
 
-  if (subcommand === "tools" || subcommand === "refresh" || hasHelp) {
-    const result = await runStdioSession(target, async (send) => {
-      const resp = await send({ jsonrpc: "2.0", method: "tools/list" });
-      if (resp.error) die(`tools/list error: ${resp.error.message}`);
-      return resp.result as { tools: McpTool[] };
-    });
-    const tools = result.tools ?? [];
+  return await runStdioSession(target, async (send) => {
+    const toolsResp = await send({ jsonrpc: "2.0", method: "tools/list" });
+    if (toolsResp.error) die(`tools/list error: ${toolsResp.error.message}`);
+    const toolsResult = toolsResp.result as { tools: McpTool[] };
+    const tools = toolsResult.tools ?? [];
     await writeToolsCache(targetName, tools).catch(() => {});
 
-    if (subcommand === "refresh") {
-      return { exitCode: 0, stdout: `Refreshed "${targetName}" schema (${tools.length} tools)\n`, stderr: "" };
-    }
+    const introspection = maybeFormatMcpIntrospection(subcommand, args, tools, target, targetName, jsonMode, 30);
+    if (introspection) return introspection;
 
     if (hasHelp) {
       const tool = tools.find((t) => t.name === subcommand);
@@ -184,36 +184,24 @@ export async function executeMcpStdio(target: McpStdioTarget, ctx: ExecutorConte
       return formatToolHelp(tool);
     }
 
-    const text = tools.map((t) => {
-      const firstLine = (t.description ?? "").split("\n")[0] ?? "";
-      const desc = firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
-      return `  ${t.name.padEnd(30)} ${desc}`;
-    }).join("\n");
-    const scripts = buildAliasSection(target);
-    return {
-      stdout: tools.length ? `Tools:\n${text}\n${scripts}` : `No tools available.${scripts}`,
-      stderr: "",
-      exitCode: 0,
-    };
-  }
+    const toolName = subcommand;
+    const tool = tools.find((t) => t.name === toolName);
+    if (!tool) {
+      return { exitCode: 1, stdout: "", stderr: `Tool "${toolName}" not found. Run: clip ${targetName} tools\n` };
+    }
 
-  // tool call
-  const toolName = subcommand;
-  const toolArgs = parseToolArgsTyped(args, {});
-
-  const result = await runStdioSession(target, async (send) => {
+    const toolArgs = parseToolArgsTyped(args, tool.inputSchema);
     const resp = await send({
       jsonrpc: "2.0",
       method: "tools/call",
       params: { name: toolName, arguments: toolArgs },
     });
     if (resp.error) die(`tools/call error: ${resp.error.message}`);
-    return resp.result as McpCallResult;
+    const result = resp.result as McpCallResult;
+    const text = (result.content ?? [])
+      .filter((c) => c.type === "text")
+      .map((c) => c.text ?? "")
+      .join("\n");
+    return { stdout: result.isError ? "" : text, stderr: result.isError ? text : "", exitCode: result.isError ? 1 : 0 };
   });
-
-  const text = (result.content ?? [])
-    .filter((c) => c.type === "text")
-    .map((c) => c.text ?? "")
-    .join("\n");
-  return { stdout: text, stderr: "", exitCode: result.isError ? 1 : 0 };
 }

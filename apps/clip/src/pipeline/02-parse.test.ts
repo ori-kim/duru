@@ -40,6 +40,13 @@ describe("global flags", () => {
     expect(p.userArgs).toEqual(["list"]);
   });
 
+  test("--json alias before target", () => {
+    const p = parse(["--json", "slack", "list"]);
+    expect(p.lateFlags.jsonMode).toBe(true);
+    expect(p.baseName).toBe("slack");
+    expect(p.userArgs).toEqual(["list"]);
+  });
+
   test("--pipe before target", () => {
     const p = parse(["--pipe", "slack", "list"]);
     expect(p.lateFlags.pipeMode).toBe(true);
@@ -148,6 +155,18 @@ describe("late flags in target args", () => {
     expect(p.userArgs).toEqual(["list"]);
   });
 
+  test("--json alias in target args merged before subcommand", () => {
+    const p = parse(["slack", "--json", "tools"]);
+    expect(p.lateFlags.jsonMode).toBe(true);
+    expect(p.userArgs).toEqual(["tools"]);
+  });
+
+  test("--json alias in target args merged after subcommand", () => {
+    const p = parse(["slack", "tools", "--json"]);
+    expect(p.lateFlags.jsonMode).toBe(true);
+    expect(p.userArgs).toEqual(["tools"]);
+  });
+
   test("--pipe in target args merged", () => {
     const p = parse(["slack", "list", "--pipe"]);
     expect(p.lateFlags.pipeMode).toBe(true);
@@ -247,7 +266,7 @@ describe("--help in target args passthrough", () => {
   });
 
   test("foo -h mytool --json: -h remains, --json filtered", () => {
-    const p = parse(["foo", "-h", "mytool", "--json-output"]);
+    const p = parse(["foo", "-h", "mytool", "--json"]);
     expect(p.lateFlags.jsonMode).toBe(true);
     expect(p.userArgs).toEqual(["-h", "mytool"]);
   });

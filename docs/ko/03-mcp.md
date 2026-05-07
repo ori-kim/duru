@@ -60,9 +60,16 @@ clip logout notion
 # 사용 가능한 도구 목록
 clip notion tools
 
+# 도구 목록을 구조화된 JSON으로 출력
+clip notion tools --json
+
 # 도구 입력 스키마 확인 (캐시 기반 — 최초 이후 네트워크 불필요)
 clip notion search_pages --help
 clip notion --help search_pages   # --help 위치 자유
+
+# 도구를 실행하지 않고 정보 확인
+clip notion describe search_pages
+clip notion schema search_pages
 
 # 도구 실행
 clip notion search_pages --query "스프린트 회고"
@@ -88,6 +95,8 @@ tool schema는 최초 `tools` 조회 또는 `tools/call` 시 `~/.clip/target/mcp
 ```sh
 clip notion refresh
 ```
+
+`tools`, `refresh`, `describe`, `schema`는 MCP introspection 명령입니다. 에이전트나 셸이 실제 도구 호출 전에 사용 가능한 도구를 확인할 수 있도록 MCP target에서는 항상 허용됩니다. 다른 프로그램이 구조화된 출력을 읽어야 할 때는 `tools`, `describe`에 `--json` 또는 `--json-output`을 붙여 사용하세요.
 
 ### 동작 방식
 
