@@ -60,9 +60,16 @@ clip logout notion
 # List available tools
 clip notion tools
 
+# List tools as structured JSON
+clip notion tools --json
+
 # Show input schema for a tool (cached — no network after first use)
 clip notion search_pages --help
 clip notion --help search_pages   # --help position is flexible
+
+# Inspect a tool without calling it
+clip notion describe search_pages
+clip notion schema search_pages
 
 # Call a tool
 clip notion search_pages --query "sprint retro"
@@ -88,6 +95,8 @@ To force-refresh the cache:
 ```sh
 clip notion refresh
 ```
+
+`tools`, `refresh`, `describe`, and `schema` are MCP introspection commands. They are always allowed for MCP targets so agents and shells can inspect available tools before choosing a concrete tool call. Use `--json` or `--json-output` with `tools` and `describe` when another program needs structured output.
 
 ### How It Works
 

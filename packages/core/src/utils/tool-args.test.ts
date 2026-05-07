@@ -6,6 +6,11 @@ describe("parseToolArgs — individual flags (existing behavior)", () => {
     expect(parseToolArgs(["--assignee", "me"], {})).toEqual({ assignee: "me" });
   });
 
+  test("schema string flag preserves JSON-looking values", () => {
+    const schema = { properties: { operations: { type: "string" } } };
+    expect(parseToolArgs(["--operations", "[]"], schema)).toEqual({ operations: "[]" });
+  });
+
   test("boolean flag without value", () => {
     expect(parseToolArgs(["--verbose"], {})).toEqual({ verbose: true });
   });

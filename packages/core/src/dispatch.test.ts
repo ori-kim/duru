@@ -142,6 +142,29 @@ describe("dispatch / ACL bypass", () => {
 
     expect(capturedCtx?.subcommand).toBe("tools");
   });
+
+  test("non-cli의 introspection subcommand는 ACL 없이 executor 호출", async () => {
+    const captured: string[] = [];
+    const reg = await makeRegistry(async (_, ctx) => {
+      captured.push(ctx.subcommand);
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+
+    const target = { url: "http://example.com", deny: ["refresh", "describe", "schema"] } as never;
+
+    for (const subcommand of ["refresh", "describe", "schema"]) {
+      await dispatch(
+        emptyCfg,
+        baseInput({
+          resolvedTarget: { type: "mcp", target } as ResolvedTarget,
+          subcommand,
+        }),
+        reg,
+      );
+    }
+
+    expect(captured).toEqual(["refresh", "describe", "schema"]);
+  });
 });
 
 // --- headers/dryRun 전달 ---

@@ -1,6 +1,7 @@
 import { AuthenticatedClient, resolveAuthDir } from "@clip/auth";
-import { buildAliasSection, die, formatToolHelp, parseToolArgs } from "@clip/core";
+import { die, formatToolHelp, parseToolArgs } from "@clip/core";
 import type { ExecutorContext, TargetResult } from "@clip/core";
+import { isMcpIntrospectionSubcommand, maybeFormatMcpIntrospection } from "./introspection.ts";
 import type { McpSseTarget } from "./schema.ts";
 import { writeToolsCache } from "./tools-cache.ts";
 
@@ -218,8 +219,8 @@ function buildSseDryRunOutput(target: McpSseTarget, headers: Record<string, stri
 // --- 공개 API ---
 
 export async function executeMcpSse(target: McpSseTarget, ctx: ExecutorContext): Promise<TargetResult> {
-  const { headers: globalHeaders, subcommand: toolName, args: rawArgs, targetName, dryRun } = ctx;
-  if (dryRun && toolName !== "tools") {
+  const { headers: globalHeaders, subcommand: toolName, args: rawArgs, targetName, dryRun, jsonMode } = ctx;
+  if (dryRun && !isMcpIntrospectionSubcommand(toolName)) {
     const headers: Record<string, string> = { ...(globalHeaders ?? {}), ...(target.headers ?? {}) };
     const toolArgs = parseToolArgs(rawArgs, {});
     const body = JSON.stringify({
@@ -250,20 +251,8 @@ export async function executeMcpSse(target: McpSseTarget, ctx: ExecutorContext):
 
     await writeToolsCache(targetName, tools).catch(() => {});
 
-    if (toolName === "refresh") {
-      return { exitCode: 0, stdout: `Refreshed "${targetName}" schema (${tools.length} tools)\n`, stderr: "" };
-    }
-
-    if (toolName === "tools") {
-      const scripts = buildAliasSection(target);
-      if (tools.length === 0) return { exitCode: 0, stdout: `No tools available.${scripts}\n`, stderr: "" };
-      const lines = tools.map((t) => {
-        const firstLine = (t.description ?? "").split("\n")[0] ?? "";
-        const desc = firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
-        return `  ${t.name.padEnd(24)} ${desc}`;
-      });
-      return { exitCode: 0, stdout: `Tools:\n${lines.join("\n")}\n${scripts}`, stderr: "" };
-    }
+    const introspection = maybeFormatMcpIntrospection(toolName, rawArgs, tools, target, targetName, jsonMode);
+    if (introspection) return introspection;
 
     const tool = tools.find((t) => t.name === toolName);
     if (!tool) {

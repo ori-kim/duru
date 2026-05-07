@@ -29,6 +29,19 @@ function normalizeMcp(t: McpTarget, ctx: NormalizeCtx): McpTarget {
   } as McpTarget;
 }
 
+const STDIO_ADD_CONTROL_FLAGS = new Set(["stdio", "sse", "url", "command", "args", "allow", "deny", "type"]);
+
+export function collectStdioCommandArgs(positionals: string[], flags: Record<string, string>): string[] | undefined {
+  const explicitArgs = flags["args"]
+    ? flags["args"].split(",").map((s) => s.trim())
+    : positionals.slice(1);
+  const passthroughFlags = Object.entries(flags)
+    .filter(([key]) => !STDIO_ADD_CONTROL_FLAGS.has(key))
+    .flatMap(([key, value]) => (value === "true" ? [`--${key}`] : [`--${key}`, value]));
+  const args = [...explicitArgs, ...passthroughFlags].filter((arg) => arg.length > 0);
+  return args.length > 0 ? args : undefined;
+}
+
 export const extension: ClipExtension = {
   name: "builtin:mcp",
   init(api) {
@@ -121,11 +134,7 @@ export const extension: ClipExtension = {
             die(
               "STDIO MCP target requires a command (e.g. clip add fs --stdio npx -y @modelcontextprotocol/server-filesystem /)",
             );
-          const prependArgs = flags["args"]
-            ? flags["args"].split(",").map((s) => s.trim())
-            : positionals.slice(1).length > 0
-              ? positionals.slice(1)
-              : undefined;
+          const prependArgs = collectStdioCommandArgs(positionals, flags);
           await addTarget(name, "mcp", { transport: "stdio", command, args: prependArgs, allow, deny });
           console.log(`Added STDIO MCP target "${name}" → ${command}${prependArgs ? " " + prependArgs.join(" ") : ""}`);
         } else if (flags["sse"]) {

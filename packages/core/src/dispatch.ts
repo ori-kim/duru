@@ -17,7 +17,7 @@ export type DispatchInput = {
 };
 
 function shouldCheckAcl(skipSubcommands: string[] | undefined, type: string, subcommand: string): boolean {
-  if (subcommand === "tools" && type !== "cli") return false;
+  if (["tools", "refresh", "describe", "schema"].includes(subcommand) && type !== "cli") return false;
   if (skipSubcommands && skipSubcommands.includes(subcommand)) return false;
   return true;
 }
