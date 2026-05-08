@@ -98,7 +98,7 @@ describe("profile application", () => {
     const t = merged.target as typeof target & { args: string[] };
 
     expect(merged.profileName).toBe("dev");
-    expect(t.args).toEqual(["--context", "dev-cluster"]);
+    expect(t.args).toEqual(["--hostname", "dev.example.com"]);
   });
 
   test("active profile auto-applied when no explicit profile", async () => {
@@ -115,7 +115,7 @@ describe("profile application", () => {
     const t = merged.target as typeof target & { args: string[] };
 
     expect(merged.profileName).toBe("prod");
-    expect(t.args).toEqual(["--context", "prod-cluster"]);
+    expect(t.args).toEqual(["--hostname", "prod.example.com"]);
   });
 
   test("headers merged (profile on top of base)", async () => {
@@ -154,7 +154,7 @@ describe("profile application", () => {
     const t = merged.target as { args: string[] };
 
     expect(merged.profileName).toBe("prod");
-    expect(t.args).toEqual(["--context", "prod"]);
+    expect(t.args).toEqual(["--hostname", "prod.example.com"]);
   });
 });
 

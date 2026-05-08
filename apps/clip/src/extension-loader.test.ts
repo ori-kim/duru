@@ -2,6 +2,7 @@
  * extension-loader.ts — Phase 2 lazy init 검증
  *
  * 완료 조건: hooks 선언 없는 extension은 argv 미매칭 시 import가 발생하지 않음.
+ * 단, list/completion은 extension metadata가 필요하므로 모든 entry를 import한다.
  */
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync, mkdirSync } from "fs";
@@ -65,7 +66,7 @@ function createTmpManifest(dir: string, extensions: Array<{
 // ---------------------------------------------------------------------------
 
 describe("extension-loader / Phase 2 lazy init", () => {
-  test("argv='list' — skills extension(internalCommands=['skills'])은 import 안 됨", async () => {
+  test("argv='list' — extension metadata 조회를 위해 skills extension도 import됨", async () => {
     const dir = mkdtempSync(join(tmpdir(), "clip-ext-test-"));
     const extDir = createTmpExtension(dir, "skills-ext", { internalCommands: ["skills"] });
     const manifestPath = createTmpManifest(dir, [
@@ -78,12 +79,12 @@ describe("extension-loader / Phase 2 lazy init", () => {
     const registry = new Registry();
     process.env["CLIP_EXT_MANIFEST"] = manifestPath;
 
-    // argv = ["list"] — skills와 무관한 커맨드
+    // argv = ["list"] — metadata 표시를 위해 모든 extension을 초기화
     await loadUserExtensions(registry, ["list"]);
     await registry.initAll();
 
     const imported = (globalThis as Record<string, unknown>)["__imported"] as Set<string>;
-    expect(imported.has("skills-ext")).toBe(false);
+    expect(imported.has("skills-ext")).toBe(true);
 
     delete process.env["CLIP_EXT_MANIFEST"];
   });
