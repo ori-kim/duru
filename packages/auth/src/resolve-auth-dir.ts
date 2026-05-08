@@ -1,5 +1,5 @@
-import { join } from "path";
-import { homedir } from "os";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 const CONFIG_DIR = process.env.CLIP_HOME ?? join(homedir(), ".clip");
 

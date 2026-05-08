@@ -1,4 +1,4 @@
-import { resolveAuthDir, getAuthStatus } from "@clip/auth";
+import { getAuthStatus, resolveAuthDir } from "@clip/auth";
 import { addTarget, die, subProfiles, subRecord } from "@clip/core";
 import type { AddArgs, ClipExtension, ListOpts, NormalizeCtx } from "@clip/core";
 import { describeApiTools, executeApi } from "./executor.ts";
@@ -79,14 +79,14 @@ export const extension: ClipExtension = {
         return `  ${nm} ${url}${profileTag}${aclStr}${statusTag}${bind(name)}`;
       },
       urlHeuristic: (url) => {
-        const lower = url.toLowerCase().split("?")[0]!.split("#")[0]!;
+        const lower = url.toLowerCase().split("?")[0]?.split("#")[0] ?? "";
         return /\/(openapi|swagger)\.(json|ya?ml)$/.test(lower) || /\/openapi\.json$/.test(lower);
       },
       addHandler: async (args: AddArgs) => {
         const { name, positionals, flags, allow, deny } = args;
-        const baseUrl = flags["base-url"] ?? flags["baseUrl"] ?? positionals[0];
+        const baseUrl = flags["base-url"] ?? flags.baseUrl ?? positionals[0];
         if (!baseUrl) die("API target requires a base URL (e.g. clip add petstore https://api.example.com)");
-        const openapiUrl = flags["openapi-url"] ?? flags["openapiUrl"];
+        const openapiUrl = flags["openapi-url"] ?? flags.openapiUrl;
         await addTarget(name, "api", { auth: false, baseUrl, ...(openapiUrl ? { openapiUrl } : {}), allow, deny });
         console.log(`Added API target "${name}" → ${baseUrl}`);
         try {
@@ -94,15 +94,15 @@ export const extension: ClipExtension = {
           if (resp.ok) {
             const text = await resp.text();
             const spec = JSON.parse(text) as Record<string, unknown>;
-            const components = spec["components"] as Record<string, unknown> | undefined;
+            const components = spec.components as Record<string, unknown> | undefined;
             const schemes = Object.values(
-              (components?.["securitySchemes"] as Record<string, unknown> | undefined) ??
-                (spec["securityDefinitions"] as Record<string, unknown> | undefined) ??
+              (components?.securitySchemes as Record<string, unknown> | undefined) ??
+                (spec.securityDefinitions as Record<string, unknown> | undefined) ??
                 {},
             );
             if (schemes.length > 0) {
               const kinds = schemes
-                .map((s) => (s as Record<string, string>)["type"] ?? (s as Record<string, string>)["scheme"])
+                .map((s) => (s as Record<string, string>).type ?? (s as Record<string, string>).scheme)
                 .join(", ");
               process.stderr.write(
                 `clip: This API declares auth (${kinds}). Add 'auth: oauth' or 'auth: apikey' with 'headers:' in config.yml.\n`,
@@ -128,9 +128,9 @@ export const extension: ClipExtension = {
 };
 
 function formatAcl(target: Record<string, unknown>): string {
-  const allow = target["allow"] as string[] | undefined;
-  const deny = target["deny"] as string[] | undefined;
-  const acl = target["acl"] as Record<string, unknown> | undefined;
+  const allow = target.allow as string[] | undefined;
+  const deny = target.deny as string[] | undefined;
+  const acl = target.acl as Record<string, unknown> | undefined;
   const parts: string[] = [];
   if (allow && allow.length > 0) parts.push(`allow: ${allow.join(",")}`);
   if (deny && deny.length > 0) parts.push(`deny: ${deny.join(",")}`);

@@ -365,13 +365,13 @@ describe("Registry / 타임아웃", () => {
     });
     await reg.initAll();
 
-    const prev = process.env["CLIP_EXT_TIMEOUT_MS"];
-    process.env["CLIP_EXT_TIMEOUT_MS"] = "50";
+    const prev = process.env.CLIP_EXT_TIMEOUT_MS;
+    process.env.CLIP_EXT_TIMEOUT_MS = "50";
     try {
       await expect(reg.runHooks("beforeExecute", makeCtx())).rejects.toThrow("timed out");
     } finally {
-      if (prev === undefined) delete process.env["CLIP_EXT_TIMEOUT_MS"];
-      else process.env["CLIP_EXT_TIMEOUT_MS"] = prev;
+      if (prev === undefined) process.env.CLIP_EXT_TIMEOUT_MS = undefined;
+      else process.env.CLIP_EXT_TIMEOUT_MS = prev;
     }
   });
 });

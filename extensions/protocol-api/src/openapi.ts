@@ -92,7 +92,7 @@ function flattenParams(
 
   for (const p of params) {
     const schema = deref(root, p.schema ?? { type: "string" }) as Record<string, unknown>;
-    const propSchema = { ...schema, description: p.description ?? (schema["description"] as string | undefined) };
+    const propSchema = { ...schema, description: p.description ?? (schema.description as string | undefined) };
     properties[p.name] = propSchema;
     if (p.required) required.push(p.name);
     if (p.in === "path") pathParams.push(p.name);
@@ -104,12 +104,12 @@ function flattenParams(
 
   if (requestBody) {
     const rb = deref(root, requestBody) as Record<string, unknown>;
-    const content = rb["content"] as Record<string, { schema?: unknown }> | undefined;
+    const content = rb.content as Record<string, { schema?: unknown }> | undefined;
     const ct = bodyContentType ?? (content ? Object.keys(content)[0] : undefined);
     if (ct && content?.[ct]?.schema) {
-      const bodySchema = deref(root, content[ct]!.schema) as Record<string, unknown>;
-      const bodyProps = bodySchema["properties"] as Record<string, unknown> | undefined;
-      const bodyRequired = bodySchema["required"] as string[] | undefined;
+      const bodySchema = deref(root, content[ct]?.schema) as Record<string, unknown>;
+      const bodyProps = bodySchema.properties as Record<string, unknown> | undefined;
+      const bodyRequired = bodySchema.required as string[] | undefined;
 
       if (bodyProps) {
         const paramNames = new Set(Object.keys(properties));
@@ -120,14 +120,14 @@ function flattenParams(
         }
       } else {
         // primitive/array body
-        properties["body"] = bodySchema;
-        if (rb["required"]) required.push("body");
+        properties.body = bodySchema;
+        if (rb.required) required.push("body");
       }
     }
   }
 
   const inputSchema: Record<string, unknown> = { type: "object", properties };
-  if (required.length) inputSchema["required"] = required;
+  if (required.length) inputSchema.required = required;
   return { inputSchema, pathParams, queryParams, headerParams, hasFormData };
 }
 
@@ -135,22 +135,20 @@ function flattenParams(
 
 function extractBaseUrl(spec: Record<string, unknown>): string | undefined {
   // OpenAPI 3.x
-  const servers = spec["servers"] as
-    | Array<{ url: string; variables?: Record<string, { default: string }> }>
-    | undefined;
+  const servers = spec.servers as Array<{ url: string; variables?: Record<string, { default: string }> }> | undefined;
   if (servers?.length) {
-    let url = servers[0]!.url;
-    const vars = servers[0]!.variables ?? {};
+    let url = servers[0]?.url;
+    const vars = servers[0]?.variables ?? {};
     for (const [k, v] of Object.entries(vars)) {
       url = url.replace(`{${k}}`, v.default);
     }
     return url;
   }
   // Swagger 2.0
-  const host = spec["host"] as string | undefined;
+  const host = spec.host as string | undefined;
   if (host) {
-    const basePath = (spec["basePath"] as string | undefined) ?? "/";
-    const schemes = (spec["schemes"] as string[] | undefined) ?? ["https"];
+    const basePath = (spec.basePath as string | undefined) ?? "/";
+    const schemes = (spec.schemes as string[] | undefined) ?? ["https"];
     return `${schemes[0]}://${host}${basePath}`.replace(/\/+$/, "");
   }
   return undefined;
@@ -163,26 +161,26 @@ export function parseOpenApi(raw: unknown): ParsedSpec {
   const baseUrl = extractBaseUrl(spec);
 
   // securitySchemes
-  const components = spec["components"] as Record<string, unknown> | undefined;
-  const definitions = spec["securityDefinitions"] as Record<string, unknown> | undefined;
-  const securitySchemes = (components?.["securitySchemes"] as Record<string, unknown> | undefined) ?? definitions ?? {};
-  const globalSecurity = (spec["security"] as unknown[]) ?? [];
+  const components = spec.components as Record<string, unknown> | undefined;
+  const definitions = spec.securityDefinitions as Record<string, unknown> | undefined;
+  const securitySchemes = (components?.securitySchemes as Record<string, unknown> | undefined) ?? definitions ?? {};
+  const globalSecurity = (spec.security as unknown[]) ?? [];
 
   const tools: ApiTool[] = [];
   const nameCount: Record<string, number> = {};
 
-  const paths = (spec["paths"] as Record<string, Record<string, unknown>>) ?? {};
+  const paths = (spec.paths as Record<string, Record<string, unknown>>) ?? {};
   const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
 
   for (const [pathStr, pathItem] of Object.entries(paths)) {
     if (!pathItem || typeof pathItem !== "object") continue;
-    const pathLevelParams = ((pathItem as Record<string, unknown>)["parameters"] as ParamDef[] | undefined) ?? [];
+    const pathLevelParams = ((pathItem as Record<string, unknown>).parameters as ParamDef[] | undefined) ?? [];
 
     for (const method of HTTP_METHODS) {
       const op = (pathItem as Record<string, unknown>)[method] as Record<string, unknown> | undefined;
       if (!op) continue;
 
-      const opId = op["operationId"] as string | undefined;
+      const opId = op.operationId as string | undefined;
       let name = toolNameFromOp(method, pathStr, opId);
 
       // dedup
@@ -194,7 +192,7 @@ export function parseOpenApi(raw: unknown): ParsedSpec {
         nameCount[name] = 1;
       }
 
-      const opParams = (op["parameters"] as ParamDef[] | undefined) ?? [];
+      const opParams = (op.parameters as ParamDef[] | undefined) ?? [];
       // path-level params are overridden by op-level if same name+in
       const mergedParamsMap = new Map<string, ParamDef>();
       for (const p of [...pathLevelParams, ...opParams]) {
@@ -202,12 +200,12 @@ export function parseOpenApi(raw: unknown): ParsedSpec {
       }
       const mergedParams = Array.from(mergedParamsMap.values());
 
-      const requestBody = op["requestBody"];
+      const requestBody = op.requestBody;
       const rb = requestBody ? (deref(spec, requestBody) as Record<string, unknown>) : undefined;
-      const content = rb?.["content"] as Record<string, unknown> | undefined;
+      const content = rb?.content as Record<string, unknown> | undefined;
       // OpenAPI 3.x: content에서, Swagger 2.0: operation 또는 root-level consumes에서
-      const opConsumes = op["consumes"] as string[] | undefined;
-      const globalConsumes = spec["consumes"] as string[] | undefined;
+      const opConsumes = op.consumes as string[] | undefined;
+      const globalConsumes = spec.consumes as string[] | undefined;
       const swaggerConsumes = (opConsumes ?? globalConsumes)?.[0];
       const bodyContentType = content ? Object.keys(content)[0] : swaggerConsumes;
 
@@ -221,8 +219,8 @@ export function parseOpenApi(raw: unknown): ParsedSpec {
       // formData 파라미터가 있는데 bodyContentType이 결정되지 않은 경우 url-encoded로 기본 설정
       const effectiveBodyCt = bodyContentType ?? (hasFormData ? "application/x-www-form-urlencoded" : undefined);
 
-      const summary = (op["summary"] as string | undefined) ?? "";
-      const desc = (op["description"] as string | undefined) ?? "";
+      const summary = (op.summary as string | undefined) ?? "";
+      const desc = (op.description as string | undefined) ?? "";
       const description = [summary, desc].filter(Boolean).join("\n\n") || `${method.toUpperCase()} ${pathStr}`;
 
       tools.push({

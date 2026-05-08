@@ -45,43 +45,43 @@ async function runProfileAdd(args: string[]): Promise<void> {
 
   const flags: Record<string, string | string[] | Record<string, string>> = {};
   for (let i = 0; i < rest.length; i++) {
-    const flag = rest[i]!;
+    const flag = rest[i] ?? "";
     const val = rest[i + 1];
     if (flag === "--args" && val) {
-      flags["args"] = val.split(",").map((s) => s.trim());
+      flags.args = val.split(",").map((s) => s.trim());
       i++;
     } else if (flag === "--url" && val) {
-      flags["url"] = val;
+      flags.url = val;
       i++;
     } else if (flag === "--command" && val) {
-      flags["command"] = val;
+      flags.command = val;
       i++;
     } else if (flag === "--endpoint" && val) {
-      flags["endpoint"] = val;
+      flags.endpoint = val;
       i++;
     } else if (flag === "--address" && val) {
-      flags["address"] = val;
+      flags.address = val;
       i++;
     } else if (flag === "--base-url" && val) {
-      flags["baseUrl"] = val;
+      flags.baseUrl = val;
       i++;
     } else if (flag === "--openapi-url" && val) {
-      flags["openapiUrl"] = val;
+      flags.openapiUrl = val;
       i++;
     } else if (flag === "--env" && val) {
       const [k, v] = val.split("=", 2);
       if (!k || v === undefined) die(`--env must be KEY=VALUE, got: ${val}`);
-      flags["env"] = { ...((flags["env"] as Record<string, string> | undefined) ?? {}), [k]: v };
+      flags.env = { ...((flags.env as Record<string, string> | undefined) ?? {}), [k]: v };
       i++;
     } else if (flag === "--header" && val) {
       const [k, v] = val.split(":", 2);
       if (!k || v === undefined) die(`--header must be KEY:VALUE, got: ${val}`);
-      flags["headers"] = { ...((flags["headers"] as Record<string, string> | undefined) ?? {}), [k.trim()]: v.trim() };
+      flags.headers = { ...((flags.headers as Record<string, string> | undefined) ?? {}), [k.trim()]: v.trim() };
       i++;
     } else if (flag === "--metadata" && val) {
       const [k, v] = val.split("=", 2);
       if (!k || v === undefined) die(`--metadata must be KEY=VALUE, got: ${val}`);
-      flags["metadata"] = { ...((flags["metadata"] as Record<string, string> | undefined) ?? {}), [k]: v };
+      flags.metadata = { ...((flags.metadata as Record<string, string> | undefined) ?? {}), [k]: v };
       i++;
     }
   }
@@ -89,7 +89,7 @@ async function runProfileAdd(args: string[]): Promise<void> {
   if (Object.keys(flags).length === 0) die("Specify at least one override flag (e.g. --args, --url, --env).");
 
   await updateTarget(targetName, (raw) => {
-    const profiles = (raw["profiles"] as Record<string, unknown> | undefined) ?? {};
+    const profiles = (raw.profiles as Record<string, unknown> | undefined) ?? {};
     profiles[profileName] = flags;
     return { ...raw, profiles };
   });
@@ -102,11 +102,11 @@ async function runProfileRemove(args: string[]): Promise<void> {
   validateIdentifier(profileName, "Profile name");
 
   await updateTarget(targetName, (raw) => {
-    const profiles = (raw["profiles"] as Record<string, unknown> | undefined) ?? {};
+    const profiles = (raw.profiles as Record<string, unknown> | undefined) ?? {};
     if (!(profileName in profiles)) die(`Profile "${profileName}" not found on target "${targetName}".`);
     delete profiles[profileName];
     const next: Record<string, unknown> = { ...raw, profiles };
-    if (raw["active"] === profileName) delete next["active"];
+    if (raw.active === profileName) next.active = undefined;
     return next;
   });
   console.log(`Profile "${profileName}" removed from target "${targetName}".`);
@@ -132,7 +132,8 @@ async function runProfileList(args: string[]): Promise<void> {
   console.log(`Profiles for "${targetName}":`);
   for (const name of names.sort()) {
     const marker = name === active ? " (active)" : "";
-    const p = profiles[name]!;
+    const p = profiles[name];
+    if (!p) continue;
     const detail = p.args ? `args: [${p.args.join(", ")}]` : (p.url ?? p.address ?? p.endpoint ?? p.baseUrl ?? "");
     console.log(`  ${name}${marker}  — ${detail}`);
   }
@@ -144,7 +145,7 @@ async function runProfileUse(args: string[]): Promise<void> {
   validateIdentifier(profileName, "Profile name");
 
   await updateTarget(targetName, (raw) => {
-    const profiles = (raw["profiles"] as Record<string, unknown> | undefined) ?? {};
+    const profiles = (raw.profiles as Record<string, unknown> | undefined) ?? {};
     if (!(profileName in profiles)) die(`Profile "${profileName}" not found on target "${targetName}".`);
     return { ...raw, active: profileName };
   });
@@ -157,7 +158,7 @@ async function runProfileUnset(args: string[]): Promise<void> {
 
   await updateTarget(targetName, (raw) => {
     const next = { ...raw };
-    delete next["active"];
+    next.active = undefined;
     return next;
   });
   console.log(`Active profile unset for "${targetName}".`);

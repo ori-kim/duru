@@ -56,7 +56,8 @@ export function expandInput(
     }
     const pure = val.match(/^\$([1-9])$/);
     if (pure) {
-      const raw = userArgs[Number.parseInt(pure[1]!, 10) - 1];
+      const rawIndex = pure[1];
+      const raw = rawIndex ? userArgs[Number.parseInt(rawIndex, 10) - 1] : undefined;
       if (raw !== undefined) {
         try {
           result[key] = JSON.parse(raw);
@@ -146,7 +147,7 @@ export function buildAliasSection(target: HasAliases): string {
     const desc = s.description ? `  — ${s.description}` : "";
     lines.push(`  ${s.name.padEnd(22)} [alias] ${s.subcommand}  ${detail}${desc}`);
   }
-  return lines.join("\n") + "\n";
+  return `${lines.join("\n")}\n`;
 }
 
 // --- Alias help output ---

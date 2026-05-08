@@ -1,14 +1,14 @@
 import {
   type AliasDef,
   type HasAliases,
-  validateIdentifier,
   buildAliasSection,
-  formatAliasDef,
-  listAliases,
-  resolveAlias,
   expandArgs,
   expandInput,
   flattenInput,
+  formatAliasDef,
+  listAliases,
+  resolveAlias,
+  validateIdentifier,
 } from "@clip/core";
 import { getTarget, loadConfig, updateTarget } from "@clip/core";
 import { die } from "@clip/core";
@@ -48,7 +48,7 @@ async function runAliasAdd(args: string[]): Promise<void> {
   let inputJson: string | undefined;
 
   for (let i = 0; i < rest.length; i++) {
-    const flag = rest[i]!;
+    const flag = rest[i] ?? "";
     const val = rest[i + 1];
     if (flag === "--subcommand" && val !== undefined && !val.startsWith("--")) {
       subcommand = val;
@@ -106,13 +106,13 @@ async function runAliasAdd(args: string[]): Promise<void> {
     ...(description ? { description } : {}),
   };
 
-  await updateTarget(targetName!, (raw) => {
-    const aliases = (raw["aliases"] as Record<string, unknown> | undefined) ?? {};
-    aliases[aliasName!] = entry;
+  await updateTarget(targetName, (raw) => {
+    const aliases = (raw.aliases as Record<string, unknown> | undefined) ?? {};
+    aliases[aliasName] = entry;
     return { ...raw, aliases };
   });
 
-  const hint = aliasInput ? ` with JSON input` : aliasArgs?.length ? ` with args [${aliasArgs.join(", ")}]` : "";
+  const hint = aliasInput ? " with JSON input" : aliasArgs?.length ? ` with args [${aliasArgs.join(", ")}]` : "";
   console.log(`Alias "${aliasName}" added to "${targetName}" → ${subcommand}${hint}.`);
   if (aliasArgs?.some((a) => a.includes("$"))) {
     console.log(`  Tip: use single-quotes to pass '$1' etc. — e.g. --arg '\$1'`);
@@ -124,7 +124,7 @@ async function runAliasRemove(args: string[]): Promise<void> {
   if (!targetName || !aliasName) die("Usage: clip alias remove <target> <name>");
 
   await updateTarget(targetName, (raw) => {
-    const aliases = (raw["aliases"] as Record<string, unknown> | undefined) ?? {};
+    const aliases = (raw.aliases as Record<string, unknown> | undefined) ?? {};
     if (!(aliasName in aliases)) die(`Alias "${aliasName}" not found on "${targetName}".`);
     delete aliases[aliasName];
     return { ...raw, aliases };
@@ -150,7 +150,8 @@ async function runAliasList(args: string[]): Promise<void> {
 
   console.log(`Aliases for "${targetName}":`);
   for (const name of names.sort()) {
-    const def = aliases[name]! as AliasDef;
+    const def = aliases[name];
+    if (!def) continue;
     const detail = def.input ? JSON.stringify(def.input) : def.args?.length ? def.args.join(" ") : "(pass-through)";
     const desc = def.description ? `  — ${def.description}` : "";
     console.log(`  ${name.padEnd(22)} → ${def.subcommand}  ${detail}${desc}`);

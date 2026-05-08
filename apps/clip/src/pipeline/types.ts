@@ -64,10 +64,7 @@ export type MatchedHelp = { kind: "help"; what: "top" | { target: string } };
 export type MatchedCompletion = { kind: "completion"; shell: readonly string[] };
 export type MatchedTarget = { kind: "target"; invocation: TargetInvocationHandle };
 
-export type MatchedCommand = Brand<
-  MatchedInternal | MatchedHelp | MatchedCompletion | MatchedTarget,
-  "MatchedCommand"
->;
+export type MatchedCommand = Brand<MatchedInternal | MatchedHelp | MatchedCompletion | MatchedTarget, "MatchedCommand">;
 
 // --- Stage 4: BoundTarget ---
 

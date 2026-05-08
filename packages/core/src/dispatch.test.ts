@@ -333,14 +333,14 @@ describe("dispatch / registry 훅 통합", () => {
       name: "auth-hook",
       init(api) {
         api.registerHook("beforeExecute", async () => ({
-          headers: { Authorization: "Bearer injected" },
+          headers: { Authorization: "Bearer dummy-injected-token" },
         }));
       },
     });
     await reg.initAll();
 
     await dispatch(emptyCfg, baseInput({ headers: {} }), reg);
-    expect(capturedCtx?.headers?.["Authorization"]).toBe("Bearer injected");
+    expect(capturedCtx?.headers?.Authorization).toBe("Bearer dummy-injected-token");
   });
 
   test("beforeExecute shortCircuit이 executor를 우회", async () => {

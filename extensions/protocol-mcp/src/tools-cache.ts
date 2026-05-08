@@ -1,4 +1,4 @@
-import { join } from "path";
+import { join } from "node:path";
 import { CONFIG_DIR, findTargetConfigDir } from "@clip/core";
 import type { Tool } from "@clip/core";
 

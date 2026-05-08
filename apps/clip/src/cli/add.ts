@@ -41,13 +41,13 @@ export async function runAdd(args: string[], registry: Registry): Promise<void> 
     }
   }
 
-  const allow = flags["allow"] ? flags["allow"].split(",").map((s) => s.trim()) : undefined;
-  const deny = flags["deny"] ? flags["deny"].split(",").map((s) => s.trim()) : undefined;
+  const allow = flags.allow ? flags.allow.split(",").map((s) => s.trim()) : undefined;
+  const deny = flags.deny ? flags.deny.split(",").map((s) => s.trim()) : undefined;
 
   const addArgs = { name, positionals, flags, allow, deny };
 
   // --type 명시: 직접 dispatch
-  const explicitType = flags["type"];
+  const explicitType = flags.type;
   if (explicitType) {
     const contribution = registry.getContribution(explicitType);
     if (contribution?.addHandler) {

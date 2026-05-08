@@ -80,7 +80,7 @@ async function runStdioSession<T>(target: McpStdioTarget, action: (send: SendFn)
   let nextId = 1;
 
   const write = async (data: string): Promise<void> => {
-    proc.stdin.write(data + "\n");
+    proc.stdin.write(`${data}\n`);
     await proc.stdin.flush();
   };
 

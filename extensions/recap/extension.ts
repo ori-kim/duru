@@ -1,25 +1,45 @@
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import type { ExtensionApi } from "@clip/core";
-import { readFileSync, existsSync, writeFileSync, unlinkSync, readdirSync, mkdirSync } from "fs";
 
-const RECAP_DIR = `${process.env.CLIP_HOME || process.env.HOME + "/.clip"}/recap`;
+const RECAP_DIR = `${process.env.CLIP_HOME || `${process.env.HOME}/.clip`}/recap`;
 
 // ─── Helpers (sync) ───
 
-function readIndex(targetName: string): any[] {
+type RecapEntry = {
+  name: string;
+  description: string;
+  updatedAt?: string;
+  file: string;
+};
+
+function isRecapEntry(value: unknown): value is RecapEntry {
+  if (value === null || typeof value !== "object") return false;
+  const entry = value as Record<string, unknown>;
+  return typeof entry.name === "string" && typeof entry.description === "string" && typeof entry.file === "string";
+}
+
+function readIndex(targetName: string): RecapEntry[] {
   const path = `${RECAP_DIR}/${targetName}/index.json`;
   if (!existsSync(path)) return [];
-  try { return JSON.parse(readFileSync(path, "utf-8")); }
-  catch { return []; }
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as unknown;
+    return Array.isArray(parsed) ? parsed.filter(isRecapEntry) : [];
+  } catch {
+    return [];
+  }
 }
 
 function readBody(targetName: string, file: string): string {
   const path = `${RECAP_DIR}/${targetName}/reference/${file}`;
   if (!existsSync(path)) return "";
-  try { return readFileSync(path, "utf-8"); }
-  catch { return ""; }
+  try {
+    return readFileSync(path, "utf-8");
+  } catch {
+    return "";
+  }
 }
 
-function writeIndex(targetName: string, entries: any[]): void {
+function writeIndex(targetName: string, entries: RecapEntry[]): void {
   const dir = `${RECAP_DIR}/${targetName}`;
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
@@ -28,13 +48,15 @@ function writeIndex(targetName: string, entries: any[]): void {
 }
 
 function getActiveProfile(targetName: string): string | null {
-  const configPath = `${process.env.CLIP_HOME || process.env.HOME + "/.clip"}/target/mcp/${targetName}/config.yml`;
+  const configPath = `${process.env.CLIP_HOME || `${process.env.HOME}/.clip`}/target/mcp/${targetName}/config.yml`;
   if (!existsSync(configPath)) return null;
   try {
     const content = readFileSync(configPath, "utf-8");
     const match = content.match(/active:\s*"?([^"\n]+)"?/);
     return match ? match[1].trim() : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function resolveTarget(targetName: string): string {
@@ -50,13 +72,15 @@ function resolveTarget(targetName: string): string {
 function getTargets(): string[] {
   try {
     return readdirSync(RECAP_DIR, { withFileTypes: true })
-      .filter((d: any) => d.isDirectory())
-      .map((d: any) => d.name);
-  } catch { return []; }
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return [];
+  }
 }
 
 function getRegisteredTargetNames(): Set<string> {
-  const root = `${process.env.CLIP_HOME || process.env.HOME + "/.clip"}/target`;
+  const root = `${process.env.CLIP_HOME || `${process.env.HOME}/.clip`}/target`;
   const names = new Set<string>();
   try {
     for (const type of readdirSync(root, { withFileTypes: true })) {
@@ -82,7 +106,7 @@ function renderRecap(targetName: string, key?: string, jsonMode = false) {
   }
 
   if (key) {
-    const entry = entries.find((e: any) => e.name === key);
+    const entry = entries.find((e) => e.name === key);
     if (!entry) {
       return jsonMode
         ? { shortCircuit: { exitCode: 0, stdout: "null", stderr: "" } }
@@ -90,13 +114,25 @@ function renderRecap(targetName: string, key?: string, jsonMode = false) {
     }
     const body = readBody(resolved, entry.file);
     if (jsonMode) {
-      return { shortCircuit: { exitCode: 0, stdout: JSON.stringify({ key, description: entry.description, value: body }), stderr: "" } };
+      return {
+        shortCircuit: {
+          exitCode: 0,
+          stdout: JSON.stringify({ key, description: entry.description, value: body }),
+          stderr: "",
+        },
+      };
     }
-    return { shortCircuit: { exitCode: 0, stdout: `📄 ${resolved} / ${key}\n─────────────────────────────────────\n${body}\n`, stderr: "" } };
+    return {
+      shortCircuit: {
+        exitCode: 0,
+        stdout: `📄 ${resolved} / ${key}\n─────────────────────────────────────\n${body}\n`,
+        stderr: "",
+      },
+    };
   }
 
   if (jsonMode) {
-    const result = entries.map((e: any) => ({
+    const result = entries.map((e) => ({
       key: e.name,
       description: e.description,
       value: readBody(resolved, e.file),
@@ -154,7 +190,13 @@ function handleAdd(targetName: string, args: string[]) {
   const body = parsed["--body"];
 
   if (!name || !description || !body) {
-    return { shortCircuit: { exitCode: 1, stdout: "", stderr: "Usage: clip <target> recap add --name <name> --description <desc> --body <body>\n" } };
+    return {
+      shortCircuit: {
+        exitCode: 1,
+        stdout: "",
+        stderr: "Usage: clip <target> recap add --name <name> --description <desc> --body <body>\n",
+      },
+    };
   }
 
   const dir = `${RECAP_DIR}/${resolved}`;
@@ -162,11 +204,11 @@ function handleAdd(targetName: string, args: string[]) {
   if (!existsSync(refDir)) {
     mkdirSync(refDir, { recursive: true });
   }
-  writeFileSync(`${refDir}/${name}.md`, body + "\n");
+  writeFileSync(`${refDir}/${name}.md`, `${body}\n`);
 
   const existing = readIndex(resolved);
   const now = new Date().toISOString();
-  const filtered = existing.filter((e: any) => e.name !== name);
+  const filtered = existing.filter((e) => e.name !== name);
   filtered.push({ name, description, updatedAt: now, file: `${name}.md` });
   writeIndex(resolved, filtered);
 
@@ -231,7 +273,7 @@ function handleDelete(targetName: string, name: string) {
   unlinkSync(file);
 
   const existing = readIndex(resolved);
-  const filtered = existing.filter((e: any) => e.name !== name);
+  const filtered = existing.filter((e) => e.name !== name);
   writeIndex(resolved, filtered);
 
   return { shortCircuit: { exitCode: 0, stdout: `🗑️  Recap '${name}' deleted from '${resolved}'\n`, stderr: "" } };
@@ -291,46 +333,49 @@ export const extension = {
     // clip recap <target> <key> → look up specific entry
     // clip recap list [target]  → list entries
     // clip recap search <kw>    → search across all entries
-    api.registerInternalCommand("recap", async ({ args }) => {
-      const first = args[0];
+    api.registerInternalCommand(
+      "recap",
+      async ({ args }) => {
+        const first = args[0];
 
-      if (!first) {
-        printResult(handleList(undefined));
-        return;
-      }
-
-      if (first === "list") {
-        printResult(handleList(args[1]));
-        return;
-      }
-
-      if (first === "search") {
-        let keyword = "";
-        let targetFilter: string | undefined;
-        let i = 1;
-        while (i < args.length) {
-          if (args[i]!.startsWith("--target=")) {
-            targetFilter = args[i]!.slice("--target=".length);
-            i++;
-          } else if (args[i] === "--target") {
-            targetFilter = args[i + 1];
-            i += 2;
-          } else {
-            keyword = args[i]!;
-            i++;
-          }
+        if (!first) {
+          printResult(handleList(undefined));
+          return;
         }
-        printResult(handleSearch(keyword, targetFilter));
-        return;
-      }
 
-      // clip recap <target> [key] [--json]
-      const isJson = args.includes("--json-output");
-      const key = args.slice(1).find((a) => !a.startsWith("--"));
-      printResult(renderRecap(first, key, isJson));
-    }, {
-      description: "query and manage stored tacit knowledge",
-      completion: () => `
+        if (first === "list") {
+          printResult(handleList(args[1]));
+          return;
+        }
+
+        if (first === "search") {
+          let keyword = "";
+          let targetFilter: string | undefined;
+          let i = 1;
+          while (i < args.length) {
+            if (args[i]?.startsWith("--target=")) {
+              targetFilter = args[i]?.slice("--target=".length);
+              i++;
+            } else if (args[i] === "--target") {
+              targetFilter = args[i + 1];
+              i += 2;
+            } else {
+              keyword = args[i] ?? "";
+              i++;
+            }
+          }
+          printResult(handleSearch(keyword, targetFilter));
+          return;
+        }
+
+        // clip recap <target> [key] [--json]
+        const isJson = args.includes("--json-output");
+        const key = args.slice(1).find((a) => !a.startsWith("--"));
+        printResult(renderRecap(first, key, isJson));
+      },
+      {
+        description: "query and manage stored tacit knowledge",
+        completion: () => `
   if (( CURRENT == 3 )); then
     local recap_dir="\${CLIP_HOME:-$HOME/.clip}/recap"
     local -a rtargets=()
@@ -344,7 +389,8 @@ export const extension = {
     (( \${#rtargets} )) && _describe -t recap-targets 'recap targets' rtargets
     _describe -t recap-commands 'recap commands' subcmds
   fi`,
-    });
+      },
+    );
 
     api.registerHook("beforeExecute", (ctx) => {
       if (ctx.subcommand !== "recap") return;
@@ -402,11 +448,13 @@ export const extension = {
         }
 
         default:
-          return { shortCircuit: {
-            exitCode: 1,
-            stdout: "",
-            stderr: `Unknown recap subcommand: ${subCmd}\nUsage: clip <target> recap {add|list|show|delete|search}\n`
-          } };
+          return {
+            shortCircuit: {
+              exitCode: 1,
+              stdout: "",
+              stderr: `Unknown recap subcommand: ${subCmd}\nUsage: clip <target> recap {add|list|show|delete|search}\n`,
+            },
+          };
       }
     });
   },

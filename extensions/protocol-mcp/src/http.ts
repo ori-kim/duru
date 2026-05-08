@@ -58,13 +58,11 @@ function parseSSE(body: string, expectedId: number): unknown {
   // 매칭 id 없으면 마지막 data: 반환
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
-    if (line && line.startsWith("data: ")) {
+    if (line?.startsWith("data: ")) {
       const data = line.slice(6).trim();
       try {
         return JSON.parse(data);
-      } catch {
-        continue;
-      }
+      } catch {}
     }
   }
   die("No JSON-RPC response found in SSE stream");

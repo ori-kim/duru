@@ -52,7 +52,13 @@ const baseConfig: Config = {
   targets: {
     cli: { mygh: { command: "gh" } },
     mcp: { notion: notionTarget },
-    api: { petstore: { baseUrl: "https://petstore.example.com", openapiUrl: "https://petstore.example.com/spec.json", auth: false } },
+    api: {
+      petstore: {
+        baseUrl: "https://petstore.example.com",
+        openapiUrl: "https://petstore.example.com/spec.json",
+        auth: false,
+      },
+    },
     grpc: { localgrpc: { address: "localhost:50051", plaintext: true } },
     graphql: { gh: { endpoint: "https://api.github.com/graphql" } },
     script: { lag: { commands: { run: { script: "echo hi" } } } },
@@ -65,7 +71,8 @@ const baseConfig: Config = {
 describe("builtin targets", () => {
   test.each(BUILTIN_TYPES)("%s target binds successfully", async (type) => {
     const reg = await makeRegistry(BUILTIN_TYPES);
-    const name = Object.keys((baseConfig.targets[type] ?? {}) as Record<string, unknown>)[0]!;
+    const name = Object.keys((baseConfig.targets[type] ?? {}) as Record<string, unknown>)[0];
+    if (!name) throw new Error(`No fixture target for ${type}`);
     const inv = makeInvocation(name);
     const bound = bindTarget(inv, baseConfig, reg) as unknown as BoundData;
 

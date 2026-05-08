@@ -29,7 +29,12 @@ function makeInvocation(baseName: string, explicitProfile?: string): TargetInvoc
 }
 
 async function makeRegistry(
-  extraTypes: { type: string; schema?: { safeParse: (x: unknown) => { success: true; data: unknown } | { success: false; error: { message: string } } } }[] = [],
+  extraTypes: {
+    type: string;
+    schema?: {
+      safeParse: (x: unknown) => { success: true; data: unknown } | { success: false; error: { message: string } };
+    };
+  }[] = [],
 ): Promise<Registry> {
   const reg = new Registry();
   const builtins = ["cli", "mcp", "api", "grpc", "graphql", "script"];
@@ -37,7 +42,11 @@ async function makeRegistry(
     reg.register({
       name: `mock:${type}`,
       init(api) {
-        api.registerTargetType({ type, schema: { safeParse: (x) => ({ success: true as const, data: x }) }, executor: noop });
+        api.registerTargetType({
+          type,
+          schema: { safeParse: (x) => ({ success: true as const, data: x }) },
+          executor: noop,
+        });
       },
     });
   }
@@ -57,8 +66,7 @@ async function makeRegistry(
   return reg;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function makeConfig(type: string, name: string, target: any) {
+function makeConfig(type: string, name: string, target: unknown) {
   const builtinTypes = new Set(["cli", "mcp", "api", "grpc", "graphql", "script"]);
   if (builtinTypes.has(type)) {
     return { targets: { [type]: { [name]: target } }, _ext: {} };
@@ -165,7 +173,7 @@ describe("extension target schema validation", () => {
     const schema = {
       safeParse: (x: unknown) => {
         const obj = x as Record<string, unknown>;
-        if (obj["host"]) return { success: true as const, data: x };
+        if (obj.host) return { success: true as const, data: x };
         return { success: false as const, error: { message: "host required" } };
       },
     };
@@ -182,7 +190,7 @@ describe("extension target schema validation", () => {
     const schema = {
       safeParse: (x: unknown) => {
         const obj = x as Record<string, unknown>;
-        if (obj["host"]) return { success: true as const, data: x };
+        if (obj.host) return { success: true as const, data: x };
         return { success: false as const, error: { message: "host required" } };
       },
     };
@@ -201,7 +209,7 @@ describe("extension target schema validation", () => {
     const schema = {
       safeParse: (x: unknown) => {
         const obj = x as Record<string, unknown>;
-        if (obj["host"]) return { success: true as const, data: x };
+        if (obj.host) return { success: true as const, data: x };
         return { success: false as const, error: { message: "host required" } };
       },
     };

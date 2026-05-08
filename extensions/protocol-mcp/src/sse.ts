@@ -96,6 +96,7 @@ async function openSseSession(
 
   if (!sseResp.ok) die(`SSE endpoint returned HTTP ${sseResp.status}`);
   if (!sseResp.body) die("SSE endpoint returned no body");
+  const sseBody = sseResp.body;
 
   const baseUrl = new URL(target.url);
   const pending = new Map<number, PendingEntry>();
@@ -113,7 +114,7 @@ async function openSseSession(
   // 백그라운드 SSE 스트림 리더
   (async () => {
     try {
-      for await (const { event, data } of parseSseStream(sseResp.body!)) {
+      for await (const { event, data } of parseSseStream(sseBody)) {
         if (event === "endpoint" && !endpointSettled) {
           endpointSettled = true;
           const url = data.startsWith("http") ? data : new URL(data, baseUrl).toString();
@@ -171,11 +172,13 @@ async function openSseSession(
       }, 30_000);
     });
 
-    const postResp = await client.fetch(messageUrl, {
-      method: "POST",
-      headers: postBaseHeaders,
-      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-    }).catch((e: unknown) => die(`SSE POST failed: ${e}`));
+    const postResp = await client
+      .fetch(messageUrl, {
+        method: "POST",
+        headers: postBaseHeaders,
+        body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+      })
+      .catch((e: unknown) => die(`SSE POST failed: ${e}`));
 
     if (!postResp.ok && postResp.status !== 202) {
       die(`SSE message endpoint returned HTTP ${postResp.status}: ${await postResp.text()}`);
@@ -194,7 +197,7 @@ async function openSseSession(
     });
   };
 
-  return { call, notify, close: () => sseResp.body!.cancel() };
+  return { call, notify, close: () => sseResp.body?.cancel() };
 }
 
 // --- dry-run 헬퍼 ---
@@ -206,7 +209,7 @@ function buildSseDryRunOutput(target: McpSseTarget, headers: Record<string, stri
   return [
     "# Step 1: Connect to SSE endpoint",
     `curl -N '${target.url}' \\`,
-    `  -H 'Accept: text/event-stream'${headerArgs ? " \\\n" + headerArgs : ""}`,
+    `  -H 'Accept: text/event-stream'${headerArgs ? ` \\\n${headerArgs}` : ""}`,
     "",
     "# Step 2: POST to message endpoint (URL from 'endpoint' SSE event)",
     `curl -X POST '<messageUrl-from-endpoint-event>' \\`,

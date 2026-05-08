@@ -1,5 +1,5 @@
-import { z } from "zod";
 import { aclFields, aliasFields, profileFields } from "@clip/core";
+import { z } from "zod";
 
 export const graphqlTargetSchema = z.object({
   endpoint: z.string().url(),

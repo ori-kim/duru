@@ -1,19 +1,28 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, copyFileSync } from "fs";
-import { join, basename, resolve } from "path";
-import { homedir } from "os";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
+import { homedir } from "node:os";
+import { basename, join, resolve } from "node:path";
 import { die, validateIdentifier } from "@clip/core";
-import { renderPrompt, parseSkillFile } from "./frontmatter.ts";
+import { parseSkillFile, renderPrompt } from "./frontmatter.ts";
 import {
   RESERVED_SKILL_NAMES,
+  deleteGroup,
   findSkillDir,
   getSkillsDir,
-  loadAllSkillsSafe,
-  removeSkill,
-  writeSkill,
   listGroupNames,
+  loadAllSkillsSafe,
   loadGroup,
+  removeSkill,
   saveGroup,
-  deleteGroup,
+  writeSkill,
 } from "./registry.ts";
 import type { GroupDef } from "./registry.ts";
 
@@ -53,7 +62,7 @@ async function cmdAdd(args: string[]): Promise<void> {
   let tags: string[] = [];
 
   for (let i = 1; i < args.length; i++) {
-    const a = args[i]!;
+    const a = args[i] ?? "";
     if (a === "--description" || a === "-d") {
       description = args[++i] ?? die("--description requires a value");
     } else if (a.startsWith("--description=")) {
@@ -61,7 +70,10 @@ async function cmdAdd(args: string[]): Promise<void> {
     } else if (a === "--tag" || a === "--tags") {
       tags = (args[++i] ?? die("--tag requires a value")).split(",").map((t) => t.trim());
     } else if (a.startsWith("--tag=")) {
-      tags = a.slice("--tag=".length).split(",").map((t) => t.trim());
+      tags = a
+        .slice("--tag=".length)
+        .split(",")
+        .map((t) => t.trim());
     } else {
       die(`Unknown option: ${a}`);
     }
@@ -143,7 +155,9 @@ function cmdList(args: string[]): void {
   // CJK/Hangul wide chars occupy 2 terminal columns — compensate with display width
   const charW = (ch: string) => {
     const cp = ch.codePointAt(0) ?? 0;
-    return cp >= 0x1100 && (cp <= 0xFFEF || (cp >= 0x20000 && cp <= 0x2FFFD) || (cp >= 0x30000 && cp <= 0x3FFFD)) ? 2 : 1;
+    return cp >= 0x1100 && (cp <= 0xffef || (cp >= 0x20000 && cp <= 0x2fffd) || (cp >= 0x30000 && cp <= 0x3fffd))
+      ? 2
+      : 1;
   };
   const displayW = (s: string) => [...s].reduce((n, ch) => n + charW(ch), 0);
   const trunc = (s: string, max: number) => {
@@ -151,7 +165,7 @@ function cmdList(args: string[]): void {
     let out = "";
     for (const ch of s) {
       const cw = charW(ch);
-      if (w + cw > max - 1) return out + "…";
+      if (w + cw > max - 1) return `${out}…`;
       out += ch;
       w += cw;
     }
@@ -159,27 +173,25 @@ function cmdList(args: string[]): void {
   };
   const padD = (s: string, w: number) => s + " ".repeat(Math.max(0, w - displayW(s)));
 
-  const nameW     = Math.max(4, ...entries.map((e) => e.name.length));
+  const nameW = Math.max(4, ...entries.map((e) => e.name.length));
   const agentColW = Math.max(6, ...withAgents.map(({ agents }) => Math.max(0, agents.length * 2 - 1)));
-  const toolsW    = Math.max(5, ...withAgents.map(({ fm }) => (fm.tags ?? []).join(", ").length));
-  const cols      = process.stdout.columns || 120;
-  const fixedW    = nameW + agentColW + toolsW + 6; // 3 × "  " separators
-  const DESC_MAX  = Math.max(11, Math.min(80, cols - fixedW));
-  const descW     = Math.max(11, ...withAgents.map(({ fm }) => Math.min(displayW(fm.description), DESC_MAX)));
+  const toolsW = Math.max(5, ...withAgents.map(({ fm }) => (fm.tags ?? []).join(", ").length));
+  const cols = process.stdout.columns || 120;
+  const fixedW = nameW + agentColW + toolsW + 6; // 3 × "  " separators
+  const DESC_MAX = Math.max(11, Math.min(80, cols - fixedW));
+  const descW = Math.max(11, ...withAgents.map(({ fm }) => Math.min(displayW(fm.description), DESC_MAX)));
 
   const sep = (w: number) => "─".repeat(w);
   const divider = `${sep(nameW)}  ${sep(agentColW)}  ${sep(descW)}  ${sep(toolsW)}`;
 
-  console.log(
-    `${bold("NAME".padEnd(nameW))}  ${"AGENTS".padEnd(agentColW)}  ${"DESCRIPTION".padEnd(descW)}  TOOLS`,
-  );
+  console.log(`${bold("NAME".padEnd(nameW))}  ${"AGENTS".padEnd(agentColW)}  ${"DESCRIPTION".padEnd(descW)}  TOOLS`);
   console.log(dim(divider));
 
   for (const { name, fm, agents } of withAgents) {
     const rawLen = Math.max(0, agents.length * 2 - 1);
     const colored = agents.map((a) => agentColored(a, tty)).join(" ");
     const agentPadded = colored + " ".repeat(Math.max(0, agentColW - rawLen));
-    const desc  = padD(trunc(fm.description, DESC_MAX), descW);
+    const desc = padD(trunc(fm.description, DESC_MAX), descW);
     const tools = dim((fm.tags ?? []).join(", "));
     console.log(`${name.padEnd(nameW)}  ${agentPadded}  ${desc}  ${tools}`);
   }
@@ -209,7 +221,7 @@ function cmdGet(args: string[]): void {
   let json = false;
 
   for (let i = 1; i < args.length; i++) {
-    const a = args[i]!;
+    const a = args[i] ?? "";
     if (a === "--json-output") {
       json = true;
     } else if (a === "--input" || a === "-i") {
@@ -279,11 +291,11 @@ const AGENT_PRESETS: Record<string, string> = {
 
 // brand RGB colors per agent
 const AGENT_COLORS: Record<string, [number, number, number]> = {
-  "claude-code": [217, 119,  87], // Anthropic orange-salmon
-  codex:         [ 16, 163, 127], // OpenAI green
-  gemini:        [ 66, 133, 244], // Google blue
-  pi:            [124,  58, 237], // Pi purple
-  cursor:        [  0, 184, 217], // Cursor cyan
+  "claude-code": [217, 119, 87], // Anthropic orange-salmon
+  codex: [16, 163, 127], // OpenAI green
+  gemini: [66, 133, 244], // Google blue
+  pi: [124, 58, 237], // Pi purple
+  cursor: [0, 184, 217], // Cursor cyan
 };
 
 const AGENT_ICON = "✶";
@@ -381,7 +393,7 @@ async function cmdInstall(args: string[]): Promise<void> {
   let force = false;
 
   for (let i = 1; i < args.length; i++) {
-    const a = args[i]!;
+    const a = args[i] ?? "";
     if (a === "--to") {
       targets.push(args[++i] ?? die("--to requires a preset name"));
     } else if (a.startsWith("--to=")) {
@@ -401,7 +413,8 @@ async function cmdInstall(args: string[]): Promise<void> {
     }
   }
 
-  if (targets.length === 0) die(`Specify at least one --to <agent>\nAvailable: ${Object.keys(AGENT_PRESETS).join(", ")}`);
+  if (targets.length === 0)
+    die(`Specify at least one --to <agent>\nAvailable: ${Object.keys(AGENT_PRESETS).join(", ")}`);
 
   for (const preset of targets) {
     const agentSkillsDir = AGENT_PRESETS[preset];
@@ -419,7 +432,7 @@ function cmdUninstall(args: string[]): void {
   let force = false;
 
   for (let i = 1; i < args.length; i++) {
-    const a = args[i]!;
+    const a = args[i] ?? "";
     if (a === "--from") {
       froms.push(args[++i] ?? die("--from requires a preset name"));
     } else if (a.startsWith("--from=")) {
@@ -469,7 +482,7 @@ function cmdGroupCreate(args: string[]): void {
   let description: string | undefined;
   const skills: string[] = [];
   for (let i = 1; i < args.length; i++) {
-    const a = args[i]!;
+    const a = args[i] ?? "";
     if (a === "--description" || a === "-d") description = args[++i] ?? die("--description requires a value");
     else if (a.startsWith("--description=")) description = a.slice("--description=".length);
     else skills.push(a);
@@ -489,7 +502,8 @@ function cmdGroupList(_args: string[]): void {
   const nameW = Math.max(5, ...names.map((n) => n.length));
   console.log(`${"GROUP".padEnd(nameW)}  SKILLS`);
   for (const n of names) {
-    const g = loadGroup(n)!;
+    const g = loadGroup(n);
+    if (!g) continue;
     const desc = g.description ? `  # ${g.description}` : "";
     console.log(`${n.padEnd(nameW)}  ${g.skills.join(", ") || "(empty)"}${desc}`);
   }
@@ -501,7 +515,10 @@ function cmdGroupShow(args: string[]): void {
   const g = loadGroup(name);
   if (!g) die(`Group "${name}" not found.`);
   console.log(`Group: ${name}${g.description ? `  — ${g.description}` : ""}`);
-  if (!g.skills.length) { console.log("  (no skills)"); return; }
+  if (!g.skills.length) {
+    console.log("  (no skills)");
+    return;
+  }
   for (const s of g.skills) console.log(`  • ${s}`);
 }
 
@@ -510,7 +527,9 @@ function cmdGroupAdd(args: string[]): void {
   if (!name || !skills.length) die("Usage: clip skills group add <group> <skill> [skill ...]");
   const g = loadGroup(name);
   if (!g) die(`Group "${name}" not found.`);
-  for (const s of skills) { if (!g.skills.includes(s)) g.skills.push(s); }
+  for (const s of skills) {
+    if (!g.skills.includes(s)) g.skills.push(s);
+  }
   saveGroup(name, g);
   console.log(`Updated "${name}": ${g.skills.join(", ")}`);
 }
@@ -541,14 +560,13 @@ async function cmdGroupActivate(args: string[]): Promise<void> {
   const targets: string[] = [];
   let force = false;
   for (let i = 1; i < args.length; i++) {
-    const a = args[i]!;
-    if (a === "--to")               targets.push(args[++i] ?? die("--to requires a value"));
+    const a = args[i] ?? "";
+    if (a === "--to") targets.push(args[++i] ?? die("--to requires a value"));
     else if (a.startsWith("--to=")) targets.push(a.slice(5));
-    else if (a === "--force")       force = true;
+    else if (a === "--force") force = true;
     else die(`Unknown option: ${a}`);
   }
-  if (!targets.length)
-    die(`Specify at least one --to <agent>\nAvailable: ${Object.keys(AGENT_PRESETS).join(", ")}`);
+  if (!targets.length) die(`Specify at least one --to <agent>\nAvailable: ${Object.keys(AGENT_PRESETS).join(", ")}`);
 
   for (const preset of targets) {
     const agentSkillsDir = AGENT_PRESETS[preset];
@@ -574,17 +592,20 @@ function cmdGroupDeactivate(args: string[]): void {
   const froms: string[] = [];
   let force = false;
   for (let i = 1; i < args.length; i++) {
-    const a = args[i]!;
-    if (a === "--from")                froms.push(args[++i] ?? die("--from requires a value"));
-    else if (a.startsWith("--from="))  froms.push(a.slice(7));
-    else if (a === "--force")          force = true;
+    const a = args[i] ?? "";
+    if (a === "--from") froms.push(args[++i] ?? die("--from requires a value"));
+    else if (a.startsWith("--from=")) froms.push(a.slice(7));
+    else if (a === "--force") force = true;
     else die(`Unknown option: ${a}`);
   }
   const targets = froms.length ? froms : Object.keys(AGENT_PRESETS);
 
   for (const preset of targets) {
     const agentSkillsDir = AGENT_PRESETS[preset];
-    if (!agentSkillsDir) { process.stderr.write(`Unknown preset: ${preset}\n`); continue; }
+    if (!agentSkillsDir) {
+      process.stderr.write(`Unknown preset: ${preset}\n`);
+      continue;
+    }
     for (const skillName of g.skills) {
       const destPath = join(agentSkillsDir, skillName);
       if (!existsSync(destPath)) continue;
@@ -604,15 +625,31 @@ async function cmdGroup(args: string[]): Promise<void> {
   const sub = args[0];
   const rest = args.slice(1);
   switch (sub) {
-    case "create":     cmdGroupCreate(rest); break;
-    case "list":       cmdGroupList(rest); break;
-    case "show":       cmdGroupShow(rest); break;
-    case "add":        cmdGroupAdd(rest); break;
+    case "create":
+      cmdGroupCreate(rest);
+      break;
+    case "list":
+      cmdGroupList(rest);
+      break;
+    case "show":
+      cmdGroupShow(rest);
+      break;
+    case "add":
+      cmdGroupAdd(rest);
+      break;
     case "rm":
-    case "remove":     cmdGroupRm(rest); break;
-    case "delete":     cmdGroupDelete(rest); break;
-    case "activate":   await cmdGroupActivate(rest); break;
-    case "deactivate": cmdGroupDeactivate(rest); break;
+    case "remove":
+      cmdGroupRm(rest);
+      break;
+    case "delete":
+      cmdGroupDelete(rest);
+      break;
+    case "activate":
+      await cmdGroupActivate(rest);
+      break;
+    case "deactivate":
+      cmdGroupDeactivate(rest);
+      break;
     default:
       die(
         [
@@ -647,7 +684,8 @@ async function cmdPull(args: string[]): Promise<void> {
   if (!/^[a-zA-Z0-9_-]+$/.test(name)) die(`Invalid skill name: "${name}"`);
 
   const destDir = join(getSkillsDir(), name);
-  if (existsSync(destDir)) die(`Skill "${name}" already exists in registry.\nUse --force to overwrite (not yet supported).`);
+  if (existsSync(destDir))
+    die(`Skill "${name}" already exists in registry.\nUse --force to overwrite (not yet supported).`);
 
   // move srcPath → registry
   mkdirSync(getSkillsDir(), { recursive: true });

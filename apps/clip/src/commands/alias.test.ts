@@ -101,8 +101,7 @@ describe("flattenInput", () => {
 
   test("object value → JSON stringify", () => {
     const result = flattenInput({ nested: { a: 1 } });
-    expect(result[0]).toBe("--nested");
-    expect(JSON.parse(result[1]!)).toEqual({ a: 1 });
+    expect(result).toEqual(["--nested", JSON.stringify({ a: 1 })]);
   });
 });
 
@@ -132,26 +131,26 @@ describe("resolveAlias", () => {
   test("alias with input → flattened args", () => {
     const r = resolveAlias(target, "send-me", ["hello"]);
     expect(r).not.toBeNull();
-    expect(r!.subcommand).toBe("chat.postMessage");
-    expect(r!.args).toEqual(["--channel", "U123", "--text", "hello"]);
-    expect(r!.hasInput).toBe(true);
+    expect(r?.subcommand).toBe("chat.postMessage");
+    expect(r?.args).toEqual(["--channel", "U123", "--text", "hello"]);
+    expect(r?.hasInput).toBe(true);
   });
 
   test("alias with args → expanded", () => {
     const r = resolveAlias(target, "pods-dev", []);
     expect(r).not.toBeNull();
-    expect(r!.subcommand).toBe("get");
-    expect(r!.args).toEqual(["pods", "-n", "dev"]);
+    expect(r?.subcommand).toBe("get");
+    expect(r?.args).toEqual(["pods", "-n", "dev"]);
   });
 
   test("alias with no args/input → passes user args through", () => {
     const r = resolveAlias(target, "pass", ["a", "b"]);
-    expect(r!.args).toEqual(["a", "b"]);
+    expect(r?.args).toEqual(["a", "b"]);
   });
 
   test("resolves scriptName", () => {
     const r = resolveAlias(target, "send-me", ["hi"]);
-    expect(r!.scriptName).toBe("send-me");
+    expect(r?.scriptName).toBe("send-me");
   });
 
   test("empty aliases record → null", () => {

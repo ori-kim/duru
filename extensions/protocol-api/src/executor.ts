@@ -1,8 +1,8 @@
-import { join } from "path";
-import YAML from "yaml";
+import { join } from "node:path";
 import { AuthenticatedClient, resolveAuthDir } from "@clip/auth";
 import { CONFIG_DIR, buildAliasSection, die, findTargetConfigDir, formatToolHelp, parseToolArgs } from "@clip/core";
 import type { ExecutorContext, TargetResult, Tool } from "@clip/core";
+import YAML from "yaml";
 import { parseOpenApi } from "./openapi.ts";
 import type { ApiTool } from "./openapi.ts";
 import type { ApiTarget } from "./schema.ts";
@@ -213,7 +213,7 @@ export function buildApiRequest(
   const ct = tool.bodyContentType ?? "application/json";
   if (hasbody) {
     if (ct.includes("multipart/form-data")) {
-      die(`multipart/form-data is not supported in v1. Use a different tool or set baseUrl manually.`);
+      die("multipart/form-data is not supported in v1. Use a different tool or set baseUrl manually.");
     } else if (ct.includes("application/x-www-form-urlencoded")) {
       const form = new URLSearchParams();
       for (const [k, v] of Object.entries(remainingArgs)) {
@@ -299,13 +299,15 @@ export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promi
     setHeaderValue(request.headers, key, value);
   }
 
-  const resp = await client.fetch(request.url, {
-    method: request.method,
-    headers: request.headers,
-    body: request.body,
-  }).catch((e: unknown) => {
-    die(`Failed to connect to ${request.url}: ${e}`);
-  });
+  const resp = await client
+    .fetch(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+    })
+    .catch((e: unknown) => {
+      die(`Failed to connect to ${request.url}: ${e}`);
+    });
 
   const respCt = resp.headers.get("Content-Type") ?? "";
   const respText = await resp.text();
@@ -336,7 +338,7 @@ export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promi
   let stdout: string;
   if (respCt.includes("json")) {
     try {
-      stdout = JSON.stringify(JSON.parse(respText), null, 2) + "\n";
+      stdout = `${JSON.stringify(JSON.parse(respText), null, 2)}\n`;
     } catch {
       stdout = respText + (respText.endsWith("\n") ? "" : "\n");
     }

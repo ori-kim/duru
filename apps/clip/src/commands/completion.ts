@@ -1,28 +1,23 @@
 import type { Registry } from "@clip/core";
 import { die } from "@clip/core";
-import { classifyInternalVerbs, BUILTIN_DESC } from "../cli/internal-verbs.ts";
+import { BUILTIN_DESC, classifyInternalVerbs } from "../cli/internal-verbs.ts";
 
 function zshArrayItems(verbs: string[], descMap?: Record<string, string>): string {
   return verbs
     .map((v) => {
       const d = descMap?.[v] ?? "";
       const safe = d.replace(/'/g, "'\\''");
-      return `    '${v}${safe ? ":" + safe : ""}'`;
+      return `    '${v}${safe ? `:${safe}` : ""}'`;
     })
     .join("\n");
 }
 
-function buildZshCompletionCore(
-  cmd: string,
-  builtinVerbs: string[],
-  extVerbs: string[],
-): string {
-  const fn = "_" + cmd.replace(/-/g, "_");
+function buildZshCompletionCore(cmd: string, builtinVerbs: string[], extVerbs: string[]): string {
+  const fn = `_${cmd.replace(/-/g, "_")}`;
   const builtinItems = zshArrayItems(builtinVerbs, BUILTIN_DESC);
   const extItems = zshArrayItems(extVerbs);
-  const extArrayDecl = extVerbs.length > 0
-    ? `    local -a extensions=(\n${extItems}\n    )`
-    : `    local -a extensions=()`;
+  const extArrayDecl =
+    extVerbs.length > 0 ? `    local -a extensions=(\n${extItems}\n    )` : "    local -a extensions=()";
   return `\
 zmodload zsh/complist 2>/dev/null
 
@@ -162,12 +157,8 @@ ${extArrayDecl}
 }
 
 // For eval "$(clip completion zsh)" in .zshrc
-export function buildZshCompletion(
-  registry?: Registry,
-  cmd = "clip",
-  phase1Verbs?: Set<string>,
-): string {
-  const fn = "_" + cmd.replace(/-/g, "_");
+export function buildZshCompletion(registry?: Registry, cmd = "clip", phase1Verbs?: Set<string>): string {
+  const fn = `_${cmd.replace(/-/g, "_")}`;
 
   let builtinVerbs: string[] = [];
   let extVerbs: string[] = [];
@@ -183,7 +174,7 @@ export function buildZshCompletion(
     const builtinTypes = new Set(["cli", "mcp", "api", "grpc", "graphql", "script"]);
     for (const contribution of registry.listContributions()) {
       if (!builtinTypes.has(contribution.type) && contribution.completionContributor) {
-        extraContribs += "\n" + contribution.completionContributor();
+        extraContribs += `\n${contribution.completionContributor()}`;
       }
     }
     for (const { verb, fn: contributor } of registry.listInternalCommandCompletions()) {
@@ -202,16 +193,11 @@ compdef ${fn} ${cmd}
 `;
 }
 
-export async function runCompletionCmd(
-  args: string[],
-  registry?: Registry,
-  phase1Verbs?: Set<string>,
-): Promise<void> {
-  let shell: string | undefined;
+export async function runCompletionCmd(args: string[], registry?: Registry, phase1Verbs?: Set<string>): Promise<void> {
   let cmd = "clip";
   const nameIdx = args.indexOf("--name");
   if (nameIdx !== -1) cmd = args[nameIdx + 1] ?? "clip";
-  shell = args.find((a) => !a.startsWith("-") && a !== args[nameIdx + 1]);
+  const shell = args.find((a) => !a.startsWith("-") && a !== args[nameIdx + 1]);
 
   if (!shell || shell === "zsh") {
     process.stdout.write(buildZshCompletion(registry, cmd, phase1Verbs));

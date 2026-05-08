@@ -1,4 +1,4 @@
-import { getStoredAuthHeaders, getAuthStatus, handleOAuth401, refreshIfExpiring } from "./oauth.ts";
+import { getAuthStatus, getStoredAuthHeaders, handleOAuth401, refreshIfExpiring } from "./oauth.ts";
 
 /**
  * AuthenticatedClient — OAuth 토큰을 자동으로 주입하고 401 시 재인증하는 HTTP 클라이언트.
@@ -51,19 +51,23 @@ export class AuthenticatedClient {
       return fetch(url, init);
     }
 
+    let requestInit = init;
     if (!isRetry) {
       const authHeaders = await this.getAuthHeaders();
       if (Object.keys(authHeaders).length > 0) {
-        init = { ...init, headers: { ...(init?.headers as Record<string, string> ?? {}), ...authHeaders } };
+        requestInit = {
+          ...init,
+          headers: { ...((init?.headers as Record<string, string>) ?? {}), ...authHeaders },
+        };
       }
     }
 
-    const resp = await fetch(url, init);
+    const resp = await fetch(url, requestInit);
 
     if (resp.status === 401 && !isRetry) {
       const authHeaders = await handleOAuth401(this.targetName, this.serverUrl, resp, this.configDir);
-      const mergedHeaders = { ...(init?.headers as Record<string, string> ?? {}), ...authHeaders };
-      return this.fetch(url, { ...init, headers: mergedHeaders }, true);
+      const mergedHeaders = { ...((requestInit?.headers as Record<string, string>) ?? {}), ...authHeaders };
+      return this.fetch(url, { ...requestInit, headers: mergedHeaders }, true);
     }
 
     return resp;
@@ -77,10 +81,10 @@ export class AuthenticatedClient {
     if (!this.oauthEnabled) return undefined;
 
     const refreshed = await refreshIfExpiring(this.configDir);
-    if (refreshed?.["Authorization"]) return refreshed["Authorization"].replace(/^Bearer\s+/i, "");
+    if (refreshed?.Authorization) return refreshed.Authorization.replace(/^Bearer\s+/i, "");
 
     const stored = await getStoredAuthHeaders(this.configDir);
-    return stored?.["Authorization"]?.replace(/^Bearer\s+/i, "");
+    return stored?.Authorization?.replace(/^Bearer\s+/i, "");
   }
 
   /** getAuthStatus 위임 — list 렌더러에서 사용 */

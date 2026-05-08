@@ -1,9 +1,4 @@
-import type {
-  LateFlags,
-  MatchedCommand,
-  ParsedInvocation,
-  TargetInvocationHandle,
-} from "./types.ts";
+import type { LateFlags, MatchedCommand, ParsedInvocation, TargetInvocationHandle } from "./types.ts";
 
 type ParsedData = {
   token: string | undefined;
@@ -43,12 +38,8 @@ export function matchCommand(parsed: ParsedInvocation): MatchedCommand {
   let subcommand: string | undefined = userArgs[0];
   let targetArgs: string[] = userArgs.slice(1);
 
-  if (
-    (subcommand === "--help" || subcommand === "-h") &&
-    targetArgs.length > 0 &&
-    !targetArgs[0]!.startsWith("-")
-  ) {
-    const toolName = targetArgs[0]!;
+  if ((subcommand === "--help" || subcommand === "-h") && targetArgs.length > 0 && !targetArgs[0]?.startsWith("-")) {
+    const toolName = targetArgs[0] ?? "";
     targetArgs = ["--help", ...targetArgs.slice(1)];
     subcommand = toolName;
   }

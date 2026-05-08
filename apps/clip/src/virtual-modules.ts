@@ -12,8 +12,8 @@
  * 먼저 side-effect(Bun.plugin 등록)가 실행된다.
  */
 import * as clipCore from "@clip/core";
-import * as zodMod from "zod";
 import * as yamlMod from "yaml";
+import * as zodMod from "zod";
 
 Bun.plugin({
   name: "clip-virtual-modules",

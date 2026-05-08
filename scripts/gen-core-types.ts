@@ -6,28 +6,28 @@
  * 생성된 파일은 bun build --compile 시 바이너리에 포함되어,
  * clip ext scaffold / clip ext types 명령이 IDE 타입 파일을 배포할 때 사용한다.
  */
-import { readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
 const CORE_DIR = join(ROOT, "packages/core");
 const OUT = join(ROOT, "apps/clip/src/core-type-bundle.generated.ts");
 
 const FILES: Array<{ path: string; src: string }> = [
-  { path: "package.json",                   src: "package.json" },
-  { path: "src/index.ts",                   src: "src/index.ts" },
-  { path: "src/extension.ts",               src: "src/extension.ts" },
-  { path: "src/config.ts",                  src: "src/config.ts" },
-  { path: "src/dispatch.ts",                src: "src/dispatch.ts" },
-  { path: "src/acl.ts",                     src: "src/acl.ts" },
-  { path: "src/alias.ts",                   src: "src/alias.ts" },
-  { path: "src/output-registry.ts",         src: "src/output-registry.ts" },
-  { path: "src/utils/errors.ts",            src: "src/utils/errors.ts" },
-  { path: "src/utils/env-sub.ts",           src: "src/utils/env-sub.ts" },
-  { path: "src/utils/output.ts",            src: "src/utils/output.ts" },
-  { path: "src/utils/agent-safety.ts",      src: "src/utils/agent-safety.ts" },
-  { path: "src/utils/target-schema.ts",     src: "src/utils/target-schema.ts" },
-  { path: "src/utils/tool-args.ts",         src: "src/utils/tool-args.ts" },
+  { path: "package.json", src: "package.json" },
+  { path: "src/index.ts", src: "src/index.ts" },
+  { path: "src/extension.ts", src: "src/extension.ts" },
+  { path: "src/config.ts", src: "src/config.ts" },
+  { path: "src/dispatch.ts", src: "src/dispatch.ts" },
+  { path: "src/acl.ts", src: "src/acl.ts" },
+  { path: "src/alias.ts", src: "src/alias.ts" },
+  { path: "src/output-registry.ts", src: "src/output-registry.ts" },
+  { path: "src/utils/errors.ts", src: "src/utils/errors.ts" },
+  { path: "src/utils/env-sub.ts", src: "src/utils/env-sub.ts" },
+  { path: "src/utils/output.ts", src: "src/utils/output.ts" },
+  { path: "src/utils/agent-safety.ts", src: "src/utils/agent-safety.ts" },
+  { path: "src/utils/target-schema.ts", src: "src/utils/target-schema.ts" },
+  { path: "src/utils/tool-args.ts", src: "src/utils/tool-args.ts" },
 ];
 
 const entries = FILES.map(({ path, src }) => {
@@ -46,4 +46,4 @@ ${entries}
 `;
 
 writeFileSync(OUT, output, "utf8");
-console.log(`[gen-core-types] → ${OUT.replace(ROOT + "/", "")}`);
+console.log(`[gen-core-types] → ${OUT.replace(`${ROOT}/`, "")}`);

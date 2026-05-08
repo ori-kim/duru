@@ -10,12 +10,10 @@ type AclConfig = {
 function matchesPattern(pattern: string, value: string): boolean {
   if (!pattern.includes("*")) return pattern === value;
   const re = new RegExp(
-    "^" +
-      pattern
-        .split("*")
-        .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-        .join(".*") +
-      "$",
+    `^${pattern
+      .split("*")
+      .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+      .join(".*")}$`,
   );
   return re.test(value);
 }
@@ -34,7 +32,8 @@ export function checkAcl(
 
   // 트리 ACL: subcommand가 acl 트리에 있으면 sub-subcommand 레벨 체크
   if (acl && subcommand in acl) {
-    const node = acl[subcommand]!;
+    const node = acl[subcommand];
+    if (!node) return;
     if (subSubcommand) {
       if (node.allow && node.allow.length > 0 && !matchesAny(node.allow, subSubcommand)) {
         die(`"${targetName} ${subcommand} ${subSubcommand}" is not allowed.\nAllowed: ${node.allow.join(", ")}`);

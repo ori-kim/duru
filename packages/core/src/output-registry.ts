@@ -69,7 +69,7 @@ function defaultRenderExecutionResult(result: ExecutionResult, format: "plain" |
       if (format === "json") {
         console.log(JSON.stringify(result.tools, null, 2));
       } else {
-        if (text) process.stdout.write(text + "\n");
+        if (text) process.stdout.write(`${text}\n`);
       }
       break;
     }
@@ -78,24 +78,24 @@ function defaultRenderExecutionResult(result: ExecutionResult, format: "plain" |
         console.log(JSON.stringify(result.items, null, 2));
       } else {
         for (const item of result.items) {
-          process.stdout.write(String(item) + "\n");
+          process.stdout.write(`${String(item)}\n`);
         }
       }
       break;
     }
     case "help": {
-      process.stdout.write(result.text + "\n");
+      process.stdout.write(`${result.text}\n`);
       break;
     }
     case "error": {
-      process.stderr.write(result.error.message + "\n");
+      process.stderr.write(`${result.error.message}\n`);
       break;
     }
     case "call-result": {
       if (format === "json") {
         console.log(JSON.stringify(result.content, null, 2));
       } else {
-        process.stdout.write(String(result.content ?? "") + "\n");
+        process.stdout.write(`${String(result.content ?? "")}\n`);
       }
       break;
     }
@@ -135,16 +135,12 @@ export class OutputRegistry {
    * TargetResult → ExecutionResult → OutputRenderer.render
    * presenter가 없으면 fallback presenter를 사용한다.
    */
-  async render(
-    result: TargetResult,
-    targetType: string,
-    meta: ResultMeta,
-    format = "plain",
-  ): Promise<void> {
+  async render(result: TargetResult, targetType: string, meta: ResultMeta, format = "plain"): Promise<void> {
     const presenter = this._presenters.get(targetType) ?? fallbackPresenter;
     const vm = presenter.toViewModel(result, meta);
 
-    const renderer = this._renderers.get(format) ?? this._renderers.get("plain")!;
+    const renderer = this._renderers.get(format) ?? this._renderers.get("plain");
+    if (!renderer) throw new Error(`No output renderer registered for format "${format}"`);
     await renderer.render(vm, { format });
   }
 
@@ -152,7 +148,8 @@ export class OutputRegistry {
    * 이미 ExecutionResult가 있는 경우 직접 렌더링한다.
    */
   async renderViewModel(vm: ExecutionResult, format = "plain"): Promise<void> {
-    const renderer = this._renderers.get(format) ?? this._renderers.get("plain")!;
+    const renderer = this._renderers.get(format) ?? this._renderers.get("plain");
+    if (!renderer) throw new Error(`No output renderer registered for format "${format}"`);
     await renderer.render(vm, { format });
   }
 }

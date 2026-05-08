@@ -85,7 +85,8 @@ export function parseMessageDescribe(text: string): ParsedDescribe {
     const values: string[] = [];
     for (const line of lines) {
       const m = line.match(/^\s+([A-Z_][A-Z0-9_]*)\s*=\s*-?\d+\s*;/);
-      if (m) values.push(m[1]!);
+      const value = m?.[1];
+      if (value) values.push(value);
     }
     return { kind: "enum", values };
   }
@@ -110,13 +111,15 @@ export function parseMessageDescribe(text: string): ParsedDescribe {
     // map<K, V> field = N;
     const mapM = line.match(/^map<([^,]+),\s*([^>]+)>\s+(\w+)\s*=/);
     if (mapM) {
+      const name = mapM[3];
+      if (!name) continue;
       fields.push({
-        name: mapM[3]!,
+        name,
         typeName: "map",
         repeated: false,
         isMap: true,
-        mapKeyType: mapM[1]!.trim(),
-        mapValueType: mapM[2]!.trim().replace(/^\./, ""),
+        mapKeyType: mapM[1]?.trim(),
+        mapValueType: mapM[2]?.trim().replace(/^\./, ""),
         oneofGroup: currentOneof,
       });
       continue;
@@ -147,9 +150,10 @@ export function parseMessageDescribe(text: string): ParsedDescribe {
     // repeated type field = N;
     const repM = line.match(/^repeated\s+(\S+)\s+(\w+)\s*=/);
     if (repM) {
-      const typeName = repM[1]!.replace(/^\./, "");
-      if (!PROTO_KEYWORDS.has(typeName)) {
-        fields.push({ name: repM[2]!, typeName, repeated: true, isMap: false, oneofGroup: currentOneof });
+      const typeName = repM[1]?.replace(/^\./, "");
+      const name = repM[2];
+      if (typeName && name && !PROTO_KEYWORDS.has(typeName)) {
+        fields.push({ name, typeName, repeated: true, isMap: false, oneofGroup: currentOneof });
       }
       continue;
     }
@@ -157,19 +161,22 @@ export function parseMessageDescribe(text: string): ParsedDescribe {
     // optional/required type field = N; (proto2/proto3 explicit optional)
     const qualM = line.match(/^(?:optional|required)\s+(\S+)\s+(\w+)\s*=/);
     if (qualM) {
-      const typeName = qualM[1]!.replace(/^\./, "");
-      if (!PROTO_KEYWORDS.has(typeName)) {
-        fields.push({ name: qualM[2]!, typeName, repeated: false, isMap: false, oneofGroup: currentOneof });
+      const typeName = qualM[1]?.replace(/^\./, "");
+      const name = qualM[2];
+      if (typeName && name && !PROTO_KEYWORDS.has(typeName)) {
+        fields.push({ name, typeName, repeated: false, isMap: false, oneofGroup: currentOneof });
       }
       continue;
     }
 
     // type field = N;
     const fieldM = line.match(/^(\S+)\s+(\w+)\s*=\s*\d+\s*;$/);
-    if (fieldM && !PROTO_KEYWORDS.has(fieldM[1]!)) {
+    const typeName = fieldM?.[1]?.replace(/^\./, "");
+    const name = fieldM?.[2];
+    if (typeName && name && !PROTO_KEYWORDS.has(typeName)) {
       fields.push({
-        name: fieldM[2]!,
-        typeName: fieldM[1]!.replace(/^\./, ""),
+        name,
+        typeName,
         repeated: false,
         isMap: false,
         oneofGroup: currentOneof,
@@ -190,10 +197,14 @@ export function parseServiceDescribe(text: string): ParsedMethod[] {
         /^rpc\s+(\w+)\s*\(\s*(stream\s+)?([.A-Za-z0-9_]+)\s*\)\s*returns\s*\(\s*(stream\s+)?([.A-Za-z0-9_]+)\s*\)/,
       );
     if (m) {
+      const name = m[1];
+      const requestType = m[3]?.replace(/^\./, "");
+      const responseType = m[5]?.replace(/^\./, "");
+      if (!name || !requestType || !responseType) continue;
       methods.push({
-        name: m[1]!,
-        requestType: m[3]!.replace(/^\./, ""),
-        responseType: m[5]!.replace(/^\./, ""),
+        name,
+        requestType,
+        responseType,
         clientStreaming: !!m[2],
         serverStreaming: !!m[4],
       });
@@ -208,8 +219,10 @@ export function buildJsonSchema(
   knownTypes: Map<string, ParsedDescribe>,
   seen: Set<string> = new Set(),
 ): Record<string, unknown> {
-  if (WELL_KNOWN[typeName]) return { ...WELL_KNOWN[typeName]! };
-  if (SCALARS[typeName]) return { ...SCALARS[typeName]! };
+  const wellKnown = WELL_KNOWN[typeName];
+  if (wellKnown) return { ...wellKnown };
+  const scalar = SCALARS[typeName];
+  if (scalar) return { ...scalar };
 
   const parsed = knownTypes.get(typeName);
   if (!parsed || parsed.kind === "unknown") return {};

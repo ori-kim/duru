@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "fs";
+import { existsSync, statSync } from "node:fs";
 import { buildAliasSection, die } from "@clip/core";
 import type { HasAliases } from "@clip/core";
 import type { ExecutorContext, TargetResult } from "@clip/core";
@@ -13,7 +13,7 @@ function buildToolsOutput(target: ScriptTarget): string {
     lines.push("Commands:");
     for (const [name, def] of cmds) {
       const argList = def.args?.length ? ` <${def.args.join("> <")}>` : "";
-      const source = def.file ? ` [file]` : "";
+      const source = def.file ? " [file]" : "";
       const desc = def.description ? `  — ${def.description}` : "";
       lines.push(`  ${name.padEnd(20)}${argList}${source}${desc}`);
     }
@@ -54,20 +54,22 @@ function buildSpawnArgs(subcommand: string, def: ScriptCommandDef, userArgs: str
     }
     return [def.file, ...userArgs];
   }
-  return ["bash", "-c", def.script!, `clip-${subcommand}`, ...userArgs];
+  const script = def.script;
+  if (!script) die(`Command "${subcommand}" has no script or file configured`);
+  return ["bash", "-c", script, `clip-${subcommand}`, ...userArgs];
 }
 
 export async function executeScript(target: ScriptTarget, ctx: ExecutorContext): Promise<TargetResult> {
   const { subcommand, args, dryRun, passthrough } = ctx;
   if (subcommand === "tools") {
-    return { exitCode: 0, stdout: buildToolsOutput(target) + "\n", stderr: "" };
+    return { exitCode: 0, stdout: `${buildToolsOutput(target)}\n`, stderr: "" };
   }
 
   const def = target.commands?.[subcommand];
   if (!def) die(`Unknown command "${subcommand}". Run: clip <target> tools`);
 
   if (args.includes("--help") || args.includes("-h")) {
-    return { exitCode: 0, stdout: buildCommandHelp(subcommand, def) + "\n", stderr: "" };
+    return { exitCode: 0, stdout: `${buildCommandHelp(subcommand, def)}\n`, stderr: "" };
   }
 
   const env = { ...process.env, ...(target.env ?? {}), ...(def.env ?? {}) } as Record<string, string>;
@@ -90,4 +92,3 @@ export async function executeScript(target: ScriptTarget, ctx: ExecutorContext):
   const stderr = await new Response(proc.stderr as ReadableStream<Uint8Array>).text();
   return { exitCode, stdout, stderr };
 }
-

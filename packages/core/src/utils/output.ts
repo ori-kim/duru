@@ -27,12 +27,12 @@ export interface ResultMeta {
 }
 
 export type ExecutionResult =
-  | { kind: "tools";       tools: Tool[];                meta: ResultMeta }
-  | { kind: "call-result"; content: unknown;             meta: ResultMeta }
-  | { kind: "list";        items: unknown[];             meta: ResultMeta }
-  | { kind: "help";        text: string;                 meta: ResultMeta }
-  | { kind: "error";       error: Error; exitCode: number; meta: ResultMeta }
-  | { kind: "stream";      stream: AsyncIterable<unknown>; meta: ResultMeta };
+  | { kind: "tools"; tools: Tool[]; meta: ResultMeta }
+  | { kind: "call-result"; content: unknown; meta: ResultMeta }
+  | { kind: "list"; items: unknown[]; meta: ResultMeta }
+  | { kind: "help"; text: string; meta: ResultMeta }
+  | { kind: "error"; error: Error; exitCode: number; meta: ResultMeta }
+  | { kind: "stream"; stream: AsyncIterable<unknown>; meta: ResultMeta };
 
 // ---------------------------------------------------------------------------
 // OutputRenderer — view layer가 구현
