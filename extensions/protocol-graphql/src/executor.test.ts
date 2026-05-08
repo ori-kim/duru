@@ -11,7 +11,7 @@ describe("GraphQL dry run", () => {
       const result = await executeGraphql(
         {
           endpoint: "https://api.example.com/graphql",
-          headers: { Authorization: "Bearer token" },
+          headers: { Authorization: "Bearer dummy-token" },
           oauth: false,
         },
         {
@@ -27,7 +27,7 @@ describe("GraphQL dry run", () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("curl -X POST 'https://api.example.com/graphql'");
-      expect(result.stdout).toContain("-H 'Authorization: Bearer token'");
+      expect(result.stdout).toContain("-H 'Authorization: Bearer dummy-token'");
       expect(result.stdout).toContain("-H 'X-Trace: 1'");
       expect(result.stdout).toContain('"query":"query { viewer { id } }"');
       expect(result.stdout).toContain('"variables":{"limit":1}');

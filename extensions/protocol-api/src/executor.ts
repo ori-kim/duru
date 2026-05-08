@@ -4,6 +4,7 @@ import { AuthenticatedClient, resolveAuthDir } from "@clip/auth";
 import { CONFIG_DIR, buildAliasSection, die, findTargetConfigDir, formatToolHelp, parseToolArgs } from "@clip/core";
 import type { ExecutorContext, TargetResult, Tool } from "@clip/core";
 import { parseOpenApi } from "./openapi.ts";
+import type { ApiTool } from "./openapi.ts";
 import type { ApiTarget } from "./schema.ts";
 
 function specCachePath(targetName: string): string {
@@ -84,6 +85,44 @@ async function loadSpec(targetName: string, target: ApiTarget, forceRefresh = fa
 
 const sq = (s: string) => s.replace(/'/g, "'\\''");
 
+function getHeaderValue(headers: Record<string, string>, name: string): string | undefined {
+  const lowerName = name.toLowerCase();
+  let value: string | undefined;
+  for (const [key, headerValue] of Object.entries(headers)) {
+    if (key.toLowerCase() === lowerName) value = headerValue;
+  }
+  return value;
+}
+
+function setHeaderValue(headers: Record<string, string>, name: string, value: string): void {
+  const lowerName = name.toLowerCase();
+  const existingKey = Object.keys(headers).find((key) => key.toLowerCase() === lowerName);
+  if (existingKey && existingKey !== name) delete headers[existingKey];
+  headers[name] = value;
+}
+
+function mergeHeadersCaseInsensitive(...sources: Array<Record<string, string> | undefined>): Record<string, string> {
+  const merged: Record<string, string> = {};
+  for (const source of sources) {
+    for (const [key, value] of Object.entries(source ?? {})) {
+      setHeaderValue(merged, key, value);
+    }
+  }
+  return merged;
+}
+
+export function buildInjectedHeaderArgs(
+  headerParams: string[],
+  headers: Record<string, string>,
+): Record<string, unknown> {
+  const injected: Record<string, unknown> = {};
+  for (const param of headerParams) {
+    const value = getHeaderValue(headers, param);
+    if (value !== undefined) injected[param] = value;
+  }
+  return injected;
+}
+
 export function buildCurlCommand(
   method: string,
   url: string,
@@ -101,6 +140,94 @@ export function buildCurlCommand(
     parts.push(`  -d '${sq(body)}'`);
   }
   return `${parts.join(" \\\n")}\n`;
+}
+
+export function buildApiRequest(
+  target: ApiTarget,
+  tool: ApiTool,
+  specBaseUrl: string | undefined,
+  rawArgs: string[],
+  globalHeaders: Record<string, string> = {},
+  targetName?: string,
+): {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body: string | URLSearchParams | undefined;
+  injectedArgs: Record<string, unknown>;
+} {
+  const mergedHeaders = mergeHeadersCaseInsensitive(target.headers, globalHeaders);
+  const injectedArgs = buildInjectedHeaderArgs(tool.headerParams, mergedHeaders);
+
+  let rawBaseUrl = target.baseUrl ?? specBaseUrl ?? "";
+  // 상대 경로 baseUrl을 spec URL 기준으로 절대 경로로 변환
+  if (rawBaseUrl && !rawBaseUrl.startsWith("http://") && !rawBaseUrl.startsWith("https://")) {
+    try {
+      rawBaseUrl = new URL(rawBaseUrl, target.openapiUrl).toString();
+    } catch {
+      /* rawBaseUrl 그대로 사용 */
+    }
+  }
+  const baseUrl = rawBaseUrl.replace(/\/+$/, "");
+  if (!baseUrl) {
+    const suffix = targetName ? ` for "${targetName}"` : "";
+    die(`No baseUrl: OpenAPI spec has no servers[], add "baseUrl" to config.yml${suffix}`);
+  }
+
+  const args = parseToolArgs(rawArgs, tool.inputSchema, injectedArgs);
+
+  let urlPath = tool.path;
+  for (const param of tool.pathParams) {
+    const val = args[param];
+    if (val !== undefined) {
+      urlPath = urlPath.replace(`{${param}}`, encodeURIComponent(String(val)));
+      delete args[param];
+    }
+  }
+
+  const queryParams = new URLSearchParams();
+  for (const param of tool.queryParams) {
+    const val = args[param];
+    if (val !== undefined) {
+      const str = typeof val === "object" ? JSON.stringify(val) : String(val);
+      queryParams.set(param, str);
+      delete args[param];
+    }
+  }
+
+  for (const param of tool.headerParams) {
+    const val = args[param];
+    if (val !== undefined) {
+      setHeaderValue(mergedHeaders, param, String(val));
+      delete args[param];
+    }
+  }
+
+  const qs = queryParams.toString();
+  const url = `${baseUrl}${urlPath}${qs ? `?${qs}` : ""}`;
+
+  let body: string | URLSearchParams | undefined;
+  const remainingArgs = { ...args };
+  const hasbody = Object.keys(remainingArgs).length > 0;
+
+  const ct = tool.bodyContentType ?? "application/json";
+  if (hasbody) {
+    if (ct.includes("multipart/form-data")) {
+      die(`multipart/form-data is not supported in v1. Use a different tool or set baseUrl manually.`);
+    } else if (ct.includes("application/x-www-form-urlencoded")) {
+      const form = new URLSearchParams();
+      for (const [k, v] of Object.entries(remainingArgs)) {
+        form.set(k, typeof v === "object" ? JSON.stringify(v) : String(v));
+      }
+      body = form;
+      setHeaderValue(mergedHeaders, "Content-Type", "application/x-www-form-urlencoded");
+    } else {
+      body = JSON.stringify(remainingArgs);
+      setHeaderValue(mergedHeaders, "Content-Type", "application/json");
+    }
+  }
+
+  return { method: tool.method, url, headers: mergedHeaders, body, injectedArgs };
 }
 
 export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promise<TargetResult> {
@@ -139,106 +266,45 @@ export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promi
     };
   }
 
+  const injectedHeaderArgs = buildInjectedHeaderArgs(
+    tool.headerParams,
+    mergeHeadersCaseInsensitive(target.headers, globalHeaders),
+  );
+
   if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
-    return formatToolHelp(tool);
+    return formatToolHelp(tool, injectedHeaderArgs);
   }
 
-  const mergedHeaders: Record<string, string> = {
-    ...(target.headers ?? {}),
-    ...(globalHeaders ?? {}),
-  };
-
-  let rawBaseUrl = target.baseUrl ?? spec.baseUrl ?? "";
-  // 상대 경로 baseUrl을 spec URL 기준으로 절대 경로로 변환
-  if (rawBaseUrl && !rawBaseUrl.startsWith("http://") && !rawBaseUrl.startsWith("https://")) {
-    try {
-      rawBaseUrl = new URL(rawBaseUrl, target.openapiUrl).toString();
-    } catch {
-      /* rawBaseUrl 그대로 사용 */
-    }
-  }
-  const baseUrl = rawBaseUrl.replace(/\/+$/, "");
-  if (!baseUrl) {
-    die(`No baseUrl: OpenAPI spec has no servers[], add "baseUrl" to config.yml for "${targetName}"`);
-  }
-
-  const args = parseToolArgs(rawArgs, tool.inputSchema);
-
-  // URL 조립
-  let urlPath = tool.path;
-  for (const param of tool.pathParams) {
-    const val = args[param];
-    if (val !== undefined) {
-      urlPath = urlPath.replace(`{${param}}`, encodeURIComponent(String(val)));
-      delete args[param];
-    }
-  }
-
-  const queryParams = new URLSearchParams();
-  for (const param of tool.queryParams) {
-    const val = args[param];
-    if (val !== undefined) {
-      const str = typeof val === "object" ? JSON.stringify(val) : String(val);
-      queryParams.set(param, str);
-      delete args[param];
-    }
-  }
-
-  for (const param of tool.headerParams) {
-    const val = args[param];
-    if (val !== undefined) {
-      mergedHeaders[param] = String(val);
-      delete args[param];
-    }
-  }
-
-  const qs = queryParams.toString();
-  const fullUrl = `${baseUrl}${urlPath}${qs ? `?${qs}` : ""}`;
-
-  // body 조립
-  let body: string | URLSearchParams | undefined;
-  const remainingArgs = { ...args };
-  const hasbody = Object.keys(remainingArgs).length > 0;
-
-  const ct = tool.bodyContentType ?? "application/json";
-  if (hasbody) {
-    if (ct.includes("multipart/form-data")) {
-      die(`multipart/form-data is not supported in v1. Use a different tool or set baseUrl manually.`);
-    } else if (ct.includes("application/x-www-form-urlencoded")) {
-      const form = new URLSearchParams();
-      for (const [k, v] of Object.entries(remainingArgs)) {
-        form.set(k, typeof v === "object" ? JSON.stringify(v) : String(v));
-      }
-      body = form;
-      mergedHeaders["Content-Type"] = "application/x-www-form-urlencoded";
-    } else {
-      body = JSON.stringify(remainingArgs);
-      mergedHeaders["Content-Type"] = "application/json";
-    }
-  }
+  const request = buildApiRequest(target, tool, spec.baseUrl, rawArgs, globalHeaders, targetName);
 
   if (dryRun) {
-    return { exitCode: 0, stdout: buildCurlCommand(tool.method, fullUrl, mergedHeaders, body), stderr: "" };
+    return {
+      exitCode: 0,
+      stdout: buildCurlCommand(request.method, request.url, request.headers, request.body),
+      stderr: "",
+    };
   }
 
   const client = new AuthenticatedClient({
     targetName,
     targetType: "api",
-    serverUrl: target.baseUrl ?? fullUrl,
+    serverUrl: target.baseUrl ?? request.url,
     oauthEnabled: target.auth === "oauth",
     configDir: resolveAuthDir(targetName, "api"),
   });
 
   // 사전 auth 헤더 주입 (client.fetch 내부에서도 401 재시도를 처리함)
   const authHeaders = await client.getAuthHeaders();
-  Object.assign(mergedHeaders, authHeaders);
+  for (const [key, value] of Object.entries(authHeaders)) {
+    setHeaderValue(request.headers, key, value);
+  }
 
-  const resp = await client.fetch(fullUrl, {
-    method: tool.method,
-    headers: mergedHeaders,
-    body,
+  const resp = await client.fetch(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: request.body,
   }).catch((e: unknown) => {
-    die(`Failed to connect to ${fullUrl}: ${e}`);
+    die(`Failed to connect to ${request.url}: ${e}`);
   });
 
   const respCt = resp.headers.get("Content-Type") ?? "";
@@ -281,7 +347,16 @@ export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promi
   return { exitCode: 0, stdout, stderr: "" };
 }
 
-export async function describeApiTools(target: ApiTarget, targetName: string): Promise<Tool[]> {
+export async function describeApiTools(
+  target: ApiTarget,
+  targetName: string,
+  globalHeaders: Record<string, string> = {},
+): Promise<Tool[]> {
   const raw = await loadSpec(targetName, target);
-  return parseOpenApi(raw).tools;
+  const mergedHeaders = mergeHeadersCaseInsensitive(target.headers, globalHeaders);
+
+  return parseOpenApi(raw).tools.map((tool) => ({
+    ...tool,
+    injectedArgs: buildInjectedHeaderArgs(tool.headerParams, mergedHeaders),
+  }));
 }

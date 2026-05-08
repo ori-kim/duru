@@ -1,5 +1,5 @@
-import type { TargetResult, Tool } from "./output.ts";
 import { hardenToolInput } from "./agent-safety.ts";
+import type { TargetResult, Tool } from "./output.ts";
 
 export type { Tool };
 
@@ -114,7 +114,11 @@ function validateAgainstSchema(value: unknown, schema: JsonSchema, path: string)
   }
 }
 
-export function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unknown>): Record<string, unknown> {
+export function parseToolArgs(
+  rawArgs: string[],
+  inputSchema: Record<string, unknown>,
+  defaultArgs: Record<string, unknown> = {},
+): Record<string, unknown> {
   const schema = inputSchema as JsonSchema;
   const props = schema.properties ?? {};
 
@@ -204,15 +208,15 @@ export function parseToolArgs(rawArgs: string[], inputSchema: Record<string, unk
     result[key] = coerceArgValue(key, rawVal, props[key]);
   }
 
-  const merged = hardenToolInput(Object.assign(baseFromArgs, result));
+  const merged = hardenToolInput({ ...defaultArgs, ...baseFromArgs, ...result });
   validateAgainstSchema(merged, schema, "args");
   return merged;
 }
 
-export function formatToolHelp(tool: Tool): TargetResult {
+export function formatToolHelp(tool: Tool, injectedArgs: Record<string, unknown> = tool.injectedArgs ?? {}): TargetResult {
   const schema = tool.inputSchema;
-  const props = (schema["properties"] as Record<string, { type?: unknown; default?: unknown }> | undefined) ?? {};
-  const required = new Set((schema["required"] as string[] | undefined) ?? []);
+  const props = (schema.properties as Record<string, { type?: unknown; default?: unknown }> | undefined) ?? {};
+  const required = new Set((schema.required as string[] | undefined) ?? []);
 
   const lines = [`Usage: clip <target> ${tool.name} [--param value ...]`, "", tool.description];
 
@@ -222,9 +226,11 @@ export function formatToolHelp(tool: Tool): TargetResult {
       const type = Array.isArray(prop.type)
         ? prop.type.filter((t) => t !== "null").join("|")
         : String(prop.type ?? "any");
-      const req = required.has(name) ? " (required)" : "";
+      const injected = name in injectedArgs;
+      const req = required.has(name) && !injected ? " (required)" : "";
       const def = prop.default != null ? `  [default: ${prop.default}]` : "";
-      lines.push(`  --${name.padEnd(22)} ${type}${req}${def}`);
+      const inj = injected ? "  [injected]" : "";
+      lines.push(`  --${name.padEnd(22)} ${type}${req}${def}${inj}`);
     }
   }
 

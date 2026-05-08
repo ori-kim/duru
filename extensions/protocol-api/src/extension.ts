@@ -19,7 +19,7 @@ export const extension: ClipExtension = {
       type: "api",
       schema: apiTargetSchema,
       executor: executeApi,
-      describeTools: (target, { targetName }) => describeApiTools(target, targetName),
+      describeTools: (target, { targetName, headers }) => describeApiTools(target, targetName, headers),
       normalizeConfig: (parsed, ctx) => normalizeApi(parsed as ApiTarget, ctx),
     });
     api.registerResultPresenter({

@@ -8,6 +8,7 @@ export type Tool = {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  injectedArgs?: Record<string, unknown>;
 };
 
 export type ExecutorContext = {
