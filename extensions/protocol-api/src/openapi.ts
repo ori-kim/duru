@@ -1,5 +1,10 @@
 // OpenAPI 3.x / Swagger 2.0 최소 파서 — 외부 의존성 없음
 
+export type MultipartField = {
+  file: boolean;
+  multiple?: boolean;
+};
+
 export type ApiTool = {
   name: string;
   description: string;
@@ -9,6 +14,7 @@ export type ApiTool = {
   queryParams: string[];
   headerParams: string[];
   bodyContentType?: string;
+  multipartFields?: Record<string, MultipartField>;
   inputSchema: Record<string, unknown>;
 };
 
@@ -69,7 +75,55 @@ type ParamDef = {
   required?: boolean;
   schema?: unknown;
   description?: string;
+  type?: string;
+  format?: string;
+  items?: unknown;
 };
+
+function paramSchema(p: ParamDef): Record<string, unknown> {
+  if (p.schema) return p.schema as Record<string, unknown>;
+  if (p.type === "file") return { type: "string", format: "binary" };
+  return {
+    type: p.type ?? "string",
+    ...(p.format ? { format: p.format } : {}),
+    ...(p.items ? { items: p.items } : {}),
+  };
+}
+
+function isBinaryFileSchema(schema: Record<string, unknown>): boolean {
+  return schema.type === "string" && (schema.format === "binary" || schema.format === "file");
+}
+
+function isBinaryFileArraySchema(schema: Record<string, unknown>): boolean {
+  const items = schema.items as Record<string, unknown> | undefined;
+  return schema.type === "array" && !!items && isBinaryFileSchema(items);
+}
+
+function multipartFieldForSchema(schema: Record<string, unknown>): MultipartField | undefined {
+  if (isBinaryFileSchema(schema)) return { file: true };
+  if (isBinaryFileArraySchema(schema)) return { file: true, multiple: true };
+  return undefined;
+}
+
+function chooseBodyContentType(
+  root: unknown,
+  content: Record<string, unknown> | undefined,
+  swaggerConsumes: string | undefined,
+): string | undefined {
+  if (!content) return swaggerConsumes;
+  const contentTypes = Object.keys(content);
+  const multipart = contentTypes.find((ct) => ct.includes("multipart/form-data"));
+  if (multipart) {
+    const entry = content[multipart] as { schema?: unknown } | undefined;
+    const schema = deref(root, entry?.schema) as Record<string, unknown> | undefined;
+    const props = schema?.properties as Record<string, unknown> | undefined;
+    const hasBinary = Object.values(props ?? {}).some(
+      (prop) => !!multipartFieldForSchema(deref(root, prop) as Record<string, unknown>),
+    );
+    if (hasBinary) return multipart;
+  }
+  return contentTypes[0];
+}
 
 function flattenParams(
   root: unknown,
@@ -82,23 +136,29 @@ function flattenParams(
   queryParams: string[];
   headerParams: string[];
   hasFormData: boolean;
+  multipartFields: Record<string, MultipartField>;
 } {
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
   const pathParams: string[] = [];
   const queryParams: string[] = [];
   const headerParams: string[] = [];
+  const multipartFields: Record<string, MultipartField> = {};
   let hasFormData = false;
 
   for (const p of params) {
-    const schema = deref(root, p.schema ?? { type: "string" }) as Record<string, unknown>;
+    const schema = deref(root, paramSchema(p)) as Record<string, unknown>;
     const propSchema = { ...schema, description: p.description ?? (schema.description as string | undefined) };
     properties[p.name] = propSchema;
     if (p.required) required.push(p.name);
     if (p.in === "path") pathParams.push(p.name);
     else if (p.in === "query") queryParams.push(p.name);
     else if (p.in === "header") headerParams.push(p.name);
-    else if (p.in === "formData") hasFormData = true;
+    else if (p.in === "formData") {
+      hasFormData = true;
+      const multipartField = multipartFieldForSchema(schema);
+      if (multipartField) multipartFields[p.name] = multipartField;
+    }
     // cookie params are dropped
   }
 
@@ -107,6 +167,7 @@ function flattenParams(
     const content = rb.content as Record<string, { schema?: unknown }> | undefined;
     const ct = bodyContentType ?? (content ? Object.keys(content)[0] : undefined);
     if (ct && content?.[ct]?.schema) {
+      const isMultipart = ct.includes("multipart/form-data");
       const bodySchema = deref(root, content[ct]?.schema) as Record<string, unknown>;
       const bodyProps = bodySchema.properties as Record<string, unknown> | undefined;
       const bodyRequired = bodySchema.required as string[] | undefined;
@@ -115,8 +176,13 @@ function flattenParams(
         const paramNames = new Set(Object.keys(properties));
         for (const [k, v] of Object.entries(bodyProps)) {
           const finalKey = paramNames.has(k) ? `body_${k}` : k;
-          properties[finalKey] = v;
+          const propSchema = deref(root, v) as Record<string, unknown>;
+          properties[finalKey] = propSchema;
           if (bodyRequired?.includes(k)) required.push(finalKey);
+          if (isMultipart) {
+            const multipartField = multipartFieldForSchema(propSchema);
+            if (multipartField) multipartFields[finalKey] = multipartField;
+          }
         }
       } else {
         // primitive/array body
@@ -128,7 +194,7 @@ function flattenParams(
 
   const inputSchema: Record<string, unknown> = { type: "object", properties };
   if (required.length) inputSchema.required = required;
-  return { inputSchema, pathParams, queryParams, headerParams, hasFormData };
+  return { inputSchema, pathParams, queryParams, headerParams, hasFormData, multipartFields };
 }
 
 // --- baseUrl 추출 ---
@@ -207,9 +273,9 @@ export function parseOpenApi(raw: unknown): ParsedSpec {
       const opConsumes = op.consumes as string[] | undefined;
       const globalConsumes = spec.consumes as string[] | undefined;
       const swaggerConsumes = (opConsumes ?? globalConsumes)?.[0];
-      const bodyContentType = content ? Object.keys(content)[0] : swaggerConsumes;
+      const bodyContentType = chooseBodyContentType(spec, content, swaggerConsumes);
 
-      const { inputSchema, pathParams, queryParams, headerParams, hasFormData } = flattenParams(
+      const { inputSchema, pathParams, queryParams, headerParams, hasFormData, multipartFields } = flattenParams(
         spec,
         mergedParams,
         requestBody,
@@ -232,6 +298,7 @@ export function parseOpenApi(raw: unknown): ParsedSpec {
         queryParams,
         headerParams,
         bodyContentType: effectiveBodyCt,
+        ...(Object.keys(multipartFields).length > 0 ? { multipartFields } : {}),
         inputSchema,
       });
     }

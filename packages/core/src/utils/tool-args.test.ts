@@ -27,6 +27,18 @@ describe("parseToolArgs — individual flags (existing behavior)", () => {
   test("--key=value syntax", () => {
     expect(parseToolArgs(["--limit=10"], {})).toEqual({ limit: 10 });
   });
+
+  test("repeated array flags accumulate values", () => {
+    const schema = { properties: { files: { type: "array", items: { type: "string" } } } };
+    expect(parseToolArgs(["--files", "./a.pdf", "--files", "./b.pdf"], schema)).toEqual({
+      files: ["./a.pdf", "./b.pdf"],
+    });
+  });
+
+  test("array flag also accepts JSON array values", () => {
+    const schema = { properties: { ids: { type: "array", items: { type: "integer" } } } };
+    expect(parseToolArgs(["--ids", "[1,2]"], schema)).toEqual({ ids: [1, 2] });
+  });
 });
 
 describe("parseToolArgs — --args spread (new behavior)", () => {

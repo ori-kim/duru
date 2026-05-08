@@ -1,11 +1,19 @@
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { AuthenticatedClient, resolveAuthDir } from "@clip/auth";
 import { CONFIG_DIR, buildAliasSection, die, findTargetConfigDir, formatToolHelp, parseToolArgs } from "@clip/core";
 import type { ExecutorContext, TargetResult, Tool } from "@clip/core";
 import YAML from "yaml";
 import { parseOpenApi } from "./openapi.ts";
-import type { ApiTool } from "./openapi.ts";
+import type { ApiTool, MultipartField } from "./openapi.ts";
 import type { ApiTarget } from "./schema.ts";
+
+export type MultipartPart = {
+  name: string;
+  value: string;
+  filePath?: string;
+};
+
+type ApiRequestBody = string | URLSearchParams | FormData | undefined;
 
 function specCachePath(targetName: string): string {
   const dir = findTargetConfigDir(targetName, "api") ?? join(CONFIG_DIR, "target", "api", targetName);
@@ -101,6 +109,13 @@ function setHeaderValue(headers: Record<string, string>, name: string, value: st
   headers[name] = value;
 }
 
+function deleteHeaderValue(headers: Record<string, string>, name: string): void {
+  const lowerName = name.toLowerCase();
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === lowerName) delete headers[key];
+  }
+}
+
 function mergeHeadersCaseInsensitive(...sources: Array<Record<string, string> | undefined>): Record<string, string> {
   const merged: Record<string, string> = {};
   for (const source of sources) {
@@ -127,19 +142,152 @@ export function buildCurlCommand(
   method: string,
   url: string,
   headers: Record<string, string>,
-  body: string | URLSearchParams | undefined,
+  body: ApiRequestBody,
+  multipartParts: MultipartPart[] = [],
 ): string {
   const parts = [`curl -X ${method.toUpperCase()} '${url}'`];
   for (const [k, v] of Object.entries(headers)) {
     parts.push(`  -H '${sq(k)}: ${sq(v)}'`);
   }
-  if (body instanceof URLSearchParams) {
+  if (multipartParts.length > 0) {
+    for (const part of multipartParts) {
+      const value = part.filePath ? `${part.name}=@${part.filePath}` : `${part.name}=${part.value}`;
+      parts.push(`  -F '${sq(value)}'`);
+    }
+  } else if (body instanceof URLSearchParams) {
     // URLSearchParams.toString() is already URL-encoded; --data-urlencode would double-encode
     parts.push(`  --data-raw '${body.toString()}'`);
   } else if (body) {
     parts.push(`  -d '${sq(body)}'`);
   }
   return `${parts.join(" \\\n")}\n`;
+}
+
+function isMultipartContentType(contentType: string | undefined): boolean {
+  return !!contentType?.includes("multipart/form-data");
+}
+
+function pushMultipartFile(files: Map<string, string[]>, field: string, filePath: string): void {
+  const paths = files.get(field) ?? [];
+  paths.push(filePath);
+  files.set(field, paths);
+}
+
+function parseMultipartFilePair(raw: string): { field: string; filePath: string } {
+  const eq = raw.indexOf("=");
+  if (eq <= 0 || eq === raw.length - 1) {
+    die(`--multipart-file requires <field>=<path>, got: ${raw}`);
+  }
+  return { field: raw.slice(0, eq), filePath: raw.slice(eq + 1) };
+}
+
+function extractMultipartFileArgs(rawArgs: string[]): {
+  args: string[];
+  files: Map<string, string[]>;
+} {
+  const args: string[] = [];
+  const files = new Map<string, string[]>();
+
+  for (let i = 0; i < rawArgs.length; i++) {
+    const arg = rawArgs[i] ?? "";
+    if (arg === "--multipart-file") {
+      const next = rawArgs[++i];
+      if (next === undefined) die("--multipart-file requires <field>=<path>");
+      const { field, filePath } = parseMultipartFilePair(next);
+      pushMultipartFile(files, field, filePath);
+      continue;
+    }
+    if (arg.startsWith("--multipart-file=")) {
+      const { field, filePath } = parseMultipartFilePair(arg.slice("--multipart-file=".length));
+      pushMultipartFile(files, field, filePath);
+      continue;
+    }
+    args.push(arg);
+  }
+
+  return { args, files };
+}
+
+function multipartFileDefaults(files: Map<string, string[]>): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {};
+  for (const [field, paths] of files) {
+    defaults[field] = paths.length === 1 ? (paths[0] ?? "") : paths;
+  }
+  return defaults;
+}
+
+function stringOrArrayFileSchema(schema: unknown): Record<string, unknown> {
+  const base =
+    schema && typeof schema === "object" && !Array.isArray(schema) ? (schema as Record<string, unknown>) : {};
+  return { ...base, type: ["string", "array"], items: { type: "string" } };
+}
+
+function multipartParsingSchema(tool: ApiTool, explicitFiles: Map<string, string[]>): Record<string, unknown> {
+  const schema = tool.inputSchema as {
+    properties?: Record<string, unknown>;
+  };
+  const properties = { ...(schema.properties ?? {}) };
+  for (const field of new Set([...Object.keys(tool.multipartFields ?? {}), ...explicitFiles.keys()])) {
+    properties[field] = stringOrArrayFileSchema(properties[field]);
+  }
+  return { ...tool.inputSchema, properties };
+}
+
+function appendFormValue(form: FormData, parts: MultipartPart[], name: string, value: unknown): void {
+  const stringValue = typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
+  form.append(name, stringValue);
+  parts.push({ name, value: stringValue });
+}
+
+function appendFormFile(form: FormData, parts: MultipartPart[], name: string, filePath: string): void {
+  form.append(name, Bun.file(filePath), basename(filePath));
+  parts.push({ name, value: filePath, filePath });
+}
+
+function asArray(value: unknown): unknown[] {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function buildMultipartBody(
+  args: Record<string, unknown>,
+  multipartFields: Record<string, MultipartField> | undefined,
+  explicitFiles: Map<string, string[]>,
+): { body: FormData; parts: MultipartPart[] } {
+  const form = new FormData();
+  const parts: MultipartPart[] = [];
+  const fileFields = new Set([...Object.keys(multipartFields ?? {}), ...explicitFiles.keys()]);
+
+  for (const [name, value] of Object.entries(args)) {
+    if (fileFields.has(name)) {
+      for (const filePath of asArray(value)) {
+        appendFormFile(form, parts, name, String(filePath));
+      }
+    } else {
+      appendFormValue(form, parts, name, value);
+    }
+  }
+
+  return { body: form, parts };
+}
+
+export function formatApiToolHelp(
+  tool: ApiTool,
+  injectedArgs: Record<string, unknown> = tool.injectedArgs ?? {},
+): TargetResult {
+  const result = formatToolHelp(tool, injectedArgs);
+  if (!isMultipartContentType(tool.bodyContentType)) return result;
+
+  const fileFields = Object.keys(tool.multipartFields ?? {});
+  const lines = [
+    "",
+    "Multipart:",
+    "  content-type: multipart/form-data",
+    fileFields.length > 0 ? `  file fields: ${fileFields.join(", ")}` : undefined,
+    "  --multipart-file <field>=<path>   Add a file part; repeat for multiple files",
+  ].filter((line): line is string => line !== undefined);
+
+  return { ...result, stdout: `${result.stdout}${lines.join("\n")}\n` };
 }
 
 export function buildApiRequest(
@@ -153,7 +301,8 @@ export function buildApiRequest(
   method: string;
   url: string;
   headers: Record<string, string>;
-  body: string | URLSearchParams | undefined;
+  body: ApiRequestBody;
+  multipartParts?: MultipartPart[];
   injectedArgs: Record<string, unknown>;
 } {
   const mergedHeaders = mergeHeadersCaseInsensitive(target.headers, globalHeaders);
@@ -174,7 +323,16 @@ export function buildApiRequest(
     die(`No baseUrl: OpenAPI spec has no servers[], add "baseUrl" to config.yml${suffix}`);
   }
 
-  const args = parseToolArgs(rawArgs, tool.inputSchema, injectedArgs);
+  const ct = tool.bodyContentType ?? "application/json";
+  const isMultipart = isMultipartContentType(ct);
+  const multipartInput = isMultipart
+    ? extractMultipartFileArgs(rawArgs)
+    : { args: rawArgs, files: new Map<string, string[]>() };
+  const inputSchema = isMultipart ? multipartParsingSchema(tool, multipartInput.files) : tool.inputSchema;
+  const args = parseToolArgs(multipartInput.args, inputSchema, {
+    ...injectedArgs,
+    ...multipartFileDefaults(multipartInput.files),
+  });
 
   let urlPath = tool.path;
   for (const param of tool.pathParams) {
@@ -206,14 +364,17 @@ export function buildApiRequest(
   const qs = queryParams.toString();
   const url = `${baseUrl}${urlPath}${qs ? `?${qs}` : ""}`;
 
-  let body: string | URLSearchParams | undefined;
+  let body: ApiRequestBody;
+  let multipartParts: MultipartPart[] | undefined;
   const remainingArgs = { ...args };
   const hasbody = Object.keys(remainingArgs).length > 0;
 
-  const ct = tool.bodyContentType ?? "application/json";
   if (hasbody) {
-    if (ct.includes("multipart/form-data")) {
-      die("multipart/form-data is not supported in v1. Use a different tool or set baseUrl manually.");
+    if (isMultipart) {
+      const multipart = buildMultipartBody(remainingArgs, tool.multipartFields, multipartInput.files);
+      body = multipart.body;
+      multipartParts = multipart.parts;
+      deleteHeaderValue(mergedHeaders, "Content-Type");
     } else if (ct.includes("application/x-www-form-urlencoded")) {
       const form = new URLSearchParams();
       for (const [k, v] of Object.entries(remainingArgs)) {
@@ -227,7 +388,7 @@ export function buildApiRequest(
     }
   }
 
-  return { method: tool.method, url, headers: mergedHeaders, body, injectedArgs };
+  return { method: tool.method, url, headers: mergedHeaders, body, multipartParts, injectedArgs };
 }
 
 export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promise<TargetResult> {
@@ -272,7 +433,7 @@ export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promi
   );
 
   if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
-    return formatToolHelp(tool, injectedHeaderArgs);
+    return formatApiToolHelp(tool, injectedHeaderArgs);
   }
 
   const request = buildApiRequest(target, tool, spec.baseUrl, rawArgs, globalHeaders, targetName);
@@ -280,7 +441,7 @@ export async function executeApi(target: ApiTarget, ctx: ExecutorContext): Promi
   if (dryRun) {
     return {
       exitCode: 0,
-      stdout: buildCurlCommand(request.method, request.url, request.headers, request.body),
+      stdout: buildCurlCommand(request.method, request.url, request.headers, request.body, request.multipartParts),
       stderr: "",
     };
   }

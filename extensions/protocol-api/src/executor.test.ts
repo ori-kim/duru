@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { formatToolHelp, parseToolArgs } from "@clip/core";
-import { buildApiRequest, buildCurlCommand, buildInjectedHeaderArgs } from "./executor.ts";
+import { buildApiRequest, buildCurlCommand, buildInjectedHeaderArgs, formatApiToolHelp } from "./executor.ts";
 import type { ApiTool } from "./openapi.ts";
 import type { ApiTarget } from "./schema.ts";
 
@@ -144,5 +144,120 @@ describe("API executor injected header args", () => {
     expect(result.stdout).toContain("--X-Custom-Header");
     expect(result.stdout).toContain("[injected]");
     expect(result.stdout).not.toContain("--X-Custom-Header   string (required)");
+  });
+});
+
+describe("API executor multipart/form-data", () => {
+  const uploadTool: ApiTool = {
+    name: "upload",
+    description: "Upload files",
+    method: "POST",
+    path: "/upload",
+    pathParams: [],
+    queryParams: [],
+    headerParams: [],
+    bodyContentType: "multipart/form-data",
+    multipartFields: {
+      file: { file: true },
+      files: { file: true, multiple: true },
+    },
+    inputSchema: {
+      type: "object",
+      properties: {
+        file: { type: "string", format: "binary" },
+        title: { type: "string" },
+        files: {
+          type: "array",
+          items: { type: "string", format: "binary" },
+        },
+        metadata: { type: "object" },
+      },
+      required: ["file"],
+    },
+  };
+
+  test("builds FormData for binary fields and lets fetch set the boundary content-type", () => {
+    const request = buildApiRequest(
+      { baseUrl: "https://api.example.com", auth: false, headers: { "content-type": "application/json" } },
+      uploadTool,
+      undefined,
+      ["--file", "./a.pdf", "--title", "A"],
+    );
+
+    expect(request.body).toBeInstanceOf(FormData);
+    expect(request.headers["content-type"]).toBeUndefined();
+    expect(request.headers["Content-Type"]).toBeUndefined();
+    expect(request.multipartParts).toEqual([
+      { name: "file", value: "./a.pdf", filePath: "./a.pdf" },
+      { name: "title", value: "A" },
+    ]);
+  });
+
+  test("supports repeated binary array flags as multiple file parts", () => {
+    const request = buildApiRequest({ baseUrl: "https://api.example.com", auth: false }, uploadTool, undefined, [
+      "--file",
+      "./cover.pdf",
+      "--files",
+      "./a.pdf",
+      "--files",
+      "./b.pdf",
+    ]);
+
+    expect(request.multipartParts).toEqual([
+      { name: "file", value: "./cover.pdf", filePath: "./cover.pdf" },
+      { name: "files", value: "./a.pdf", filePath: "./a.pdf" },
+      { name: "files", value: "./b.pdf", filePath: "./b.pdf" },
+    ]);
+  });
+
+  test("supports repeated --multipart-file escape hatch parts", () => {
+    const request = buildApiRequest({ baseUrl: "https://api.example.com", auth: false }, uploadTool, undefined, [
+      "--multipart-file",
+      "file=./cover.pdf",
+      "--multipart-file",
+      "files=./a.pdf",
+      "--multipart-file=files=./b.pdf",
+      "--title",
+      "Bundle",
+    ]);
+
+    expect(request.multipartParts).toEqual([
+      { name: "file", value: "./cover.pdf", filePath: "./cover.pdf" },
+      { name: "files", value: "./a.pdf", filePath: "./a.pdf" },
+      { name: "files", value: "./b.pdf", filePath: "./b.pdf" },
+      { name: "title", value: "Bundle" },
+    ]);
+  });
+
+  test("serializes non-file objects as JSON string parts", () => {
+    const request = buildApiRequest({ baseUrl: "https://api.example.com", auth: false }, uploadTool, undefined, [
+      "--file",
+      "./a.pdf",
+      "--metadata",
+      '{"source":"clip"}',
+    ]);
+
+    expect(request.multipartParts).toContainEqual({ name: "metadata", value: '{"source":"clip"}' });
+  });
+
+  test("dry-run renders multipart as curl -F parts", () => {
+    const request = buildApiRequest({ baseUrl: "https://api.example.com", auth: false }, uploadTool, undefined, [
+      "--file",
+      "./a.pdf",
+      "--title",
+      "A",
+    ]);
+
+    expect(buildCurlCommand(request.method, request.url, request.headers, request.body, request.multipartParts)).toBe(
+      "curl -X POST 'https://api.example.com/upload' \\\n  -F 'file=@./a.pdf' \\\n  -F 'title=A'\n",
+    );
+  });
+
+  test("help documents multipart file fields and escape hatch", () => {
+    const result = formatApiToolHelp(uploadTool);
+
+    expect(result.stdout).toContain("content-type: multipart/form-data");
+    expect(result.stdout).toContain("file fields: file, files");
+    expect(result.stdout).toContain("--multipart-file <field>=<path>");
   });
 });
