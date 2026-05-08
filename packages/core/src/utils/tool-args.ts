@@ -22,6 +22,11 @@ function schemaType(schema: JsonSchema | undefined): string | undefined {
   return Array.isArray(t) ? t.find((v) => v !== "null") : t;
 }
 
+function schemaAllowsArray(schema: JsonSchema | undefined): boolean {
+  const t = schema?.type;
+  return Array.isArray(t) ? t.includes("array") : t === "array";
+}
+
 function parseJsonValue(rawVal: string | undefined, key: string): unknown {
   try {
     return JSON.parse(rawVal ?? "");
@@ -45,6 +50,18 @@ function parseNumber(rawVal: string | undefined, key: string, integer: boolean):
   return n;
 }
 
+function coerceArrayValue(key: string, rawVal: string | undefined, propDef: JsonSchema): unknown[] {
+  try {
+    const parsed = JSON.parse(rawVal ?? "");
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed !== null && typeof parsed === "object") return [parsed];
+  } catch {
+    // Repeated flags such as --files ./a.png are valid array inputs.
+  }
+
+  return [coerceArgValue(key, rawVal, propDef.items)];
+}
+
 function coerceArgValue(key: string, rawVal: string | undefined, propDef: JsonSchema | undefined): unknown {
   const propType = schemaType(propDef);
 
@@ -58,6 +75,7 @@ function coerceArgValue(key: string, rawVal: string | undefined, propDef: JsonSc
     return rawVal;
   }
   if (propType === "object" || propType === "array") {
+    if (propType === "array" && propDef) return coerceArrayValue(key, rawVal, propDef);
     return parseJsonValue(rawVal, key);
   }
 
@@ -66,6 +84,28 @@ function coerceArgValue(key: string, rawVal: string | undefined, propDef: JsonSc
   } catch {
     return rawVal;
   }
+}
+
+function assignArg(
+  result: Record<string, unknown>,
+  key: string,
+  value: unknown,
+  propDef: JsonSchema | undefined,
+): void {
+  if (!schemaAllowsArray(propDef)) {
+    result[key] = value;
+    return;
+  }
+
+  const existing = result[key];
+  if (existing === undefined) {
+    result[key] = value;
+    return;
+  }
+
+  const existingValues = Array.isArray(existing) ? existing : [existing];
+  const nextValues = Array.isArray(value) ? value : [value];
+  result[key] = [...existingValues, ...nextValues];
 }
 
 function hasSchemaType(schema: JsonSchema, type: string): boolean {
@@ -205,7 +245,7 @@ export function parseToolArgs(
       continue;
     }
 
-    result[key] = coerceArgValue(key, rawVal, props[key]);
+    assignArg(result, key, coerceArgValue(key, rawVal, props[key]), props[key]);
   }
 
   const merged = hardenToolInput({ ...defaultArgs, ...baseFromArgs, ...result });
