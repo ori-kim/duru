@@ -1,6 +1,6 @@
-import { existsSync, readdirSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
+import { existsSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import YAML from "yaml";
 import type { NormalizeCtx, TargetResult, TargetTypeDef } from "./extension.ts";
 import { validateIdentifier } from "./utils/agent-safety.ts";
@@ -15,13 +15,7 @@ import {
 
 // Re-export for backward compatibility
 export { profileOverrideSchema };
-export type {
-  ProfileOverride,
-  AliasDef,
-  AclNode,
-  AclTree,
-  TargetResult,
-};
+export type { ProfileOverride, AliasDef, AclNode, AclTree, TargetResult };
 
 // --- Types ---
 
@@ -47,7 +41,9 @@ async function loadDotEnv(path: string): Promise<Record<string, string>> {
   const env: Record<string, string> = {};
   for (const line of (await file.text()).split("\n")) {
     const match = line.match(/^\s*([A-Z_][A-Z0-9_]*)=["']?(.+?)["']?\s*$/);
-    if (match) env[match[1]!] = match[2]!;
+    const key = match?.[1];
+    const value = match?.[2];
+    if (key && value !== undefined) env[key] = value;
   }
   return env;
 }
@@ -60,9 +56,9 @@ async function loadDotEnv(path: string): Promise<Record<string, string>> {
  * registry를 인자로 받으면 normalizeConfig를 수행하고, 없으면 raw 저장 후 dispatch 시 lazy 검증.
  * 인자 없이 호출하면 builtin-loader를 import하지 않으므로 순환 의존이 없다.
  */
-export async function loadConfig(
-  registry?: { getTargetType: (t: string) => TargetTypeDef | undefined },
-): Promise<Config> {
+export async function loadConfig(registry?: {
+  getTargetType: (t: string) => TargetTypeDef | undefined;
+}): Promise<Config> {
   const globalEnv = await loadDotEnv(join(CONFIG_DIR, ".env"));
   const reg = registry ?? { getTargetType: () => undefined };
 
@@ -108,8 +104,12 @@ export async function loadConfig(
       _configDirs[name] = configDir;
 
       if (!def) {
-        if (!_ext[type]) _ext[type] = {};
-        _ext[type]![name] = rawParsed as unknown;
+        let extTargets = _ext[type];
+        if (!extTargets) {
+          extTargets = {};
+          _ext[type] = extTargets;
+        }
+        extTargets[name] = rawParsed as unknown;
         continue;
       }
 
@@ -122,12 +122,14 @@ export async function loadConfig(
       const env = { ...globalEnv, ...targetEnv };
 
       const normalizeCtx: NormalizeCtx = { configDir, env };
-      const normalized = def.normalizeConfig
-        ? def.normalizeConfig(result.data as never, normalizeCtx)
-        : result.data;
+      const normalized = def.normalizeConfig ? def.normalizeConfig(result.data as never, normalizeCtx) : result.data;
 
-      if (!targets[type]) targets[type] = {};
-      targets[type]![name] = normalized as unknown;
+      let targetsByName = targets[type];
+      if (!targetsByName) {
+        targetsByName = {};
+        targets[type] = targetsByName;
+      }
+      targetsByName[name] = normalized as unknown;
     }
   }
 
@@ -144,11 +146,7 @@ export function findTargetConfigDir(name: string, type: string): string | null {
 
 // --- Management helpers ---
 
-export async function addTarget(
-  name: string,
-  type: string,
-  target: Record<string, unknown>,
-): Promise<void> {
+export async function addTarget(name: string, type: string, target: Record<string, unknown>): Promise<void> {
   validateIdentifier(name, "Target name");
   const config = await loadConfig();
   const allNames = getAllTargetNames(config);
@@ -214,10 +212,12 @@ export function getAllTargetNames(config: Config): Set<string> {
 
 export function getTarget(config: Config, name: string): ResolvedTarget {
   for (const [type, byName] of Object.entries(config.targets)) {
-    if (byName[name] !== undefined) return { type, target: byName[name]! };
+    const target = byName[name];
+    if (target !== undefined) return { type, target };
   }
   for (const [extType, byName] of Object.entries(config._ext ?? {})) {
-    if (byName[name] !== undefined) return { type: extType, target: byName[name]! };
+    const target = byName[name];
+    if (target !== undefined) return { type: extType, target };
   }
   die(`Target "${name}" not found.\nRun: clip list  — to see registered targets.`);
 }

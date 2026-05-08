@@ -1,5 +1,5 @@
-import { z } from "zod";
 import { aclFields, aliasFields, profileFields } from "@clip/core";
+import { z } from "zod";
 
 export const grpcTargetSchema = z.object({
   address: z.string().min(1),

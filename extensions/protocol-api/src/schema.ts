@@ -1,5 +1,5 @@
-import { z } from "zod";
 import { aclFields, aliasFields, profileFields } from "@clip/core";
+import { z } from "zod";
 
 export const apiTargetSchema = z.object({
   openapiUrl: z.string().url().optional(),

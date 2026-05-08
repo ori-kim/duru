@@ -9,9 +9,9 @@
  * skills entry를 선언해야 `clip skills` 동작.
  */
 import "./virtual-modules.ts";
-import { checkAcl, dispatch, loadConfig, getTarget, outputRegistry, printAndExit, formatToolHelp } from "@clip/core";
-import type { ClipExtension, HasAliases, ResolvedTarget } from "@clip/core";
-import { Registry } from "@clip/core";
+import { checkAcl, dispatch, formatToolHelp, getTarget, loadConfig, outputRegistry, printAndExit } from "@clip/core";
+import type { AclTree, ClipExtension, HasAliases, ResolvedTarget } from "@clip/core";
+import type { Registry } from "@clip/core";
 import { createDefaultRegistry } from "./builtin-loader.ts";
 import { runAdd } from "./cli/add.ts";
 import { runConfigCmd } from "./cli/config-cmd.ts";
@@ -25,7 +25,7 @@ import { runBind, runBinds, runUnbind } from "./commands/bind.ts";
 import { runCompletionCmd } from "./commands/completion.ts";
 import { runExtCmd } from "./commands/ext.ts";
 import { runProfileCmd } from "./commands/profile.ts";
-import { loadUserExtensions, type ExtensionLoader } from "./extension-loader.ts";
+import { type ExtensionLoader, loadUserExtensions } from "./extension-loader.ts";
 import { createRawInvocation } from "./pipeline/01-raw.ts";
 import { parseInvocation, setInternalVerbSet } from "./pipeline/02-parse.ts";
 import { matchCommand } from "./pipeline/03-match-command.ts";
@@ -38,24 +38,58 @@ const registry = createDefaultRegistry();
 // ext loader는 main()에서 초기화 후 ext 커맨드에 전달
 let _extLoader: ExtensionLoader | undefined;
 
+type AclCheckTarget = {
+  allow?: string[];
+  deny?: string[];
+  acl?: AclTree;
+};
+
 function registerInternalCommands(reg: Registry): void {
   const ext: ClipExtension = {
     name: "builtin:internal-commands",
     init(api) {
-      api.registerInternalCommand("config",     async ({ args }) => { await runConfigCmd(args, reg); });
-      api.registerInternalCommand("list",       async () => { await runList(reg, _extLoader?.phase1InternalVerbs); });
-      api.registerInternalCommand("add",        async ({ args }) => { await runAdd(args, reg); });
-      api.registerInternalCommand("remove",     async ({ args }) => { await runRemove(args); });
-      api.registerInternalCommand("bind",       async ({ args }) => { await runBind(args); });
-      api.registerInternalCommand("unbind",     async ({ args }) => { await runUnbind(args); });
-      api.registerInternalCommand("binds",      async () => { await runBinds(); });
-      api.registerInternalCommand("completion", async ({ args }) => { await runCompletionCmd(args, reg, _extLoader?.phase1InternalVerbs); });
-      api.registerInternalCommand("profile",    async ({ args }) => { await runProfileCmd(args); });
-      api.registerInternalCommand("alias",      async ({ args }) => { await runAliasCmd(args); });
-      api.registerInternalCommand("refresh",    async ({ args }) => { await runRefresh(args, reg); });
-      api.registerInternalCommand("login",      async ({ args }) => { await runLogin(args, reg); });
-      api.registerInternalCommand("logout",     async ({ args }) => { await runLogout(args); });
-      api.registerInternalCommand("ext",        async ({ args }) => { await runExtCmd(args, reg); });
+      api.registerInternalCommand("config", async ({ args }) => {
+        await runConfigCmd(args, reg);
+      });
+      api.registerInternalCommand("list", async () => {
+        await runList(reg, _extLoader?.phase1InternalVerbs);
+      });
+      api.registerInternalCommand("add", async ({ args }) => {
+        await runAdd(args, reg);
+      });
+      api.registerInternalCommand("remove", async ({ args }) => {
+        await runRemove(args);
+      });
+      api.registerInternalCommand("bind", async ({ args }) => {
+        await runBind(args);
+      });
+      api.registerInternalCommand("unbind", async ({ args }) => {
+        await runUnbind(args);
+      });
+      api.registerInternalCommand("binds", async () => {
+        await runBinds();
+      });
+      api.registerInternalCommand("completion", async ({ args }) => {
+        await runCompletionCmd(args, reg, _extLoader?.phase1InternalVerbs);
+      });
+      api.registerInternalCommand("profile", async ({ args }) => {
+        await runProfileCmd(args);
+      });
+      api.registerInternalCommand("alias", async ({ args }) => {
+        await runAliasCmd(args);
+      });
+      api.registerInternalCommand("refresh", async ({ args }) => {
+        await runRefresh(args, reg);
+      });
+      api.registerInternalCommand("login", async ({ args }) => {
+        await runLogin(args, reg);
+      });
+      api.registerInternalCommand("logout", async ({ args }) => {
+        await runLogout(args);
+      });
+      api.registerInternalCommand("ext", async ({ args }) => {
+        await runExtCmd(args, reg);
+      });
     },
   };
   reg.register(ext);
@@ -71,10 +105,7 @@ async function main(): Promise<number> {
 
   // builtin + user(Phase 1 선언) internal verbs를 모두 포함해 parseInvocation이 올바르게 분류하도록 한다.
   // Phase 2 init이 안 된 user verb도 포함: handler 없으면 "unknown command" 출력 (main.ts:matched.kind==="internal" 분기).
-  const allVerbs = new Set([
-    ...registry.listInternalVerbs(),
-    ...(_extLoader?.phase1InternalVerbs ?? []),
-  ]);
+  const allVerbs = new Set([...registry.listInternalVerbs(), ...(_extLoader?.phase1InternalVerbs ?? [])]);
   setInternalVerbSet(allVerbs);
 
   process.on("SIGINT", () => {
@@ -130,7 +161,11 @@ async function main(): Promise<number> {
 
   const bound = bindTarget(invocation, config, registry);
   const mergedResult = resolveProfileStage(bound, registry);
-  const { type, target } = mergedResult as unknown as { type: string; target: unknown; invocation: TargetInvocationHandle };
+  const { type, target } = mergedResult as unknown as {
+    type: string;
+    target: unknown;
+    invocation: TargetInvocationHandle;
+  };
 
   if (!rawSubcommand || rawSubcommand === "--help" || rawSubcommand === "-h") {
     await printTargetHelp(baseName, type, target, registry);
@@ -142,12 +177,12 @@ async function main(): Promise<number> {
   const effectiveJsonMode = jsonMode;
   const effectivePipeMode = pipeMode;
   const supportsPassthrough = registry.getArgSpec(type)?.passthrough ?? false;
-  const effectivePassthrough = supportsPassthrough && !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode;
+  const effectivePassthrough =
+    supportsPassthrough && !!process.stdout.isTTY && !effectiveJsonMode && !effectivePipeMode;
 
   const hasHelpFlag = lateFiltered.includes("--help") || lateFiltered.includes("-h");
   if (hasHelpFlag && rawSubcommand !== "tools") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    checkAcl(target as any, rawSubcommand, undefined, baseName);
+    checkAcl(target as AclCheckTarget, rawSubcommand, undefined, baseName);
 
     const aliasDef = (target as HasAliases).aliases?.[rawSubcommand];
     if (aliasDef) {

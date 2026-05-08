@@ -1,4 +1,4 @@
-import { resolveAuthDir, getAuthStatus } from "@clip/auth";
+import { getAuthStatus, resolveAuthDir } from "@clip/auth";
 import { addTarget, die, subProfiles, subRecord } from "@clip/core";
 import type { AddArgs, ClipExtension, ListOpts, NormalizeCtx } from "@clip/core";
 import { describeGrpcTools, executeGrpc } from "./executor.ts";
@@ -48,7 +48,7 @@ export const extension: ClipExtension = {
           ? authStatus
           : t.oauth
             ? "not authenticated"
-            : metadata?.["authorization"]
+            : metadata?.authorization
               ? "api key"
               : "no auth";
         return {
@@ -72,7 +72,7 @@ export const extension: ClipExtension = {
           ? color("2", `  [${authStatus}]`)
           : t.oauth
             ? color("2", "  [not authenticated]")
-            : metadata?.["authorization"]
+            : metadata?.authorization
               ? color("2", "  [api key]")
               : color("2", "  [no auth]");
         const profileTag = (t as Record<string, unknown>).active ? ` @${(t as Record<string, unknown>).active}` : "";
@@ -82,10 +82,10 @@ export const extension: ClipExtension = {
       urlHeuristic: () => false,
       addHandler: async (args: AddArgs) => {
         const { name, positionals, flags, allow, deny } = args;
-        const address = flags["address"] ?? positionals[0];
+        const address = flags.address ?? positionals[0];
         if (!address) die("gRPC target requires an address (e.g. clip add petstore grpc.example.com:443 --grpc)");
-        const proto = flags["proto"] ?? undefined;
-        const plaintext = flags["plaintext"] ? true : undefined;
+        const proto = flags.proto ?? undefined;
+        const plaintext = flags.plaintext ? true : undefined;
         await addTarget(name, "grpc", {
           address,
           ...(proto ? { proto } : {}),
@@ -104,9 +104,9 @@ export const extension: ClipExtension = {
 };
 
 function formatAcl(target: Record<string, unknown>): string {
-  const allow = target["allow"] as string[] | undefined;
-  const deny = target["deny"] as string[] | undefined;
-  const acl = target["acl"] as Record<string, unknown> | undefined;
+  const allow = target.allow as string[] | undefined;
+  const deny = target.deny as string[] | undefined;
+  const acl = target.acl as Record<string, unknown> | undefined;
   const parts: string[] = [];
   if (allow && allow.length > 0) parts.push(`allow: ${allow.join(",")}`);
   if (deny && deny.length > 0) parts.push(`deny: ${deny.join(",")}`);

@@ -105,8 +105,8 @@ function getNamedType(ref: IntrospectionTypeRef): { name: string; kind: string }
 
 /** IntrospectionTypeRef → GraphQL 타입 문자열 (e.g. [Int!]!) */
 export function gqlTypeToString(ref: IntrospectionTypeRef): string {
-  if (ref.kind === "NON_NULL") return `${gqlTypeToString(ref.ofType!)}!`;
-  if (ref.kind === "LIST") return `[${gqlTypeToString(ref.ofType!)}]`;
+  if (ref.kind === "NON_NULL") return ref.ofType ? `${gqlTypeToString(ref.ofType)}!` : "Unknown!";
+  if (ref.kind === "LIST") return ref.ofType ? `[${gqlTypeToString(ref.ofType)}]` : "[Unknown]";
   return ref.name ?? "Unknown";
 }
 
@@ -116,13 +116,14 @@ export function gqlTypeToJsonSchema(
   types: Map<string, IntrospectionType>,
   seen: Set<string> = new Set(),
 ): Record<string, unknown> {
-  if (ref.kind === "NON_NULL") return gqlTypeToJsonSchema(ref.ofType!, types, seen);
+  if (ref.kind === "NON_NULL") return ref.ofType ? gqlTypeToJsonSchema(ref.ofType, types, seen) : {};
   if (ref.kind === "LIST") {
-    return { type: "array", items: gqlTypeToJsonSchema(ref.ofType!, types, seen) };
+    return { type: "array", items: ref.ofType ? gqlTypeToJsonSchema(ref.ofType, types, seen) : {} };
   }
 
   const name = ref.name ?? "";
-  if (STANDARD_SCALARS[name]) return { ...STANDARD_SCALARS[name]! };
+  const scalar = STANDARD_SCALARS[name];
+  if (scalar) return { ...scalar };
 
   const type = types.get(name);
   if (!type) return {};
@@ -217,8 +218,12 @@ function buildTree(paths: string[][]): SelectNode {
   for (const path of paths) {
     let node = root;
     for (const seg of path) {
-      if (!node.has(seg)) node.set(seg, new Map());
-      node = node.get(seg)!;
+      let child = node.get(seg);
+      if (!child) {
+        child = new Map();
+        node.set(seg, child);
+      }
+      node = child;
     }
   }
   return root;
@@ -332,11 +337,11 @@ export function describeField(field: IntrospectionField | IntrospectionInputValu
 
 /** introspection 응답 { __schema: ... } → GqlSpec */
 export function parseIntrospection(raw: Record<string, unknown>): GqlSpec {
-  const schema = raw["__schema"] as Record<string, unknown>;
-  const queryTypeName = (schema["queryType"] as { name: string } | null)?.name ?? "Query";
-  const mutationTypeName = (schema["mutationType"] as { name: string } | null)?.name ?? undefined;
+  const schema = raw.__schema as Record<string, unknown>;
+  const queryTypeName = (schema.queryType as { name: string } | null)?.name ?? "Query";
+  const mutationTypeName = (schema.mutationType as { name: string } | null)?.name ?? undefined;
 
-  const rawTypes = (schema["types"] ?? []) as IntrospectionType[];
+  const rawTypes = (schema.types ?? []) as IntrospectionType[];
   const types = new Map<string, IntrospectionType>();
   for (const t of rawTypes) {
     if (!t.name.startsWith("__")) types.set(t.name, t);

@@ -1,7 +1,7 @@
+import { homedir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
 import { addTarget } from "@clip/core";
 import type { AddArgs, ClipExtension, ListOpts, NormalizeCtx } from "@clip/core";
-import { homedir } from "os";
-import { isAbsolute, join, resolve } from "path";
 import { executeScript } from "./executor.ts";
 import { type ScriptTarget, scriptTargetSchema } from "./schema.ts";
 
@@ -74,7 +74,7 @@ export const extension: ClipExtension = {
       urlHeuristic: () => false,
       addHandler: async (args: AddArgs) => {
         const { name, flags, allow, deny } = args;
-        const description = flags["description"];
+        const description = flags.description;
         await addTarget(name, "script", {
           ...(description ? { description } : {}),
           commands: {},
@@ -93,9 +93,9 @@ export const extension: ClipExtension = {
 };
 
 function formatAcl(target: Record<string, unknown>): string {
-  const allow = target["allow"] as string[] | undefined;
-  const deny = target["deny"] as string[] | undefined;
-  const acl = target["acl"] as Record<string, unknown> | undefined;
+  const allow = target.allow as string[] | undefined;
+  const deny = target.deny as string[] | undefined;
+  const acl = target.acl as Record<string, unknown> | undefined;
   const parts: string[] = [];
   if (allow && allow.length > 0) parts.push(`allow: ${allow.join(",")}`);
   if (deny && deny.length > 0) parts.push(`deny: ${deny.join(",")}`);

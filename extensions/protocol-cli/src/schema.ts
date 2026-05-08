@@ -1,5 +1,5 @@
-import { z } from "zod";
 import { aliasFields, profileFields } from "@clip/core";
+import { z } from "zod";
 
 const aclTreeSchema = z.record(
   z.object({

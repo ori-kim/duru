@@ -32,9 +32,7 @@ function normalizeMcp(t: McpTarget, ctx: NormalizeCtx): McpTarget {
 const STDIO_ADD_CONTROL_FLAGS = new Set(["stdio", "sse", "url", "command", "args", "allow", "deny", "type"]);
 
 export function collectStdioCommandArgs(positionals: string[], flags: Record<string, string>): string[] | undefined {
-  const explicitArgs = flags["args"]
-    ? flags["args"].split(",").map((s) => s.trim())
-    : positionals.slice(1);
+  const explicitArgs = flags.args ? flags.args.split(",").map((s) => s.trim()) : positionals.slice(1);
   const passthroughFlags = Object.entries(flags)
     .filter(([key]) => !STDIO_ADD_CONTROL_FLAGS.has(key))
     .flatMap(([key, value]) => (value === "true" ? [`--${key}`] : [`--${key}`, value]));
@@ -119,7 +117,7 @@ export const extension: ClipExtension = {
       },
       urlHeuristic: (url) => {
         // graphql과 api 휴리스틱에 매칭되지 않는 http URL
-        const lower = url.toLowerCase().split("?")[0]!.split("#")[0]!;
+        const lower = url.toLowerCase().split("?")[0]?.split("#")[0] ?? "";
         if (!url.startsWith("http://") && !url.startsWith("https://")) return false;
         const isApiSpec = /\/(openapi|swagger)\.(json|ya?ml)$/.test(lower) || /\/openapi\.json$/.test(lower);
         if (isApiSpec) return false;
@@ -128,22 +126,22 @@ export const extension: ClipExtension = {
       },
       addHandler: async (args: AddArgs) => {
         const { name, positionals, flags, allow, deny } = args;
-        if (flags["stdio"]) {
-          const command = flags["command"] ?? positionals[0];
+        if (flags.stdio) {
+          const command = flags.command ?? positionals[0];
           if (!command)
             die(
               "STDIO MCP target requires a command (e.g. clip add fs --stdio npx -y @modelcontextprotocol/server-filesystem /)",
             );
           const prependArgs = collectStdioCommandArgs(positionals, flags);
           await addTarget(name, "mcp", { transport: "stdio", command, args: prependArgs, allow, deny });
-          console.log(`Added STDIO MCP target "${name}" → ${command}${prependArgs ? " " + prependArgs.join(" ") : ""}`);
-        } else if (flags["sse"]) {
-          const url = flags["url"] ?? positionals[0];
+          console.log(`Added STDIO MCP target "${name}" → ${command}${prependArgs ? ` ${prependArgs.join(" ")}` : ""}`);
+        } else if (flags.sse) {
+          const url = flags.url ?? positionals[0];
           if (!url) die("SSE MCP target requires a URL (e.g. clip add myserver --sse https://example.com/sse)");
           await addTarget(name, "mcp", { transport: "sse", url, auth: false, allow, deny });
           console.log(`Added SSE MCP target "${name}" → ${url}`);
         } else {
-          const url = flags["url"] ?? positionals[0];
+          const url = flags.url ?? positionals[0];
           if (!url) die("MCP target requires a URL (e.g. clip add myserver https://...mcp)");
           await addTarget(name, "mcp", { transport: "http", url, auth: false, allow, deny });
           console.log(`Added MCP target "${name}" → ${url}`);
@@ -169,9 +167,9 @@ export const extension: ClipExtension = {
 };
 
 function formatMcpAcl(target: Record<string, unknown>): string {
-  const allow = target["allow"] as string[] | undefined;
-  const deny = target["deny"] as string[] | undefined;
-  const acl = target["acl"] as Record<string, unknown> | undefined;
+  const allow = target.allow as string[] | undefined;
+  const deny = target.deny as string[] | undefined;
+  const acl = target.acl as Record<string, unknown> | undefined;
   const parts: string[] = [];
   if (allow && allow.length > 0) parts.push(`allow: ${allow.join(",")}`);
   if (deny && deny.length > 0) parts.push(`deny: ${deny.join(",")}`);

@@ -1,4 +1,4 @@
-import { basename, join } from "path";
+import { basename, join } from "node:path";
 import { CONFIG_DIR, getAllTargetNames, getTarget, loadConfig } from "@clip/core";
 import { die } from "@clip/core";
 
@@ -30,7 +30,7 @@ export async function bindTarget(name: string): Promise<void> {
   const pathDirs = (process.env.PATH ?? "").split(":");
   if (!pathDirs.includes(BIND_DIR)) {
     console.log(`\nNote: ${BIND_DIR} is not in your PATH.`);
-    console.log(`Add this to your shell profile (before other PATH entries):`);
+    console.log("Add this to your shell profile (before other PATH entries):");
     console.log(`  export PATH="${BIND_DIR}:$PATH"`);
   }
 }
@@ -103,7 +103,7 @@ export async function runBinds(): Promise<void> {
   const names = await listBound();
   if (names.length === 0) {
     console.log("No native bindings.");
-    console.log(`\nBind a target with: clip bind <target>`);
+    console.log("\nBind a target with: clip bind <target>");
     return;
   }
   console.log("Bound targets:");

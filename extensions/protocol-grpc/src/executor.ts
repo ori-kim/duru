@@ -1,5 +1,5 @@
-import { mkdirSync } from "fs";
-import { join } from "path";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { AuthenticatedClient, resolveAuthDir } from "@clip/auth";
 import { CONFIG_DIR, buildAliasSection, die, findTargetConfigDir, formatToolHelp, parseToolArgs } from "@clip/core";
 import type { ExecutorContext, TargetResult, Tool } from "@clip/core";
@@ -75,7 +75,7 @@ function makeBaseFlags(target: GrpcTarget): string[] {
 
 function makeReflectFlags(target: GrpcTarget, token?: string): string[] {
   const meta = { ...(target.reflectMetadata ?? target.metadata ?? {}) };
-  if (token) meta["authorization"] = `Bearer ${token}`;
+  if (token) meta.authorization = `Bearer ${token}`;
   return Object.entries(meta).flatMap(([k, v]) => ["-reflect-header", `${k}: ${v}`]);
 }
 
@@ -84,14 +84,14 @@ function makeRpcFlags(target: GrpcTarget, token?: string): string[] {
   if (target.emitDefaults !== false) flags.push("-emit-defaults");
   if (target.allowUnknownFields) flags.push("-allow-unknown-fields");
   const meta = { ...(target.metadata ?? {}) };
-  if (token) meta["authorization"] = `Bearer ${token}`;
+  if (token) meta.authorization = `Bearer ${token}`;
   for (const [k, v] of Object.entries(meta)) flags.push("-rpc-header", `${k}: ${v}`);
   return flags;
 }
 
 function validateTls(target: GrpcTarget): void {
   if (target.plaintext && target.address.endsWith(":443")) {
-    die(`TLS is required on port 443. Remove "plaintext: true" from config.\n` + `Address: ${target.address}`);
+    die(`TLS is required on port 443. Remove "plaintext: true" from config.\nAddress: ${target.address}`);
   }
 }
 
@@ -106,7 +106,7 @@ function warnMetadata(metadata: Record<string, string> | undefined): void {
 }
 
 function tokenFromHeaders(headers: Record<string, string>): string | undefined {
-  const val = headers["Authorization"] ?? headers["authorization"];
+  const val = headers.Authorization ?? headers.authorization;
   return val?.replace(/^Bearer\s+/i, "");
 }
 
@@ -150,8 +150,7 @@ async function loadSchema(
   const listResult = await spawnGrpcurl([...baseFlags, ...reflectFlags, target.address, "list"]);
   if (listResult.exitCode !== 0) {
     die(
-      `Failed to list gRPC services for "${targetName}":\n${listResult.stderr.trim()}\n\n` +
-        `If reflection is disabled, add "proto: ./service.proto" to config.yml.`,
+      `Failed to list gRPC services for "${targetName}":\n${listResult.stderr.trim()}\n\nIf reflection is disabled, add "proto: ./service.proto" to config.yml.`,
     );
   }
 
@@ -182,7 +181,8 @@ async function loadSchema(
   const queue = [...typesToDescribe];
 
   while (queue.length > 0) {
-    const typeName = queue.shift()!;
+    const typeName = queue.shift();
+    if (!typeName) continue;
     if (descSeen.has(typeName) || isWellKnownOrScalar(typeName)) continue;
     descSeen.add(typeName);
 
@@ -226,12 +226,13 @@ function resolveMethod(
   subcommand: string,
 ): { service: GrpcService; method: GrpcMethod; fqn: string } | null {
   const parts = subcommand.split(".");
-  const methodName = parts[parts.length - 1]!;
+  const methodName = parts[parts.length - 1];
+  if (!methodName) return null;
   const serviceHint = parts.length > 1 ? parts.slice(0, -1).join(".") : undefined;
 
   const matches: { service: GrpcService; method: GrpcMethod; fqn: string }[] = [];
   for (const svc of schema.services) {
-    const svcShort = svc.name.split(".").pop()!;
+    const svcShort = svc.name.split(".").pop() ?? svc.name;
     const matchesSvc =
       !serviceHint || svc.name === serviceHint || svcShort === serviceHint || svc.name.endsWith(`.${serviceHint}`);
 
@@ -247,7 +248,7 @@ function resolveMethod(
       `[clip] warning: ambiguous method "${subcommand}", using first match. Use full name to disambiguate: ${fqns}\n`,
     );
   }
-  return matches[0]!;
+  return matches[0] ?? null;
 }
 
 function toolDisplayName(svc: GrpcService, method: GrpcMethod, multiService: boolean): string {
@@ -323,7 +324,7 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
 
     // Service 매칭
     const svc = schema.services.find((s) => {
-      const short = s.name.split(".").pop()!;
+      const short = s.name.split(".").pop() ?? s.name;
       return s.name === arg || short === arg || s.name.endsWith(`.${arg}`);
     });
     if (svc) {
@@ -389,7 +390,7 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
   if (result.exitCode === 0) {
     let stdout: string;
     try {
-      stdout = JSON.stringify(JSON.parse(result.stdout), null, 2) + "\n";
+      stdout = `${JSON.stringify(JSON.parse(result.stdout), null, 2)}\n`;
     } catch {
       stdout = result.stdout;
     }
@@ -414,7 +415,7 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
       if (retry.exitCode === 0) {
         let stdout: string;
         try {
-          stdout = JSON.stringify(JSON.parse(retry.stdout), null, 2) + "\n";
+          stdout = `${JSON.stringify(JSON.parse(retry.stdout), null, 2)}\n`;
         } catch {
           stdout = retry.stdout;
         }
@@ -429,9 +430,7 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
         "  Option 1: Add to config.yml:",
         "    metadata:",
         '      authorization: "Bearer <token>"',
-        "  Option 2: Store token in " +
-          (findTargetConfigDir(targetName, "grpc") ?? join(CONFIG_DIR, "target", "grpc", targetName)) +
-          "/auth.json",
+        `  Option 2: Store token in ${findTargetConfigDir(targetName, "grpc") ?? join(CONFIG_DIR, "target", "grpc", targetName)}/auth.json`,
         "",
         result.stderr,
       ].join("\n"),

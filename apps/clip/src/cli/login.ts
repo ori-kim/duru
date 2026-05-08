@@ -1,8 +1,8 @@
+import { join } from "node:path";
 import { removeTokens, resolveAuthDir } from "@clip/auth";
 import { findTargetConfigDir, getTarget, loadConfig } from "@clip/core";
 import type { Registry } from "@clip/core";
 import { die } from "@clip/core";
-import { join } from "path";
 import { CONFIG_DIR } from "@clip/core";
 
 export async function runLogin(args: string[], registry?: Registry): Promise<void> {

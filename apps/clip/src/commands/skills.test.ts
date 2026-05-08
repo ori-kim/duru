@@ -52,18 +52,18 @@ describe("runSkillsCmd / AGENT_PRESETS (소스 검증)", () => {
 
     // 소스 코드에 AGENT_PRESETS 상수로 등록되어 있는지 직접 확인
     // extensions/skills/src/skills.ts가 단일 진실 소스
-    const fs = await import("fs");
-    const path = await import("path");
-    const { fileURLToPath } = await import("url");
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
     const thisDir = path.dirname(fileURLToPath(import.meta.url));
     // apps/clip/src/commands/ → project root → extensions/skills/src/skills.ts
     const skillsSrc = path.resolve(thisDir, "../../../../extensions/skills/src/skills.ts");
     const content = fs.readFileSync(skillsSrc, "utf8");
 
     expect(content).toContain('"claude-code"');
-    expect(content).toContain('codex');
-    expect(content).toContain('gemini');
-    expect(content).toContain('pi');
+    expect(content).toContain("codex");
+    expect(content).toContain("gemini");
+    expect(content).toContain("pi");
   });
 });
 
@@ -72,9 +72,9 @@ describe("runSkillsCmd / AGENT_PRESETS (소스 검증)", () => {
 describe("runSkillsCmd / install --to 누락 시 Available 안내", () => {
   test("install --to 없으면 Available 목록이 오류 메시지에 포함", async () => {
     // extensions/skills/src/skills.ts가 단일 진실 소스
-    const fs = await import("fs");
-    const path = await import("path");
-    const { fileURLToPath } = await import("url");
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
     const thisDir = path.dirname(fileURLToPath(import.meta.url));
     const skillsSrc = path.resolve(thisDir, "../../../../extensions/skills/src/skills.ts");
     const content = fs.readFileSync(skillsSrc, "utf8");

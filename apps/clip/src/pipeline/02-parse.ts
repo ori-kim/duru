@@ -19,9 +19,20 @@ type ParsedData = {
 // Registry 초기화 전에 parse가 호출될 수 있어 모듈 수준 Set을 공유 상태로 사용.
 // 기본값: builtin internal commands (테스트 및 registry 초기화 이전 호환용)
 const DEFAULT_INTERNAL_VERBS = new Set([
-  "add", "list", "remove", "bind", "unbind", "binds",
-  "completion", "profile", "alias", "refresh", "login", "logout",
-  "config", "ext",
+  "add",
+  "list",
+  "remove",
+  "bind",
+  "unbind",
+  "binds",
+  "completion",
+  "profile",
+  "alias",
+  "refresh",
+  "login",
+  "logout",
+  "config",
+  "ext",
 ]);
 
 let _internalVerbSet: Set<string> = DEFAULT_INTERNAL_VERBS;
@@ -59,7 +70,7 @@ export function parseGlobalFlags(argv: string[]): {
       dryRun = true;
       i++;
     } else if (a === "--debug") {
-      process.env["CLIP_EXT_TRACE"] = "1";
+      process.env.CLIP_EXT_TRACE = "1";
       i++;
     } else if (a === "--help" || a === "-h") {
       console.log(HELP);
@@ -102,7 +113,7 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
       dryRun = true;
       i++;
     } else if (a === "--debug") {
-      process.env["CLIP_EXT_TRACE"] = "1";
+      process.env.CLIP_EXT_TRACE = "1";
       i++;
     } else if (a === "--help" || a === "-h") {
       internalVerb = "help";
@@ -128,7 +139,7 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
   let rawTargetArgs: string[];
 
   if (!internalVerb && rest.length > 0) {
-    const first = rest[0]!;
+    const first = rest[0] ?? "";
     if (_internalVerbSet.has(first)) {
       internalVerb = first;
       rawTargetArgs = rest.slice(1);
@@ -160,7 +171,7 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
     } else if (a === "--pipe") {
       effectivePipeMode = true;
     } else if (a === "--debug") {
-      process.env["CLIP_EXT_TRACE"] = "1";
+      process.env.CLIP_EXT_TRACE = "1";
     } else if (a === "--format") {
       effectiveFormat = rawTargetArgs[++i] ?? "plain";
     } else {

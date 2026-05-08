@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { parse as yamlParse } from "yaml";
 import { IDENTIFIER_RE, die } from "@clip/core";
+import { parse as yamlParse } from "yaml";
+import { z } from "zod";
 
 const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 

@@ -1,8 +1,8 @@
+import type { Registry } from "@clip/core";
+import type { CliTarget } from "@clip/protocol-cli";
+import pkg from "../../package.json";
 import { type HasAliases, listAliases } from "../commands/alias.ts";
 import { BIND_DIR } from "../commands/bind.ts";
-import type { CliTarget } from "@clip/protocol-cli";
-import type { Registry } from "@clip/core";
-import pkg from "../../package.json";
 
 export const VERSION = pkg.version;
 
@@ -109,25 +109,18 @@ Zsh completion:
   ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 `.trim();
 
-export async function printTargetHelp(
-  name: string,
-  type: string,
-  target: unknown,
-  registry?: Registry,
-): Promise<void> {
+export async function printTargetHelp(name: string, type: string, target: unknown, registry?: Registry): Promise<void> {
   // contribution의 helpRenderer가 있으면 사용, 없으면 fallback
   const contribution = registry?.getContribution(type);
-  const detail = contribution?.helpRenderer
-    ? await contribution.helpRenderer(name, target)
-    : `${type} target`;
+  const detail = contribution?.helpRenderer ? await contribution.helpRenderer(name, target) : `${type} target`;
 
   console.log(`clip ${name} — ${detail}`);
   console.log(`\nUsage: clip ${name} <subcommand> [...args]`);
 
   const t = target as Record<string, unknown>;
-  const allow = t["allow"] as string[] | undefined;
-  const deny = t["deny"] as string[] | undefined;
-  const acl = t["acl"] as Record<string, { allow?: string[]; deny?: string[] }> | undefined;
+  const allow = t.allow as string[] | undefined;
+  const deny = t.deny as string[] | undefined;
+  const acl = t.acl as Record<string, { allow?: string[]; deny?: string[] }> | undefined;
 
   if (allow && allow.length > 0) {
     console.log(`\nAllowed: ${allow.join(", ")}`);
@@ -145,7 +138,7 @@ export async function printTargetHelp(
     }
   }
   if (!allow?.length && !deny?.length && !acl) {
-    console.log(`\nNo ACL restrictions.`);
+    console.log("\nNo ACL restrictions.");
   }
 
   const aliasList = listAliases(target as HasAliases);

@@ -1,9 +1,12 @@
-const useColor = !process.env["NO_COLOR"] && process.stderr.isTTY;
+const useColor = !process.env.NO_COLOR && process.stderr.isTTY;
 const red = useColor ? "\x1b[31m" : "";
 const reset = useColor ? "\x1b[0m" : "";
 
 export class ClipError extends Error {
-  constructor(message: string, readonly exitCode = 1) {
+  constructor(
+    message: string,
+    readonly exitCode = 1,
+  ) {
     super(message);
     this.name = "ClipError";
   }

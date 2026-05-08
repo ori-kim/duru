@@ -1,6 +1,5 @@
 export const IDENTIFIER_RE = /^[A-Za-z0-9_-]+$/;
 
-const CONTROL_CHAR_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 const DANGEROUS_RESOURCE_CHARS_RE = /[?#%]/;
 
 export function validateIdentifier(value: string, label = "Name"): void {
@@ -11,7 +10,16 @@ export function validateIdentifier(value: string, label = "Name"): void {
 
 function hasDangerousControlChar(value: string): boolean {
   // Allow common textual whitespace while rejecting invisible/control payloads.
-  return CONTROL_CHAR_RE.test(value);
+  return [...value].some((char) => {
+    const code = char.charCodeAt(0);
+    return (
+      (code >= 0x00 && code <= 0x08) ||
+      code === 0x0b ||
+      code === 0x0c ||
+      (code >= 0x0e && code <= 0x1f) ||
+      code === 0x7f
+    );
+  });
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

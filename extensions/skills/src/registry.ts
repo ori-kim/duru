@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "fs";
-import { join } from "path";
-import { parse as yamlParse, stringify as dumpYAML } from "yaml";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { CONFIG_DIR, validateIdentifier } from "@clip/core";
+import { stringify as dumpYAML, parse as yamlParse } from "yaml";
 import { parseSkillFile } from "./frontmatter.ts";
 import type { SkillFrontmatter } from "./frontmatter.ts";
 

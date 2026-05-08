@@ -118,7 +118,7 @@ describe("gqlTypeToJsonSchema", () => {
     const schema = gqlTypeToJsonSchema(named("Recursive", "INPUT_OBJECT"), circTypes);
     expect(schema.type).toBe("object");
     const props = schema.properties as Record<string, unknown>;
-    expect((props["self"] as Record<string, unknown>).description).toMatch(/recursive/i);
+    expect((props.self as Record<string, unknown>).description).toMatch(/recursive/i);
   });
 });
 
@@ -339,8 +339,8 @@ describe("parseIntrospection", () => {
   test("ping tool", () => {
     const ping = spec.tools.find((t) => t.rootField === "ping");
     expect(ping).toBeDefined();
-    expect(ping!.operationType).toBe("query");
-    expect(ping!.description).toBe("Health check");
+    expect(ping?.operationType).toBe("query");
+    expect(ping?.description).toBe("Health check");
   });
   test("deleteUser tool operationType", () => {
     const del = spec.tools.find((t) => t.rootField === "deleteUser");

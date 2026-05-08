@@ -12,11 +12,14 @@ import { runSkillsCmd } from "./skills.ts";
 export const extension: ClipExtension = {
   name: "ext:skills",
   init(api) {
-    api.registerInternalCommand("skills", async ({ args }) => {
-      await runSkillsCmd(args);
-    }, {
-      description: "manage reusable prompt-template skills",
-      completion: () => `
+    api.registerInternalCommand(
+      "skills",
+      async ({ args }) => {
+        await runSkillsCmd(args);
+      },
+      {
+        description: "manage reusable prompt-template skills",
+        completion: () => `
   if (( CURRENT == 3 )); then
     local -a subcmds=(
       'add:create a new skill scaffold'
@@ -55,6 +58,7 @@ export const extension: ClipExtension = {
         ;;
     esac
   fi`,
-    });
+      },
+    );
   },
 };

@@ -22,10 +22,7 @@ export type ClassifiedVerbs = {
   extensions: string[];
 };
 
-export function classifyInternalVerbs(
-  registry: Registry,
-  phase1Verbs?: Set<string>,
-): ClassifiedVerbs {
+export function classifyInternalVerbs(registry: Registry, phase1Verbs?: Set<string>): ClassifiedVerbs {
   const all = new Set(registry.listInternalVerbs());
   const userInit = new Set(registry.listUserInternalVerbs());
   const userAll = new Set([...userInit, ...(phase1Verbs ?? [])]);

@@ -1,8 +1,8 @@
-import { listBound } from "../commands/bind.ts";
 import type { Registry } from "@clip/core";
 import { loadConfig } from "@clip/core";
 import type { ListOpts, ListRow } from "@clip/core";
-import { classifyInternalVerbs, BUILTIN_DESC } from "./internal-verbs.ts";
+import { listBound } from "../commands/bind.ts";
+import { BUILTIN_DESC, classifyInternalVerbs } from "./internal-verbs.ts";
 
 export async function runList(registry: Registry, phase1Verbs?: Set<string>): Promise<void> {
   const config = await loadConfig(registry);
@@ -29,14 +29,16 @@ export async function runList(registry: Registry, phase1Verbs?: Set<string>): Pr
     // 헤더 색상은 type별로 contribution이 알고 있다. 헤더는 일단 generic으로 출력.
     // listRowRenderer가 있으면 섹션 단위로 폭을 계산해 테이블처럼 렌더링한다.
     if (contribution.listRowRenderer) {
-      const headerLine = await getHeaderLine(type, contribution, entries[0]![1], opts);
+      const headerLine = await getHeaderLine(type, contribution, entries[0]?.[1], opts);
       console.log(headerLine);
       const sorted = [...entries].sort(([a], [b]) => a.localeCompare(b));
-      const rows = await Promise.all(sorted.map(([name, target]) => contribution.listRowRenderer!(name, target, opts)));
+      const rows = await Promise.all(
+        sorted.map(([name, target]) => contribution.listRowRenderer?.(name, target, opts)),
+      );
       for (const line of formatListRows(rows, opts)) console.log(line);
     } else if (contribution.listRenderer) {
       // 헤더 출력: 첫 번째 entry로 헤더 색상 추론
-      const headerLine = await getHeaderLine(type, contribution, entries[0]![1], opts);
+      const headerLine = await getHeaderLine(type, contribution, entries[0]?.[1], opts);
       console.log(headerLine);
       const sorted = [...entries].sort(([a], [b]) => a.localeCompare(b));
       for (const [name, target] of sorted) {
@@ -108,11 +110,11 @@ export async function runList(registry: Registry, phase1Verbs?: Set<string>): Pr
   if (first) {
     // 아무것도 없음
     console.log("No targets configured.");
-    console.log(`\nAdd one:\n  clip add <name> <command>          # CLI tool`);
-    console.log(`  clip add <name> <https://...>      # MCP server`);
-    console.log(`  clip add <name> <https://.../openapi.json> --api  # OpenAPI REST API`);
-    console.log(`  clip add <name> <host:port> --grpc  # gRPC server`);
-    console.log(`  clip add <name> <https://.../graphql> --graphql  # GraphQL API`);
+    console.log("\nAdd one:\n  clip add <name> <command>          # CLI tool");
+    console.log("  clip add <name> <https://...>      # MCP server");
+    console.log("  clip add <name> <https://.../openapi.json> --api  # OpenAPI REST API");
+    console.log("  clip add <name> <host:port> --grpc  # gRPC server");
+    console.log("  clip add <name> <https://.../graphql> --graphql  # GraphQL API");
   }
 }
 

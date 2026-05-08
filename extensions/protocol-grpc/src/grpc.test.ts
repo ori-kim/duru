@@ -287,7 +287,7 @@ describe("buildJsonSchema: message 변환", () => {
     ]);
     const schema = buildJsonSchema("pkg.Msg", types);
     const props = (schema as { properties: Record<string, unknown> }).properties;
-    expect(props["status"]).toEqual({ type: "string", enum: ["UNKNOWN", "ACTIVE"] });
+    expect(props.status).toEqual({ type: "string", enum: ["UNKNOWN", "ACTIVE"] });
   });
 
   test("순환 참조 방지", () => {
@@ -305,7 +305,7 @@ describe("buildJsonSchema: message 변환", () => {
     ]);
     const schema = buildJsonSchema("pkg.Node", types);
     const props = (schema as { properties: Record<string, unknown> }).properties;
-    expect((props["child"] as Record<string, unknown>)["description"]).toContain("recursive");
+    expect((props.child as Record<string, unknown>).description).toContain("recursive");
   });
 
   test("oneof 필드에 description 추가", () => {
@@ -323,7 +323,7 @@ describe("buildJsonSchema: message 변환", () => {
     ]);
     const schema = buildJsonSchema("pkg.Msg", types);
     const props = (schema as { properties: Record<string, unknown> }).properties;
-    const textDesc = (props["text"] as Record<string, string>)["description"];
+    const textDesc = (props.text as Record<string, string>).description;
     expect(textDesc).toContain("oneof payload");
     expect(textDesc).toContain("text");
     expect(textDesc).toContain("data");

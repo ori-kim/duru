@@ -1,6 +1,6 @@
 import { checkAcl } from "./acl.ts";
 import { type HasAliases, resolveAlias } from "./alias.ts";
-import type { Config, ResolvedTarget } from "./config.ts";
+import type { AclTree, Config, ResolvedTarget } from "./config.ts";
 import type { ErrorCtx, ExecutorContext, TargetResult } from "./extension.ts";
 import type { HookCtx, Registry } from "./extension.ts";
 
@@ -16,9 +16,15 @@ export type DispatchInput = {
   env: Record<string, string>;
 };
 
+type AclCheckTarget = {
+  allow?: string[];
+  deny?: string[];
+  acl?: AclTree;
+};
+
 function shouldCheckAcl(skipSubcommands: string[] | undefined, type: string, subcommand: string): boolean {
   if (["tools", "refresh", "describe", "schema"].includes(subcommand) && type !== "cli") return false;
-  if (skipSubcommands && skipSubcommands.includes(subcommand)) return false;
+  if (skipSubcommands?.includes(subcommand)) return false;
   return true;
 }
 
@@ -65,8 +71,7 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
     // ACL 검사
     if (shouldCheckAcl(def.aclRule?.skipSubcommands, type, subcommand)) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        checkAcl(target as any, subcommand, args[0], input.targetName);
+        checkAcl(target as AclCheckTarget, subcommand, args[0], input.targetName);
       } catch (e) {
         aclDenied = true;
         throw e;
@@ -103,8 +108,7 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
 
     // extension 타겟은 raw config를 dispatch 시에 schema로 검증
     // builtin 타겟은 loadConfig()에서 이미 검증+normalizeConfig 완료된 상태
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let validTarget: any = target;
+    let validTarget: unknown = target;
     const isExtension = cfg._ext?.[type]?.[input.targetName] !== undefined;
     if (isExtension) {
       const parsed = def.schema.safeParse(target);

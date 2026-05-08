@@ -1,4 +1,4 @@
-import { join } from "path";
+import { join } from "node:path";
 import { CONFIG_DIR, type Config, getTarget } from "@clip/core";
 import type { Registry } from "@clip/core";
 import type { BoundTarget, TargetInvocationHandle } from "./types.ts";

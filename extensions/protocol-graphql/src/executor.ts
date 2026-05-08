@@ -1,5 +1,5 @@
-import { mkdirSync } from "fs";
-import { join } from "path";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { AuthenticatedClient, resolveAuthDir } from "@clip/auth";
 import { CONFIG_DIR, buildAliasSection, die, findTargetConfigDir, formatToolHelp, parseToolArgs } from "@clip/core";
 import type { ExecutorContext, TargetResult, Tool } from "@clip/core";
@@ -101,17 +101,17 @@ async function loadSchema(
     die(`Failed to introspect "${targetName}": HTTP ${resp.status}\n${JSON.stringify(json).slice(0, 400)}`);
   }
 
-  const errors = json["errors"] as unknown[] | undefined;
+  const errors = json.errors as unknown[] | undefined;
   if (errors?.length) {
     die(`Introspection error for "${targetName}":\n${JSON.stringify(errors, null, 2).slice(0, 800)}`);
   }
 
-  const data = json["data"] as Record<string, unknown> | null;
-  if (!data?.["__schema"]) {
+  const data = json.data as Record<string, unknown> | null;
+  if (!data?.__schema) {
     die(`Introspection returned no __schema for "${targetName}"`);
   }
 
-  const schemaObj = { __schema: data["__schema"] };
+  const schemaObj = { __schema: data.__schema };
   const dir = findTargetConfigDir(targetName, "graphql") ?? join(CONFIG_DIR, "target", "graphql", targetName);
   mkdirSync(dir, { recursive: true });
   await Bun.write(cachePath, JSON.stringify(schemaObj, null, 2));
@@ -138,7 +138,7 @@ function buildGraphqlBody(
   operationName?: string,
 ): Record<string, unknown> {
   const body: Record<string, unknown> = { query, variables };
-  if (operationName) body["operationName"] = operationName;
+  if (operationName) body.operationName = operationName;
   return body;
 }
 
@@ -161,7 +161,7 @@ function buildToolsOutput(spec: GqlSpec): string {
   } else {
     for (const t of spec.tools) lines.push(formatToolsLine(t, ""));
   }
-  return lines.join("\n") + "\n";
+  return `${lines.join("\n")}\n`;
 }
 
 async function executeQuery(
@@ -184,15 +184,15 @@ async function executeQuery(
     };
   }
 
-  const data = json["data"] as Record<string, unknown> | null | undefined;
-  const errors = json["errors"] as unknown[] | undefined;
+  const data = json.data as Record<string, unknown> | null | undefined;
+  const errors = json.errors as unknown[] | undefined;
 
   if (errors?.length) {
-    const errStr = JSON.stringify(errors, null, 2) + "\n";
+    const errStr = `${JSON.stringify(errors, null, 2)}\n`;
     if (data !== null && data !== undefined) {
       return {
         exitCode: 1,
-        stdout: JSON.stringify(data, null, 2) + "\n",
+        stdout: `${JSON.stringify(data, null, 2)}\n`,
         stderr: errStr,
       };
     }
@@ -201,7 +201,7 @@ async function executeQuery(
 
   return {
     exitCode: 0,
-    stdout: JSON.stringify(data, null, 2) + "\n",
+    stdout: `${JSON.stringify(data, null, 2)}\n`,
     stderr: "",
   };
 }
@@ -234,11 +234,12 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
     }
     let variables: Record<string, unknown> = {};
     const varIdx = rawArgs.indexOf("--variables");
-    if (varIdx !== -1 && rawArgs[varIdx + 1]) {
+    const variablesArg = rawArgs[varIdx + 1];
+    if (varIdx !== -1 && variablesArg) {
       try {
-        variables = JSON.parse(rawArgs[varIdx + 1]!) as Record<string, unknown>;
+        variables = JSON.parse(variablesArg) as Record<string, unknown>;
       } catch {
-        return { exitCode: 1, stdout: "", stderr: `Invalid JSON in --variables\n` };
+        return { exitCode: 1, stdout: "", stderr: "Invalid JSON in --variables\n" };
       }
     }
     if (dryRun) {
@@ -270,7 +271,7 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
     for (const t of visible.sort((a, b) => a.name.localeCompare(b.name))) {
       lines.push(`  ${t.name.padEnd(32)} ${t.kind}`);
     }
-    return { exitCode: 0, stdout: lines.join("\n") + "\n", stderr: "" };
+    return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
   }
 
   if (subcommand === "describe") {
@@ -286,7 +287,7 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
           `  ${spec.mutationTypeName}  (${spec.tools.filter((t) => t.operationType === "mutation").length} mutation fields)`,
         );
       lines.push(`\nRun: clip ${targetName} types    — list all types`);
-      return { exitCode: 0, stdout: lines.join("\n") + "\n", stderr: "" };
+      return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
     }
 
     // TypeName.fieldName 형식 체크
@@ -301,7 +302,7 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
       if (tool) {
         return formatToolHelp({
           name: arg,
-          description: `GraphQL ${tool.operationType}: ${tool.rootField}\nReturn: ${gqlTypeToString(tool.returnType)}${tool.description ? "\n" + tool.description : ""}`,
+          description: `GraphQL ${tool.operationType}: ${tool.rootField}\nReturn: ${gqlTypeToString(tool.returnType)}${tool.description ? `\n${tool.description}` : ""}`,
           inputSchema: tool.inputSchema,
         });
       }
@@ -321,10 +322,10 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
       if (!field) {
         return { exitCode: 1, stdout: "", stderr: `Field "${fieldName}" not found in "${typeName}".\n` };
       }
-      return { exitCode: 0, stdout: describeField(field) + "\n", stderr: "" };
+      return { exitCode: 0, stdout: `${describeField(field)}\n`, stderr: "" };
     }
 
-    return { exitCode: 0, stdout: describeType(type) + "\n", stderr: "" };
+    return { exitCode: 0, stdout: `${describeType(type)}\n`, stderr: "" };
   }
 
   // RPC 도구 호출
@@ -340,10 +341,7 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
   if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
     return formatToolHelp({
       name: subcommand,
-      description:
-        `GraphQL ${tool.operationType}: ${tool.rootField}\nReturn: ${gqlTypeToString(tool.returnType)}` +
-        (tool.description ? "\n" + tool.description : "") +
-        "\n\nSelection: pass '{ field1 field2 }' as last arg, or --select field.nested,other",
+      description: `GraphQL ${tool.operationType}: ${tool.rootField}\nReturn: ${gqlTypeToString(tool.returnType)}${tool.description ? `\n${tool.description}` : ""}\n\nSelection: pass '{ field1 field2 }' as last arg, or --select field.nested,other`,
       inputSchema: tool.inputSchema,
     });
   }
@@ -353,14 +351,15 @@ export async function executeGraphql(target: GraphqlTarget, ctx: ExecutorContext
   let remaining = [...rawArgs];
 
   const selIdx = remaining.indexOf("--select");
-  if (selIdx !== -1 && remaining[selIdx + 1]) {
-    selection = parseDotPath(remaining[selIdx + 1]!);
+  const selectArg = remaining[selIdx + 1];
+  if (selIdx !== -1 && selectArg) {
+    selection = parseDotPath(selectArg);
     remaining = remaining.filter((_, i) => i !== selIdx && i !== selIdx + 1);
   }
 
   const last = remaining[remaining.length - 1];
   if (!selection && last?.startsWith("{")) {
-    selection = remaining.pop()!;
+    selection = remaining.pop();
   }
 
   if (!selection) selection = tool.autoSelection;

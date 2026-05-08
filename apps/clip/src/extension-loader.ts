@@ -14,11 +14,11 @@
  *   CLIP_NO_EXTENSIONS  — "1" 이면 user extension 전체 skip
  *   CLIP_EXT_TRACE      — "1" 이면 stderr 로그
  */
-import { existsSync, readFileSync, writeFileSync } from "fs";
-import { dirname, isAbsolute, join, resolve } from "path";
-import { parse as yamlParse, stringify as yamlStringify } from "yaml";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { ClipExtension, ExtensionApi, Registry, TargetTypeManifestSpec } from "@clip/core";
 import { CONFIG_DIR } from "@clip/core";
+import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 
 // ---------------------------------------------------------------------------
 // manifest 스키마 타입
@@ -37,7 +37,7 @@ export type ExtensionEntry = {
   path: string;
   entry: string;
   enabled?: boolean;
-  builtin?: boolean;          // 내장 extension 마킹 (user manifest에는 없음)
+  builtin?: boolean; // 내장 extension 마킹 (user manifest에는 없음)
   contributes?: ContributesSpec;
 };
 
@@ -55,7 +55,7 @@ export type ExtensionManifest = {
 // ---------------------------------------------------------------------------
 
 function trace(msg: string): void {
-  if (process.env["CLIP_EXT_TRACE"] === "1") process.stderr.write(`[clip:ext] ${msg}\n`);
+  if (process.env.CLIP_EXT_TRACE === "1") process.stderr.write(`[clip:ext] ${msg}\n`);
 }
 
 function warn(msg: string): void {
@@ -63,7 +63,7 @@ function warn(msg: string): void {
 }
 
 function getManifestPath(): string {
-  return process.env["CLIP_EXT_MANIFEST"] ?? join(CONFIG_DIR, "extensions", "extensions.yml");
+  return process.env.CLIP_EXT_MANIFEST ?? join(CONFIG_DIR, "extensions", "extensions.yml");
 }
 
 // ---------------------------------------------------------------------------
@@ -104,15 +104,11 @@ function resolveEntryPath(entry: ExtensionEntry, manifestDir: string): string {
 // Phase 2: 단일 entry lazy import
 // ---------------------------------------------------------------------------
 
-async function importEntry(
-  entryAbsPath: string,
-  entry: ExtensionEntry,
-): Promise<ClipExtension | null> {
+async function importEntry(entryAbsPath: string, entry: ExtensionEntry): Promise<ClipExtension | null> {
   trace(`importing extension entry: ${entryAbsPath}`);
   try {
     const mod = await import(entryAbsPath);
-    const ext: ClipExtension | undefined =
-      mod.extension ?? mod.default?.extension ?? mod.default;
+    const ext: ClipExtension | undefined = mod.extension ?? mod.default?.extension ?? mod.default;
     if (!ext || typeof ext.name !== "string" || typeof ext.init !== "function") {
       warn(`extension "${entry.name}" (${entryAbsPath}) must export { extension: ClipExtension }`);
       return null;
@@ -172,9 +168,19 @@ function extractVerb(argv: string[]): string | undefined {
   const VALUE_FLAGS = new Set(["--config", "-c"]); // 다음 토큰이 값인 플래그
   let i = 0;
   while (i < argv.length) {
-    const a = argv[i]!;
-    if (VALUE_FLAGS.has(a)) { i += 2; continue; } // 플래그 + 값 모두 skip
-    if (a.startsWith("-")) { if (!GLOBAL_FLAGS.has(a)) { i++; continue; } i++; continue; }
+    const a = argv[i] ?? "";
+    if (VALUE_FLAGS.has(a)) {
+      i += 2;
+      continue;
+    } // 플래그 + 값 모두 skip
+    if (a.startsWith("-")) {
+      if (!GLOBAL_FLAGS.has(a)) {
+        i++;
+        continue;
+      }
+      i++;
+      continue;
+    }
     return a; // 첫 번째 positional
   }
   return undefined;
@@ -192,11 +198,7 @@ function extractVerb(argv: string[]): string | undefined {
 // Verbs that need full extension metadata (descriptions, completion contributors, etc.)
 const METADATA_VERBS = new Set(["list", "completion"]);
 
-function shouldInit(
-  entry: ExtensionEntry,
-  argv: string[] | undefined,
-  hasHooks: boolean,
-): boolean {
+function shouldInit(entry: ExtensionEntry, argv: string[] | undefined, hasHooks: boolean): boolean {
   if (hasHooks) return true;
 
   const verb = argv ? extractVerb(argv) : undefined;
@@ -229,11 +231,8 @@ function shouldInit(
  *
  * 반환값: ExtensionLoader (clip ext 서브커맨드에서 활용)
  */
-export async function loadUserExtensions(
-  registry: Registry,
-  argv?: string[],
-): Promise<ExtensionLoader> {
-  if (process.env["CLIP_NO_EXTENSIONS"] === "1") {
+export async function loadUserExtensions(registry: Registry, argv?: string[]): Promise<ExtensionLoader> {
+  if (process.env.CLIP_NO_EXTENSIONS === "1") {
     trace("CLIP_NO_EXTENSIONS=1, skipping user extensions");
     return makeEmptyLoader();
   }

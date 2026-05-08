@@ -45,9 +45,9 @@ export const extension: ClipExtension = {
       urlHeuristic: (url) => !url.startsWith("http://") && !url.startsWith("https://"),
       addHandler: async (args: AddArgs) => {
         const { name, positionals, flags, allow, deny } = args;
-        const command = flags["command"] ?? positionals[0];
+        const command = flags.command ?? positionals[0];
         if (!command) die("CLI target requires a command (e.g. clip add gh gh)");
-        const prependArgs = flags["args"] ? flags["args"].split(",").map((s) => s.trim()) : undefined;
+        const prependArgs = flags.args ? flags.args.split(",").map((s) => s.trim()) : undefined;
         await addTarget(name, "cli", { command, args: prependArgs, allow, deny });
         console.log(`Added CLI target "${name}" → ${command}`);
       },
@@ -60,9 +60,9 @@ export const extension: ClipExtension = {
 };
 
 function formatAcl(target: Record<string, unknown>): string {
-  const allow = target["allow"] as string[] | undefined;
-  const deny = target["deny"] as string[] | undefined;
-  const acl = target["acl"] as Record<string, unknown> | undefined;
+  const allow = target.allow as string[] | undefined;
+  const deny = target.deny as string[] | undefined;
+  const acl = target.acl as Record<string, unknown> | undefined;
   const parts: string[] = [];
   if (allow && allow.length > 0) parts.push(`allow: ${allow.join(",")}`);
   if (deny && deny.length > 0) parts.push(`deny: ${deny.join(",")}`);

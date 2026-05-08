@@ -213,7 +213,10 @@ export function parseToolArgs(
   return merged;
 }
 
-export function formatToolHelp(tool: Tool, injectedArgs: Record<string, unknown> = tool.injectedArgs ?? {}): TargetResult {
+export function formatToolHelp(
+  tool: Tool,
+  injectedArgs: Record<string, unknown> = tool.injectedArgs ?? {},
+): TargetResult {
   const schema = tool.inputSchema;
   const props = (schema.properties as Record<string, { type?: unknown; default?: unknown }> | undefined) ?? {};
   const required = new Set((schema.required as string[] | undefined) ?? []);

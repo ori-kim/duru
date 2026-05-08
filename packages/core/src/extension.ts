@@ -40,7 +40,7 @@ export type HookCtx = Readonly<{
 }>;
 
 export type HookReturn =
-  | void
+  | undefined
   | { headers?: Record<string, string>; args?: string[]; subcommand?: string }
   | { shortCircuit: TargetResult }
   | { result: Partial<TargetResult> };
@@ -48,7 +48,7 @@ export type HookReturn =
 export type HookFn = (ctx: HookCtx) => HookReturn | Promise<HookReturn>;
 
 export type ErrorCtx = HookCtx & { error: unknown; aclDenied?: boolean };
-export type ErrorReturn = void | { result: TargetResult } | { rethrow: unknown };
+export type ErrorReturn = undefined | { result: TargetResult } | { rethrow: unknown };
 export type ErrorHandler = (ctx: ErrorCtx) => ErrorReturn | Promise<ErrorReturn>;
 
 // 구조적 타이핑으로 zod 직접 의존 없이 schema 정의
@@ -215,7 +215,7 @@ const defaultLogger: Logger = {
   warn: (msg) => process.stderr.write(`[clip:warn] ${msg}\n`),
   error: (msg) => process.stderr.write(`[clip:error] ${msg}\n`),
   debug: (msg) => {
-    if (process.env["CLIP_EXT_TRACE"] === "1") process.stderr.write(`[clip:debug] ${msg}\n`);
+    if (process.env.CLIP_EXT_TRACE === "1") process.stderr.write(`[clip:debug] ${msg}\n`);
   },
 };
 
@@ -329,8 +329,7 @@ export class Registry {
           // builtin이 이미 소유: 사용자 extension은 manifest override 허가 없이 덮어쓰기 불가
           if (!isBuiltin && !this._allowedTypeOverrides.has(def.type)) {
             throw new Error(
-              `Target type "${def.type}" is owned by a builtin extension and cannot be overridden. ` +
-                `To override, disable the builtin entry in your extensions manifest.`,
+              `Target type "${def.type}" is owned by a builtin extension and cannot be overridden. To override, disable the builtin entry in your extensions manifest.`,
             );
           }
           if (!isBuiltin) {
@@ -360,8 +359,7 @@ export class Registry {
           // builtin이 이미 소유: 사용자 extension은 manifest override 허가 없이 탈취 불가
           if (!isBuiltin && !this._allowedVerbOverrides.has(verb)) {
             throw new Error(
-              `Internal command "${verb}" is owned by a builtin extension and cannot be overridden. ` +
-                `To override, disable the builtin entry in your extensions manifest.`,
+              `Internal command "${verb}" is owned by a builtin extension and cannot be overridden. To override, disable the builtin entry in your extensions manifest.`,
             );
           }
           if (!isBuiltin) {
@@ -454,7 +452,12 @@ export class Registry {
   }
 
   listContributions(): TargetTypeContribution[] {
-    return [...this._contributions.keys()].map((t) => this.getContribution(t)!);
+    const contributions: TargetTypeContribution[] = [];
+    for (const type of this._contributions.keys()) {
+      const contribution = this.getContribution(type);
+      if (contribution) contributions.push(contribution);
+    }
+    return contributions;
   }
 
   listContributionsByPriority(): TargetTypeContribution[] {
@@ -516,7 +519,7 @@ export class Registry {
 
     // afterExecute는 priority 내림차순 (onion 역방향)
     const ordered = phase === "afterExecute" ? [...base].reverse() : base;
-    const timeoutMs = Number(process.env["CLIP_EXT_TIMEOUT_MS"] ?? "5000");
+    const timeoutMs = Number(process.env.CLIP_EXT_TIMEOUT_MS ?? "5000");
 
     const mergedHeaders: Record<string, string> = {};
     let mergedArgs: string[] | undefined;

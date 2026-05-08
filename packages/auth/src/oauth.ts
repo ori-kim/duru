@@ -1,4 +1,4 @@
-import { join } from "path";
+import { join } from "node:path";
 
 // --- 타입 ---
 
@@ -226,7 +226,9 @@ function startCallbackServer(expectedState: string): {
     },
   });
 
-  return { port: server.port!, codePromise };
+  const port = server.port;
+  if (!port) throw new Error("OAuth callback server did not expose a port");
+  return { port, codePromise };
 }
 
 // --- Token Exchange ---
@@ -357,7 +359,15 @@ async function runFullOAuthFlow(
     throw new Error(`OAuth: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  const tokens = await exchangeCode(asMeta.token_endpoint, clientId, code, redirectUri, pkce.verifier, serverUrl, clientSecret);
+  const tokens = await exchangeCode(
+    asMeta.token_endpoint,
+    clientId,
+    code,
+    redirectUri,
+    pkce.verifier,
+    serverUrl,
+    clientSecret,
+  );
 
   const auth: StoredAuth = {
     access_token: tokens.access_token,
@@ -374,7 +384,7 @@ async function runFullOAuthFlow(
   };
 
   await saveAuth(configDir, auth);
-  process.stderr.write(`\x1b[0mclip: 로그인 완료.\n\x1b[0m`);
+  process.stderr.write("\x1b[0mclip: 로그인 완료.\n\x1b[0m");
 
   return auth;
 }
@@ -382,9 +392,7 @@ async function runFullOAuthFlow(
 // --- Export 함수 ---
 
 /** 저장된 토큰으로 Authorization 헤더 반환. 없거나 만료되면 null. */
-export async function getStoredAuthHeaders(
-  configDir: string,
-): Promise<Record<string, string> | null> {
+export async function getStoredAuthHeaders(configDir: string): Promise<Record<string, string> | null> {
   const auth = await loadAuth(configDir);
   if (!auth) return null;
   if (Date.now() >= auth.expires_at) return null;
@@ -392,9 +400,7 @@ export async function getStoredAuthHeaders(
 }
 
 /** 만료 5분 전이면 refresh 시도. 새 헤더 반환 또는 null. */
-export async function refreshIfExpiring(
-  configDir: string,
-): Promise<Record<string, string> | null> {
+export async function refreshIfExpiring(configDir: string): Promise<Record<string, string> | null> {
   const auth = await loadAuth(configDir);
   if (!auth) return null;
 

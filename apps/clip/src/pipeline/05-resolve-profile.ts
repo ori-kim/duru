@@ -1,5 +1,5 @@
-import { type HasProfiles, resolveProfile } from "../commands/profile.ts";
 import type { Registry } from "@clip/core";
+import { type HasProfiles, resolveProfile } from "../commands/profile.ts";
 import type { BoundTarget, MergedTarget, TargetInvocationHandle } from "./types.ts";
 
 const BUILTIN_TYPES = new Set(["cli", "mcp", "api", "grpc", "graphql", "script"]);

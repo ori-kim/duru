@@ -1,4 +1,4 @@
-import { resolveAuthDir, getAuthStatus } from "@clip/auth";
+import { getAuthStatus, resolveAuthDir } from "@clip/auth";
 import { addTarget, die, subProfiles, subRecord } from "@clip/core";
 import type { AddArgs, ClipExtension, ListOpts, NormalizeCtx } from "@clip/core";
 import { describeGraphqlTools, executeGraphql } from "./executor.ts";
@@ -47,7 +47,7 @@ export const extension: ClipExtension = {
           ? authStatus
           : t.oauth
             ? "not authenticated"
-            : headers?.["authorization"]
+            : headers?.authorization
               ? "api key"
               : "no auth";
         return {
@@ -71,7 +71,7 @@ export const extension: ClipExtension = {
           ? color("2", `  [${authStatus}]`)
           : t.oauth
             ? color("2", "  [not authenticated]")
-            : headers?.["authorization"]
+            : headers?.authorization
               ? color("2", "  [api key]")
               : color("2", "  [no auth]");
         const profileTag = (t as Record<string, unknown>).active ? ` @${(t as Record<string, unknown>).active}` : "";
@@ -81,7 +81,7 @@ export const extension: ClipExtension = {
       urlHeuristic: (url) => url.toLowerCase().endsWith("/graphql"),
       addHandler: async (args: AddArgs) => {
         const { name, positionals, flags, allow, deny } = args;
-        const endpoint = flags["endpoint"] ?? positionals[0];
+        const endpoint = flags.endpoint ?? positionals[0];
         if (!endpoint)
           die("GraphQL target requires an endpoint URL (e.g. clip add gh https://api.github.com/graphql --graphql)");
         await addTarget(name, "graphql", { endpoint, allow, deny });
@@ -101,9 +101,9 @@ export const extension: ClipExtension = {
 };
 
 function formatAcl(target: Record<string, unknown>): string {
-  const allow = target["allow"] as string[] | undefined;
-  const deny = target["deny"] as string[] | undefined;
-  const acl = target["acl"] as Record<string, unknown> | undefined;
+  const allow = target.allow as string[] | undefined;
+  const deny = target.deny as string[] | undefined;
+  const acl = target.acl as Record<string, unknown> | undefined;
   const parts: string[] = [];
   if (allow && allow.length > 0) parts.push(`allow: ${allow.join(",")}`);
   if (deny && deny.length > 0) parts.push(`deny: ${deny.join(",")}`);
