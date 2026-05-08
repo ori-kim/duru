@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseToolArgs } from "./tool-args.ts";
+import { formatToolHelp, parseToolArgs } from "./tool-args.ts";
 
 describe("parseToolArgs — individual flags (existing behavior)", () => {
   test("string flag", () => {
@@ -140,6 +140,18 @@ describe("parseToolArgs — schema validation", () => {
     expect(() => parseToolArgs([], schema)).toThrow("Missing required argument: args.limit");
   });
 
+  test("accepts injected default arguments as schema inputs", () => {
+    const schema = { required: ["token"], properties: { token: { type: "string" } } };
+    expect(parseToolArgs([], schema, { token: "dummy-injected-token" })).toEqual({ token: "dummy-injected-token" });
+  });
+
+  test("explicit flags override injected default arguments", () => {
+    const schema = { required: ["token"], properties: { token: { type: "string" } } };
+    expect(parseToolArgs(["--token", "dummy-manual-token"], schema, { token: "dummy-injected-token" })).toEqual({
+      token: "dummy-manual-token",
+    });
+  });
+
   test("rejects invalid integer values", () => {
     const schema = { properties: { limit: { type: "integer" } } };
     expect(() => parseToolArgs(["--limit", "1.5"], schema)).toThrow('Invalid --limit: expected integer, got "1.5"');
@@ -187,5 +199,25 @@ describe("parseToolArgs — schema validation", () => {
     expect(() => parseToolArgs(["--ids", "[1,2.5]"], schema)).toThrow(
       "Invalid args.ids[1]: expected integer, got number",
     );
+  });
+});
+
+describe("formatToolHelp — injected arguments", () => {
+  test("does not mark injected required arguments as manually required", () => {
+    const result = formatToolHelp(
+      {
+        name: "call",
+        description: "Test call",
+        inputSchema: {
+          required: ["token"],
+          properties: { token: { type: "string" } },
+        },
+      },
+      { token: "dummy-injected-token" },
+    );
+
+    expect(result.stdout).toContain("--token");
+    expect(result.stdout).toContain("[injected]");
+    expect(result.stdout).not.toContain("--token                  string (required)");
   });
 });

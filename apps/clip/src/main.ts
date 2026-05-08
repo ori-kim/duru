@@ -196,7 +196,7 @@ async function main(): Promise<number> {
   const result = await dispatch(
     config,
     {
-      targetName: invocation.token,
+      targetName: baseName,
       resolvedTarget: { type, target } as ResolvedTarget,
       subcommand: rawSubcommand,
       args: lateFiltered,

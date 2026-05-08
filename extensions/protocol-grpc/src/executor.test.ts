@@ -6,7 +6,7 @@ describe("gRPC dry run", () => {
     const out = buildGrpcurlCommand([
       "-plaintext",
       "-rpc-header",
-      "authorization: Bearer token",
+      "authorization: Bearer dummy-token",
       "-d",
       '{"id":"123","name":"Jane Doe"}',
       "localhost:50051",
@@ -14,7 +14,7 @@ describe("gRPC dry run", () => {
     ]);
 
     expect(out).toBe(
-      'grpcurl -plaintext -rpc-header \'authorization: Bearer token\' -d \'{"id":"123","name":"Jane Doe"}\' localhost:50051 petstore.PetService.GetPet\n',
+      'grpcurl -plaintext -rpc-header \'authorization: Bearer dummy-token\' -d \'{"id":"123","name":"Jane Doe"}\' localhost:50051 petstore.PetService.GetPet\n',
     );
   });
 });

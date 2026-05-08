@@ -125,7 +125,7 @@ describe("profile application", () => {
       url: "https://api.example.com",
       auth: false as const,
       headers: { "X-Base": "base" },
-      profiles: { bot: { headers: { "Authorization": "Bearer token" } } },
+      profiles: { bot: { headers: { Authorization: "Bearer dummy-token" } } },
     };
     const config = makeConfig("mcp", "myapi", target);
     const inv = makeInvocation("myapi", "bot");
@@ -134,7 +134,7 @@ describe("profile application", () => {
     const t = merged.target as { headers: Record<string, string> };
 
     expect(t.headers["X-Base"]).toBe("base");
-    expect(t.headers["Authorization"]).toBe("Bearer token");
+    expect(t.headers.Authorization).toBe("Bearer dummy-token");
   });
 
   test("explicit profile wins over active", async () => {
