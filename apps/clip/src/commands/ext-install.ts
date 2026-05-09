@@ -289,7 +289,7 @@ function writeManifest(manifestPath: string, manifest: { extensions: ExtensionEn
 
 function normalizeContributes(contributes: ContributesSpec | undefined): ContributesSpec {
   return {
-    internalCommands: contributes?.internalCommands ?? [],
+    commands: contributes?.commands ?? [],
     targetTypes: contributes?.targetTypes ?? [],
     hooks: contributes?.hooks ?? [],
     outputFormats: contributes?.outputFormats ?? [],
@@ -416,7 +416,7 @@ function printInstallSummary(params: {
       `commit: ${params.resolvedCommit}`,
       `entry: ${params.metadata.entry}`,
       `install_dir: ${params.installDir}`,
-      `commands: ${(contributes.internalCommands ?? []).join(", ") || "-"}`,
+      `commands: ${(contributes.commands ?? []).join(", ") || "-"}`,
       `hooks: ${(contributes.hooks ?? []).join(", ") || "-"}`,
       `target_types: ${(contributes.targetTypes ?? []).map((t) => (typeof t === "string" ? t : t.name)).join(", ") || "-"}`,
       `dependencies: ${Object.keys(dependencies).join(", ") || "-"}`,

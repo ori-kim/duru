@@ -15,9 +15,9 @@ function setupHistoryHome(): { home: string; manifest: string } {
       `    path: ${resolve("extensions/history")}`,
       "    entry: src/extension.ts",
       "    contributes:",
-      "      internalCommands: [history]",
+      "      commands: [history]",
       "      targetTypes: []",
-      "      hooks: [cli-end]",
+      "      hooks: [command-end]",
       "",
     ].join("\n"),
   );
@@ -51,7 +51,7 @@ async function runClip(params: {
 }
 
 describe("history extension CLI flow", () => {
-  test("records a clip run through cli-end and exposes it through clip history", async () => {
+  test("records a clip run through command-end and exposes it through clip history", async () => {
     const { home, manifest } = setupHistoryHome();
 
     const version = await runClip({ home, manifest, args: ["--version"] });

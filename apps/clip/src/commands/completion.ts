@@ -188,7 +188,7 @@ export function buildZshCompletion(registry?: Registry, cmd = "clip", phase1Verb
         extraContribs += `\n${contribution.completionContributor()}`;
       }
     }
-    for (const { verb, fn: contributor } of registry.listInternalCommandCompletions()) {
+    for (const { verb, fn: contributor } of registry.listCommandCompletions()) {
       const extFnName = `${fn}_ext_${verb.replace(/-/g, "_")}`;
       const body = contributor();
       extraContribs += `\n${extFnName}() {\n${body}\n}`;

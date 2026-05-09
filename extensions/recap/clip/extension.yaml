@@ -3,10 +3,10 @@ version: 0.1.0
 description: Query and manage stored tacit knowledge for clip targets and bundles.
 entry: extension.ts
 contributes:
-  internalCommands:
+  commands:
     - recap
   targetTypes: []
   hooks:
-    - target-start
+    - subcommand-start
 runtime:
   dependencies: {}

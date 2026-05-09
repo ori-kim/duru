@@ -75,8 +75,8 @@ function cmdList(registry: Registry): void {
     const statusPad = status + " ".repeat(Math.max(0, statusW - (enabled ? 7 : 8)));
 
     const contributes: string[] = [];
-    if (e.contributes?.internalCommands?.length) {
-      contributes.push(`cmds=[${e.contributes.internalCommands.join(",")}]`);
+    if (e.contributes?.commands?.length) {
+      contributes.push(`cmds=[${e.contributes.commands.join(",")}]`);
     }
     if (e.contributes?.targetTypes?.length) {
       const typeNames = (e.contributes.targetTypes as Array<string | { name: string }>).map((t) =>
@@ -86,6 +86,12 @@ function cmdList(registry: Registry): void {
     }
     if (e.contributes?.hooks?.length) {
       contributes.push(`hooks=[${e.contributes.hooks.join(",")}]`);
+    }
+    if (e.contributes?.globalOptions?.length) {
+      const optionNames = e.contributes.globalOptions.map((option) =>
+        typeof option === "string" ? option : option.name,
+      );
+      contributes.push(`globalOptions=[${optionNames.join(",")}]`);
     }
 
     console.log(`${e.name.padEnd(nameW)}  ${kind.padEnd(kindW)}  ${statusPad}  ${dim(contributes.join(" ") || "—")}`);
@@ -158,9 +164,12 @@ const EXTENSION_SCAFFOLD = `import type { ClipExtension } from "@clip/core";
 export const extension: ClipExtension = {
   name: "ext:NAME",
   init(api) {
-    api.registerInternalCommand("NAME", async ({ args }) => {
-      // TODO: implement
-      console.log("NAME args:", args);
+    api.commands.register({
+      name: "NAME",
+      async run({ args }) {
+        // TODO: implement
+        console.log("NAME args:", args);
+      },
     });
   },
 };
@@ -171,7 +180,7 @@ const MANIFEST_ENTRY_TEMPLATE = (name: string) => ({
   path: name,
   entry: "src/extension.ts",
   enabled: true,
-  contributes: { internalCommands: [name], targetTypes: [], hooks: [] },
+  contributes: { commands: [name], targetTypes: [], hooks: [] },
 });
 
 async function cmdScaffold(args: string[]): Promise<void> {
@@ -250,7 +259,7 @@ async function cmdScaffold(args: string[]): Promise<void> {
   console.log(`  - manifest entry added: ${manifestPath}`);
   console.log(`\nRun \`bun install\` in ${extDir} to set up editor types.`);
   console.log(`Then open ${join(srcDir, "extension.ts")} and start coding.`);
-  console.log(`Run: clip ${name} (after implementing registerInternalCommand)`);
+  console.log(`Run: clip ${name} (after implementing api.commands.register)`);
 }
 
 // ---------------------------------------------------------------------------

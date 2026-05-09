@@ -3,10 +3,10 @@ version: 0.1.0
 description: Record and query local clip command history.
 entry: src/extension.ts
 contributes:
-  internalCommands:
+  commands:
     - history
   targetTypes: []
   hooks:
-    - cli-end
+    - command-end
 runtime:
   dependencies: {}

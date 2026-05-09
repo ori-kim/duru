@@ -18,18 +18,31 @@ export type ExecutorContext = {
   headers: Record<string, string>;
   dryRun: boolean;
   jsonMode: boolean;
+  globalOptions?: Record<string, OptionValue>;
   passthrough: boolean;
 };
 
 export type Executor<T> = (target: T, ctx: ExecutorContext) => Promise<TargetResult>;
 
-export type HookPhase = "cli-start" | "cli-end" | "target-start" | "target-end";
+export type HookPhase = "command-start" | "command-end" | "subcommand-start" | "subcommand-end";
+
+export type OptionValue = boolean | string | string[];
+
+export type OptionSpec = {
+  name: string;
+  type: "boolean" | "value";
+  aliases?: string[];
+  description?: string;
+  valueName?: string;
+  default?: OptionValue;
+  placement?: "leading" | "any";
+};
 
 export type CliCommandSummary =
   | { kind: "none"; argv: readonly string[] }
   | { kind: "help"; argv: readonly string[] }
   | { kind: "version"; argv: readonly string[] }
-  | { kind: "internal"; argv: readonly string[]; name: string; args: readonly string[] }
+  | { kind: "command"; argv: readonly string[]; name: string; args: readonly string[] }
   | {
       kind: "target";
       argv: readonly string[];
@@ -46,8 +59,8 @@ export type CliCommandSummary =
       format?: string;
     };
 
-export type CliHookCtx = Readonly<{
-  phase: "cli-start" | "cli-end";
+export type CommandHookCtx = Readonly<{
+  phase: "command-start" | "command-end";
   argv: readonly string[];
   startedAt: string;
   durationMs?: number;
@@ -57,13 +70,17 @@ export type CliHookCtx = Readonly<{
   error?: unknown;
 }>;
 
-export type TargetHookCtx = Readonly<{
-  phase: "target-start" | "target-end";
+export type SubcommandHookCtx = Readonly<{
+  phase: "subcommand-start" | "subcommand-end";
+  kind: "command" | "target";
+  command: string;
+  subcommand: string;
+  subcommandIndex: number;
+  args: readonly string[];
+  globalOptions: Record<string, OptionValue>;
   targetName: string;
   targetType: string;
   target: Readonly<unknown>;
-  subcommand: string;
-  args: readonly string[];
   headers: Record<string, string>;
   dryRun: boolean;
   jsonMode: boolean;
@@ -71,7 +88,7 @@ export type TargetHookCtx = Readonly<{
   result?: TargetResult;
 }>;
 
-export type HookCtx = CliHookCtx | TargetHookCtx;
+export type HookCtx = CommandHookCtx | SubcommandHookCtx;
 
 export type HookReturn =
   | undefined
@@ -82,7 +99,11 @@ export type HookReturn =
 export type HookCtxFor<P extends HookPhase> = Extract<HookCtx, { phase: P }>;
 export type HookFn<P extends HookPhase = HookPhase> = (ctx: HookCtxFor<P>) => HookReturn | Promise<HookReturn>;
 
-export type ErrorCtx = Omit<TargetHookCtx, "phase"> & { phase: "target-error"; error: unknown; aclDenied?: boolean };
+export type ErrorCtx = Omit<SubcommandHookCtx, "phase"> & {
+  phase: "subcommand-error";
+  error: unknown;
+  aclDenied?: boolean;
+};
 export type ErrorReturn = undefined | { result: TargetResult } | { rethrow: unknown };
 export type ErrorHandler = (ctx: ErrorCtx) => ErrorReturn | Promise<ErrorReturn>;
 
@@ -189,17 +210,40 @@ export type TargetTypeContribution = {
   completionContributor?: () => string;
 };
 
-// --- InternalCommandHandler ---
+// --- Commands ---
 
-export type InternalCommandCtx = {
+export type CommandCtx = {
   args: string[];
+  options: Record<string, OptionValue>;
+  globalOptions: Record<string, OptionValue>;
+  argv: readonly string[];
+  logger: Logger;
+  signal: AbortSignal;
 };
 
-export type InternalCommandHandler = (ctx: InternalCommandCtx) => Promise<void>;
+export type CommandHandler = (ctx: CommandCtx) => Promise<void>;
 
-export type InternalCommandOpts = {
+export type CommandSpec = {
+  name: string;
+  summary?: string;
   description?: string;
+  options?: OptionSpec[];
+  early?: boolean;
+  protected?: boolean;
   completion?: () => string;
+  run: CommandHandler;
+};
+
+export type CommandRegistration = CommandSpec;
+export type CommandOverride = Omit<CommandSpec, "name">;
+
+export type CommandRegistryApi = {
+  register(spec: CommandRegistration): void;
+  override(name: string, spec: CommandOverride): void;
+};
+
+export type OptionRegistryApi = {
+  registerGlobal(spec: OptionSpec): void;
 };
 
 export type HookOpts = {
@@ -223,7 +267,8 @@ import type { OutputRenderer, ResultPresenter } from "./utils/output.ts";
 export type ExtensionApi = {
   registerTargetType<T>(def: TargetTypeDef<T>): void;
   registerContribution(contribution: TargetTypeContribution): void;
-  registerInternalCommand(verb: string, handler: InternalCommandHandler, opts?: InternalCommandOpts): void;
+  commands: CommandRegistryApi;
+  options: OptionRegistryApi;
   registerHook<P extends HookPhase>(phase: P, fn: HookFn<P>, opts?: HookOpts): void;
   registerErrorHandler(fn: ErrorHandler, opts?: HookOpts): void;
   registerResultPresenter(presenter: ResultPresenter): void;
@@ -254,14 +299,14 @@ const defaultLogger: Logger = {
   },
 };
 
-function isTargetLikeCtx(ctx: HookCtx | ErrorCtx): ctx is TargetHookCtx | ErrorCtx {
-  return "targetType" in ctx;
+function isSubcommandCtx(ctx: HookCtx | ErrorCtx): ctx is SubcommandHookCtx | ErrorCtx {
+  return "subcommand" in ctx;
 }
 
 function matchesHook(opts: HookOpts, ctx: HookCtx | ErrorCtx): boolean {
   const { match } = opts;
   if (!match) return true;
-  if (!isTargetLikeCtx(ctx)) return false;
+  if (!isSubcommandCtx(ctx)) return false;
   if (match.type && !match.type.includes(ctx.targetType)) return false;
   if (match.target) {
     const ok = match.target.some((m) => (typeof m === "string" ? m === ctx.targetName : m.test(ctx.targetName)));
@@ -294,22 +339,25 @@ export class Registry {
   private _api: ExtensionApi | undefined = undefined;
   private readonly _contributions = new Map<string, TargetTypeContribution>();
   private readonly _contributionOverrides = new Map<string, Partial<TargetTypeContribution>>();
-  private readonly _internalCommands = new Map<string, InternalCommandHandler>();
-  private readonly _internalCommandDescs = new Map<string, string>();
-  private readonly _internalCommandCompletions = new Map<string, () => string>();
+  private readonly _commandHandlers = new Map<string, CommandHandler>();
+  private readonly _commandSpecs = new Map<string, CommandSpec>();
+  private readonly _commandDescs = new Map<string, string>();
+  private readonly _commandCompletions = new Map<string, () => string>();
+  private readonly _globalOptions = new Map<string, OptionSpec>();
+  private readonly _globalOptionAliases = new Map<string, string>();
   private readonly _hooks: Map<HookPhase, RegisteredHook[]> = new Map([
-    ["cli-start", []],
-    ["cli-end", []],
-    ["target-start", []],
-    ["target-end", []],
+    ["command-start", []],
+    ["command-end", []],
+    ["subcommand-start", []],
+    ["subcommand-end", []],
   ]);
   private readonly _errorHandlers: RegisteredErrorHandler[] = [];
   private _disposed = false;
   private readonly _ac = new AbortController();
 
   /**
-   * builtin이 소유한 internal verb 세트.
-   * builtin:* extension이 registerInternalCommand()를 호출하면 자동으로 추가된다.
+   * builtin이 소유한 command verb 세트.
+   * builtin:* extension이 command를 등록하면 자동으로 추가된다.
    */
   private readonly _builtinVerbOwners = new Set<string>();
 
@@ -318,12 +366,6 @@ export class Registry {
    * builtin:* extension이 registerTargetType()을 호출하면 자동으로 추가된다.
    */
   private readonly _builtinTypeOwners = new Set<string>();
-
-  /**
-   * manifest에서 enabled:false로 명시해 override를 허용한 verb 세트.
-   * extension-loader가 Phase 1 인덱싱 결과를 바탕으로 주입한다.
-   */
-  private readonly _allowedVerbOverrides = new Set<string>();
 
   /**
    * manifest에서 enabled:false로 명시해 override를 허용한 target type 세트.
@@ -342,14 +384,6 @@ export class Registry {
   }
 
   /**
-   * builtin internal verb에 대한 사용자 override를 허용한다.
-   * extension-loader가 manifest의 builtin entry enabled:false를 감지했을 때 호출.
-   */
-  allowVerbOverride(verb: string): void {
-    this._allowedVerbOverrides.add(verb);
-  }
-
-  /**
    * builtin target type에 대한 사용자 override를 허용한다.
    */
   allowTypeOverride(type: string): void {
@@ -358,6 +392,48 @@ export class Registry {
 
   /** 현재 초기화 중인 extension 이름 추적 (builtin 판단용) */
   private _currentExtName = "";
+
+  private registerCommandSpec(spec: CommandSpec, overrideBuiltin: boolean): void {
+    const verb = spec.name;
+    const isBuiltin = this._currentExtName.startsWith("builtin:");
+    const ownedByBuiltin = this._builtinVerbOwners.has(verb);
+    const existing = this._commandSpecs.get(verb);
+
+    if (ownedByBuiltin && !isBuiltin) {
+      if (existing?.protected) {
+        throw new Error(`Command "${verb}" is protected and cannot be overridden.`);
+      }
+      if (!overrideBuiltin) {
+        throw new Error(
+          `Command "${verb}" is owned by a builtin extension and cannot be overridden. Use api.commands.override("${verb}", spec) to replace it explicitly.`,
+        );
+      }
+      process.stderr.write(`clip: warning: command "${verb}" overridden by user extension\n`);
+    } else if (!isBuiltin && this._commandHandlers.has(verb)) {
+      throw new Error(`Command "${verb}" is already registered.`);
+    }
+
+    if (isBuiltin) this._builtinVerbOwners.add(verb);
+    this._commandSpecs.set(verb, spec);
+    this._commandHandlers.set(verb, spec.run);
+    if (spec.description ?? spec.summary) this._commandDescs.set(verb, spec.description ?? spec.summary ?? "");
+    if (spec.completion) this._commandCompletions.set(verb, spec.completion);
+  }
+
+  private registerGlobalOption(spec: OptionSpec): void {
+    const existing = this.resolveGlobalOptionName(spec.name);
+    if (existing) throw new Error(`Global option "--${spec.name}" is already registered.`);
+    this._globalOptions.set(spec.name, spec);
+    for (const alias of spec.aliases ?? []) {
+      const existingAlias = this.resolveGlobalOptionName(alias);
+      if (existingAlias) throw new Error(`Global option alias "-${alias}" is already registered.`);
+      this._globalOptionAliases.set(alias, spec.name);
+    }
+  }
+
+  resolveGlobalOptionName(nameOrAlias: string): string | undefined {
+    return this._globalOptions.has(nameOrAlias) ? nameOrAlias : this._globalOptionAliases.get(nameOrAlias);
+  }
 
   async initAll(outputSink?: {
     registerResultPresenter(p: ResultPresenter): void;
@@ -394,23 +470,18 @@ export class Registry {
         }
         this._contributions.set(contribution.type, contribution);
       },
-      registerInternalCommand: (verb: string, handler: InternalCommandHandler, opts?: InternalCommandOpts): void => {
-        const isBuiltin = this._currentExtName.startsWith("builtin:");
-        if (this._builtinVerbOwners.has(verb)) {
-          // builtin이 이미 소유: 사용자 extension은 manifest override 허가 없이 탈취 불가
-          if (!isBuiltin && !this._allowedVerbOverrides.has(verb)) {
-            throw new Error(
-              `Internal command "${verb}" is owned by a builtin extension and cannot be overridden. To override, disable the builtin entry in your extensions manifest.`,
-            );
-          }
-          if (!isBuiltin) {
-            process.stderr.write(`clip: warning: internal command "${verb}" overridden by user extension\n`);
-          }
-        }
-        if (isBuiltin) this._builtinVerbOwners.add(verb);
-        this._internalCommands.set(verb, handler);
-        if (opts?.description) this._internalCommandDescs.set(verb, opts.description);
-        if (opts?.completion) this._internalCommandCompletions.set(verb, opts.completion);
+      commands: {
+        register: (spec: CommandRegistration): void => {
+          this.registerCommandSpec(spec as CommandSpec, false);
+        },
+        override: (name: string, spec: CommandOverride): void => {
+          this.registerCommandSpec({ ...spec, name } as CommandSpec, true);
+        },
+      },
+      options: {
+        registerGlobal: (spec: OptionSpec): void => {
+          this.registerGlobalOption(spec);
+        },
       },
       registerHook: (phase, fn, opts = {}): void => {
         const hooks = this._hooks.get(phase);
@@ -535,24 +606,36 @@ export class Registry {
     return this.getContribution(type)?.displayHint;
   }
 
-  getInternalCommand(verb: string): InternalCommandHandler | undefined {
-    return this._internalCommands.get(verb);
+  getCommandHandler(verb: string): CommandHandler | undefined {
+    return this._commandHandlers.get(verb);
   }
 
-  listInternalVerbs(): string[] {
-    return [...this._internalCommands.keys()];
+  getCommand(verb: string): CommandSpec | undefined {
+    return this._commandSpecs.get(verb);
   }
 
-  listUserInternalVerbs(): string[] {
-    return [...this._internalCommands.keys()].filter((v) => !this._builtinVerbOwners.has(v));
+  listCommandNames(): string[] {
+    return [...this._commandHandlers.keys()];
   }
 
-  getInternalCommandDesc(verb: string): string | undefined {
-    return this._internalCommandDescs.get(verb);
+  listCommands(): CommandSpec[] {
+    return [...this._commandSpecs.values()];
   }
 
-  listInternalCommandCompletions(): Array<{ verb: string; fn: () => string }> {
-    return [...this._internalCommandCompletions.entries()].map(([verb, fn]) => ({ verb, fn }));
+  listUserCommandNames(): string[] {
+    return [...this._commandHandlers.keys()].filter((v) => !this._builtinVerbOwners.has(v));
+  }
+
+  getCommandDesc(verb: string): string | undefined {
+    return this._commandDescs.get(verb);
+  }
+
+  listCommandCompletions(): Array<{ verb: string; fn: () => string }> {
+    return [...this._commandCompletions.entries()].map(([verb, fn]) => ({ verb, fn }));
+  }
+
+  listGlobalOptions(): OptionSpec[] {
+    return [...this._globalOptions.values()];
   }
 
   async runHooks(phase: HookPhase, ctx: HookCtx): Promise<HookReturn | null> {
@@ -560,11 +643,11 @@ export class Registry {
       .filter((h) => matchesHook(h.opts, ctx))
       .sort((a, b) => a.opts.priority - b.opts.priority);
 
-    // target-end는 priority 내림차순 (onion 역방향)
-    const ordered = phase === "target-end" ? [...base].reverse() : base;
+    // subcommand-end는 priority 내림차순 (onion 역방향)
+    const ordered = phase === "subcommand-end" ? [...base].reverse() : base;
     const timeoutMs = Number(process.env.CLIP_EXT_TIMEOUT_MS ?? "5000");
 
-    if (phase === "cli-start" || phase === "cli-end") {
+    if (phase === "command-start" || phase === "command-end") {
       for (const { fn } of ordered) {
         await withTimeout(Promise.resolve(fn(ctx)), timeoutMs);
       }
@@ -583,8 +666,8 @@ export class Registry {
       anyReturn = true;
 
       if (typeof ret === "object" && "shortCircuit" in ret) {
-        if (phase !== "target-start") {
-          process.stderr.write("clip: warning: shortCircuit from hook outside target-start, ignoring\n");
+        if (phase !== "subcommand-start") {
+          process.stderr.write("clip: warning: shortCircuit from hook outside subcommand-start, ignoring\n");
           anyReturn = false; // shortCircuit이 무시되면 이 훅은 없던 것으로
           continue;
         }
@@ -592,14 +675,14 @@ export class Registry {
       }
 
       if (typeof ret === "object" && "result" in ret) {
-        if (phase !== "target-end") {
-          process.stderr.write("clip: warning: result rewrite from hook outside target-end, ignoring\n");
+        if (phase !== "subcommand-end") {
+          process.stderr.write("clip: warning: result rewrite from hook outside subcommand-end, ignoring\n");
           anyReturn = false;
           continue;
         }
         mergedResult = { ...mergedResult, ...(ret as { result: Partial<TargetResult> }).result };
       } else if (typeof ret === "object") {
-        if (phase !== "target-start") {
+        if (phase !== "subcommand-start") {
           anyReturn = false;
           continue;
         }

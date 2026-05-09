@@ -3,13 +3,13 @@ version: 0.1.0
 description: Index large clip target output through upstream context-mode MCP.
 entry: src/extension.ts
 contributes:
-  internalCommands:
+  commands:
     - context
     - ctx
   targetTypes: []
   hooks:
-    - target-start
-    - target-end
+    - subcommand-start
+    - subcommand-end
 runtime:
   dependencies:
     context-mode: ^1.0.104

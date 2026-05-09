@@ -94,7 +94,7 @@ export async function runList(registry: Registry, phase1Verbs?: Set<string>): Pr
     const rows = extensions.map((v) => ({
       name: v,
       nameColor: "38;2;180;141;173",
-      subject: registry.getInternalCommandDesc(v) ?? "",
+      subject: registry.getCommandDesc(v) ?? "",
     }));
     for (const line of formatListRows(rows, opts)) console.log(line);
   }

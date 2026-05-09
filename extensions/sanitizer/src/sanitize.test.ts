@@ -5,13 +5,12 @@ describe("sanitizeTargetResult", () => {
   test("redacts common secret shapes in stdout", () => {
     const result = sanitizeTargetResult({
       exitCode: 0,
-      stdout:
-        'token=abc123456789 access_token: "secret-token-123" Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.signature',
+      stdout: 'token=dummy-token-value access_token: "dummy-access-token" Authorization: Bearer dummy-token-value',
       stderr: "",
     });
 
-    expect(result.stdout).not.toContain("abc123456789");
-    expect(result.stdout).not.toContain("secret-token-123");
+    expect(result.stdout).not.toContain("dummy-token-value");
+    expect(result.stdout).not.toContain("dummy-access-token");
     expect(result.stdout).toContain("token=[REDACTED]");
     expect(result.stdout).toContain('access_token: "[REDACTED]"');
     expect(result.stdout).toContain("Bearer [REDACTED]");
@@ -22,11 +21,11 @@ describe("sanitizeTargetResult", () => {
     const result = sanitizeTargetResult({
       exitCode: 7,
       stdout: "",
-      stderr: "failed with ghp_abcdefghijklmnopqrstuvwxyz1234567890",
+      stderr: "failed with password=dummy-password-value",
     });
 
     expect(result.exitCode).toBe(7);
-    expect(result.stderr).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz1234567890");
+    expect(result.stderr).not.toContain("dummy-password-value");
     expect(result.stderr).toContain("[REDACTED]");
   });
 

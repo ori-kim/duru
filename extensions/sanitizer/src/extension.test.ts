@@ -3,7 +3,7 @@ import type { ExtensionApi, HookFn, HookPhase } from "@clip/core";
 import { extension } from "./extension.ts";
 
 describe("sanitizer extension", () => {
-  test("registers an target-end hook that sanitizes results", async () => {
+  test("registers an subcommand-end hook that sanitizes results", async () => {
     let registeredPhase: HookPhase | undefined;
     let registeredHook: HookFn | undefined;
 
@@ -14,14 +14,18 @@ describe("sanitizer extension", () => {
       },
     } as Partial<ExtensionApi> as ExtensionApi);
 
-    expect(registeredPhase).toBe("target-end");
+    expect(registeredPhase).toBe("subcommand-end");
     const result = await registeredHook?.({
-      phase: "target-end",
+      phase: "subcommand-end",
+      kind: "target",
+      command: "demo",
       targetName: "demo",
       targetType: "api",
       target: {},
       subcommand: "get",
+      subcommandIndex: 1,
       args: [],
+      globalOptions: {},
       headers: {},
       dryRun: false,
       jsonMode: false,

@@ -293,10 +293,10 @@ describe("dispatch / error handler 복구", () => {
   });
 });
 
-// --- target-end ctx.result ---
+// --- subcommand-end ctx.result ---
 
-describe("dispatch / target-end ctx.result", () => {
-  test("target-end 훅이 executor 결과를 ctx.result로 수신", async () => {
+describe("dispatch / subcommand-end ctx.result", () => {
+  test("subcommand-end 훅이 executor 결과를 ctx.result로 수신", async () => {
     let capturedResult: TargetResult | undefined;
     const reg = await makeRegistry(async () => ({
       exitCode: 0,
@@ -307,7 +307,7 @@ describe("dispatch / target-end ctx.result", () => {
     reg.register({
       name: "after-spy",
       init(api) {
-        api.registerHook("target-end", async (ctx) => {
+        api.registerHook("subcommand-end", async (ctx) => {
           capturedResult = ctx.result;
         });
       },
@@ -322,7 +322,7 @@ describe("dispatch / target-end ctx.result", () => {
 // --- Registry 훅 통합 ---
 
 describe("dispatch / registry 훅 통합", () => {
-  test("target-start 훅이 headers를 주입하면 executor에 전달", async () => {
+  test("subcommand-start 훅이 headers를 주입하면 executor에 전달", async () => {
     let capturedCtx: ExecutorContext | undefined;
     const reg = await makeRegistry(async (_, ctx) => {
       capturedCtx = ctx;
@@ -332,7 +332,7 @@ describe("dispatch / registry 훅 통합", () => {
     reg.register({
       name: "auth-hook",
       init(api) {
-        api.registerHook("target-start", async () => ({
+        api.registerHook("subcommand-start", async () => ({
           headers: { Authorization: "Bearer dummy-injected-token" },
         }));
       },
@@ -343,7 +343,7 @@ describe("dispatch / registry 훅 통합", () => {
     expect(capturedCtx?.headers?.Authorization).toBe("Bearer dummy-injected-token");
   });
 
-  test("target-start shortCircuit이 executor를 우회", async () => {
+  test("subcommand-start shortCircuit이 executor를 우회", async () => {
     let executorCalled = false;
     const reg = await makeRegistry(async () => {
       executorCalled = true;
@@ -353,7 +353,7 @@ describe("dispatch / registry 훅 통합", () => {
     reg.register({
       name: "short",
       init(api) {
-        api.registerHook("target-start", async () => ({
+        api.registerHook("subcommand-start", async () => ({
           shortCircuit: { exitCode: 99, stdout: "bypassed", stderr: "" },
         }));
       },
@@ -366,7 +366,7 @@ describe("dispatch / registry 훅 통합", () => {
     expect(executorCalled).toBe(false);
   });
 
-  test("target-end 훅이 result를 부분 머지", async () => {
+  test("subcommand-end 훅이 result를 부분 머지", async () => {
     const reg = await makeRegistry(async () => ({
       exitCode: 0,
       stdout: "original",
@@ -376,7 +376,7 @@ describe("dispatch / registry 훅 통합", () => {
     reg.register({
       name: "after",
       init(api) {
-        api.registerHook("target-end", async () => ({
+        api.registerHook("subcommand-end", async () => ({
           result: { stdout: "modified" },
         }));
       },

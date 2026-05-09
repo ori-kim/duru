@@ -26,8 +26,8 @@ extensions:
     entry: src/extension.ts
     enabled: true
     contributes:
-      internalCommands: [context, ctx]
-      hooks: [target-start, target-end]
+      commands: [context, ctx]
+      hooks: [subcommand-start, subcommand-end]
 ```
 
 With the extension installer, the runtime copy can be created from this repo source:

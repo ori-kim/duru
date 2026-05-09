@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { CONFIG_DIR } from "@clip/core";
-import type { CliCommandSummary, CliHookCtx } from "@clip/core";
+import type { CliCommandSummary, CommandHookCtx } from "@clip/core";
 
 export type HistoryRecord = {
   schemaVersion: 1;
@@ -166,7 +166,7 @@ function redactCommand(
     return redacted.argv;
   };
 
-  if (command.kind === "internal") {
+  if (command.kind === "command") {
     return { command: { ...command, argv: redactedArgv, args: redactList(command.args) }, redactions };
   }
   if (command.kind === "target") {
@@ -175,9 +175,9 @@ function redactCommand(
   return { command: { ...command, argv: redactedArgv } as CliCommandSummary, redactions };
 }
 
-export function recordCliEnd(ctx: CliHookCtx, rootDir = CONFIG_DIR): void {
-  if (ctx.phase !== "cli-end" || !ctx.command) return;
-  if (ctx.command.kind === "internal" && ctx.command.name === "history") return;
+export function recordCliEnd(ctx: CommandHookCtx, rootDir = CONFIG_DIR): void {
+  if (ctx.phase !== "command-end" || !ctx.command) return;
+  if (ctx.command.kind === "command" && ctx.command.name === "history") return;
 
   const redactedArgv = redactArgv(ctx.argv);
   const redactedCommand = redactCommand(ctx.command, redactedArgv.argv);
@@ -314,10 +314,10 @@ export type HistorySummary = {
 
 export function summarizeHistoryRecord(record: HistoryRecord): HistorySummary {
   const command = record.command;
-  if (command.kind === "internal") {
+  if (command.kind === "command") {
     const args = summarizeTokens(command.args, 72);
     return {
-      target: "internal",
+      target: "command",
       action: command.name,
       args,
       command: ["clip", command.name].join(" "),
@@ -356,7 +356,7 @@ function matchesQuery(record: HistoryRecord, query: string): boolean {
     record.process.cwd,
     commandText(record),
     command.kind,
-    command.kind === "internal" ? command.name : undefined,
+    command.kind === "command" ? command.name : undefined,
     command.kind === "target" ? command.target : undefined,
     command.kind === "target" ? command.targetType : undefined,
     command.kind === "target" ? command.subcommand : undefined,

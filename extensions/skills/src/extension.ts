@@ -3,7 +3,7 @@
  *
  * manifest entry point — extensions.yml에서 `entry: extension.ts`로 선언됨.
  *
- * Phase 2 lazy init: argv에서 "skills" internalCommand 매칭 시 이 파일이 import되고
+ * Phase 2 lazy init: argv에서 "skills" command 매칭 시 이 파일이 import되고
  * init(api)가 호출되어 clip skills 서브커맨드가 등록된다.
  */
 import type { ClipExtension } from "@clip/core";
@@ -12,14 +12,10 @@ import { runSkillsCmd } from "./skills.ts";
 export const extension: ClipExtension = {
   name: "ext:skills",
   init(api) {
-    api.registerInternalCommand(
-      "skills",
-      async ({ args }) => {
-        await runSkillsCmd(args);
-      },
-      {
-        description: "manage reusable prompt-template skills",
-        completion: () => `
+    api.commands.register({
+      name: "skills",
+      description: "manage reusable prompt-template skills",
+      completion: () => `
   if (( CURRENT == 3 )); then
     local -a subcmds=(
       'add:create a new skill scaffold'
@@ -58,7 +54,9 @@ export const extension: ClipExtension = {
         ;;
     esac
   fi`,
+      async run({ args }) {
+        await runSkillsCmd(args);
       },
-    );
+    });
   },
 };

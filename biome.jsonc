@@ -1,4 +1,7 @@
 {
+  "files": {
+    "ignore": ["apps/clip/src/core-type-bundle.generated.ts"]
+  },
   "formatter": {
     "indentStyle": "space",
     "indentWidth": 2,

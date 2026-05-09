@@ -131,7 +131,7 @@ clip notion search_pages --query "sprint retro" --dry-run
 curl -X POST 'https://mcp.notion.com/mcp' \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
-  -H 'Authorization: Bearer eyJhbGciOiJSUzI1NiJ9...' \
+  -H 'Authorization: Bearer dummy-token' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_pages","arguments":{"query":"sprint retro"}}}'
 ```
 

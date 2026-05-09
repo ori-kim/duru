@@ -10,7 +10,7 @@ export async function runAdd(args: string[], registry: Registry): Promise<void> 
   }
   validateIdentifier(name, "Target name");
 
-  const reservedNames = new Set(registry.listInternalVerbs());
+  const reservedNames = new Set(registry.listCommandNames());
   if (reservedNames.has(name)) {
     die(`"${name}" is a reserved command name and cannot be used as a target.`);
   }

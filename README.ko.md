@@ -70,6 +70,13 @@ npx skills add ori-kim/cli-proxy
 eval "$(clip completion zsh)"
 ```
 
+**업데이트:**
+
+```sh
+clip update --check
+clip update --yes
+```
+
 ## 빠른 시작
 
 ```sh
@@ -111,6 +118,7 @@ clip gql query --query '{ users { id name } }'
 | `clip list` | 전체 대상 목록 |
 | `clip login / logout <target>` | OAuth 인증 |
 | `clip refresh <target>` | 스펙/스키마 재fetch |
+| `clip update [--check]` | 최신 릴리즈에서 로컬 clip 바이너리 업데이트 |
 | `clip <target> tools` | 도구·오퍼레이션 목록 |
 | `clip <target> describe <op>` | 메서드/타입 상세 확인 |
 | `clip <target> types` | 전체 타입 목록 (gRPC/GraphQL) |

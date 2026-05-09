@@ -3,12 +3,16 @@ import { type ErrorCtx, type HookCtx, Registry } from "./extension.ts";
 
 function makeCtx(overrides: Partial<HookCtx> = {}): HookCtx {
   return {
-    phase: "target-start",
+    phase: "subcommand-start",
+    kind: "target",
+    command: "test",
     targetName: "test",
     targetType: "cli",
     target: Object.freeze({}),
     subcommand: "run",
+    subcommandIndex: 1,
     args: Object.freeze([]) as readonly string[],
+    globalOptions: {},
     headers: Object.freeze({}) as Record<string, string>,
     dryRun: false,
     jsonMode: false,
@@ -20,7 +24,7 @@ function makeCtx(overrides: Partial<HookCtx> = {}): HookCtx {
 function makeErrorCtx(overrides: Partial<ErrorCtx> = {}): ErrorCtx {
   return {
     ...makeCtx(),
-    phase: "target-error",
+    phase: "subcommand-error",
     error: new Error("test error"),
     ...overrides,
   };
@@ -36,14 +40,14 @@ describe("Registry / 등록", () => {
     reg.register({
       name: "ext",
       init(api) {
-        api.registerHook("target-start", async () => {
+        api.registerHook("subcommand-start", async () => {
           called = true;
         });
       },
     });
     await reg.initAll();
 
-    await reg.runHooks("target-start", makeCtx());
+    await reg.runHooks("subcommand-start", makeCtx());
     expect(called).toBe(true);
   });
 
@@ -65,6 +69,28 @@ describe("Registry / 등록", () => {
     expect(reg.getTargetType("mytype")).toBeDefined();
     expect(reg.listTypes()).toContain("mytype");
   });
+
+  test("commands.register와 options.registerGlobal 메타데이터 조회 가능", async () => {
+    const reg = new Registry();
+
+    reg.register({
+      name: "ext",
+      init(api) {
+        api.options.registerGlobal({ name: "trace-id", type: "value", placement: "leading" });
+        api.commands.register({
+          name: "hello",
+          description: "say hello",
+          options: [{ name: "check", type: "boolean" }],
+          async run() {},
+        });
+      },
+    });
+    await reg.initAll();
+
+    expect(reg.getCommand("hello")?.description).toBe("say hello");
+    expect(reg.getCommand("hello")?.options?.[0]?.name).toBe("check");
+    expect(reg.listGlobalOptions().map((option) => option.name)).toContain("trace-id");
+  });
 });
 
 // --- 우선순위 ---
@@ -78,14 +104,14 @@ describe("Registry / 우선순위", () => {
       name: "ext",
       init(api) {
         api.registerHook(
-          "target-start",
+          "subcommand-start",
           async () => {
             order.push(2);
           },
           { priority: 200 },
         );
         api.registerHook(
-          "target-start",
+          "subcommand-start",
           async () => {
             order.push(1);
           },
@@ -95,7 +121,7 @@ describe("Registry / 우선순위", () => {
     });
     await reg.initAll();
 
-    await reg.runHooks("target-start", makeCtx());
+    await reg.runHooks("subcommand-start", makeCtx());
     expect(order).toEqual([1, 2]);
   });
 
@@ -106,11 +132,11 @@ describe("Registry / 우선순위", () => {
     reg.register({
       name: "ext",
       init(api) {
-        api.registerHook("target-start", async () => {
+        api.registerHook("subcommand-start", async () => {
           order.push(100);
         });
         api.registerHook(
-          "target-start",
+          "subcommand-start",
           async () => {
             order.push(50);
           },
@@ -120,7 +146,7 @@ describe("Registry / 우선순위", () => {
     });
     await reg.initAll();
 
-    await reg.runHooks("target-start", makeCtx());
+    await reg.runHooks("subcommand-start", makeCtx());
     expect(order[0]).toBe(50);
   });
 });
@@ -136,7 +162,7 @@ describe("Registry / match 필터링", () => {
       name: "ext",
       init(api) {
         api.registerHook(
-          "target-start",
+          "subcommand-start",
           async () => {
             called = true;
           },
@@ -146,10 +172,10 @@ describe("Registry / match 필터링", () => {
     });
     await reg.initAll();
 
-    await reg.runHooks("target-start", makeCtx({ targetType: "cli" }));
+    await reg.runHooks("subcommand-start", makeCtx({ targetType: "cli" }));
     expect(called).toBe(false);
 
-    await reg.runHooks("target-start", makeCtx({ targetType: "api" }));
+    await reg.runHooks("subcommand-start", makeCtx({ targetType: "api" }));
     expect(called).toBe(true);
   });
 
@@ -161,7 +187,7 @@ describe("Registry / match 필터링", () => {
       name: "ext",
       init(api) {
         api.registerHook(
-          "target-start",
+          "subcommand-start",
           async () => {
             called = true;
           },
@@ -171,10 +197,10 @@ describe("Registry / match 필터링", () => {
     });
     await reg.initAll();
 
-    await reg.runHooks("target-start", makeCtx({ targetName: "notion" }));
+    await reg.runHooks("subcommand-start", makeCtx({ targetName: "notion" }));
     expect(called).toBe(false);
 
-    await reg.runHooks("target-start", makeCtx({ targetName: "linear" }));
+    await reg.runHooks("subcommand-start", makeCtx({ targetName: "linear" }));
     expect(called).toBe(true);
   });
 
@@ -186,7 +212,7 @@ describe("Registry / match 필터링", () => {
       name: "ext",
       init(api) {
         api.registerHook(
-          "target-start",
+          "subcommand-start",
           async () => {
             called = true;
           },
@@ -196,10 +222,10 @@ describe("Registry / match 필터링", () => {
     });
     await reg.initAll();
 
-    await reg.runHooks("target-start", makeCtx({ targetName: "notion" }));
+    await reg.runHooks("subcommand-start", makeCtx({ targetName: "notion" }));
     expect(called).toBe(false);
 
-    await reg.runHooks("target-start", makeCtx({ targetName: "linear" }));
+    await reg.runHooks("subcommand-start", makeCtx({ targetName: "linear" }));
     expect(called).toBe(true);
   });
 
@@ -211,7 +237,7 @@ describe("Registry / match 필터링", () => {
       name: "ext",
       init(api) {
         api.registerHook(
-          "target-start",
+          "subcommand-start",
           async () => {
             called = true;
           },
@@ -221,10 +247,10 @@ describe("Registry / match 필터링", () => {
     });
     await reg.initAll();
 
-    await reg.runHooks("target-start", makeCtx({ subcommand: "run" }));
+    await reg.runHooks("subcommand-start", makeCtx({ subcommand: "run" }));
     expect(called).toBe(false);
 
-    await reg.runHooks("target-start", makeCtx({ subcommand: "tools" }));
+    await reg.runHooks("subcommand-start", makeCtx({ subcommand: "tools" }));
     expect(called).toBe(true);
   });
 });
@@ -232,7 +258,7 @@ describe("Registry / match 필터링", () => {
 // --- short-circuit ---
 
 describe("Registry / short-circuit", () => {
-  test("target-start에서 shortCircuit 반환 → 즉시 반환, 이후 훅 미호출", async () => {
+  test("subcommand-start에서 shortCircuit 반환 → 즉시 반환, 이후 훅 미호출", async () => {
     const reg = new Registry();
     let secondCalled = false;
     const shortResult = { exitCode: 42, stdout: "short", stderr: "" };
@@ -240,9 +266,9 @@ describe("Registry / short-circuit", () => {
     reg.register({
       name: "ext",
       init(api) {
-        api.registerHook("target-start", async () => ({ shortCircuit: shortResult }), { priority: 10 });
+        api.registerHook("subcommand-start", async () => ({ shortCircuit: shortResult }), { priority: 10 });
         api.registerHook(
-          "target-start",
+          "subcommand-start",
           async () => {
             secondCalled = true;
           },
@@ -252,24 +278,24 @@ describe("Registry / short-circuit", () => {
     });
     await reg.initAll();
 
-    const ret = await reg.runHooks("target-start", makeCtx());
+    const ret = await reg.runHooks("subcommand-start", makeCtx());
     expect(ret).toEqual({ shortCircuit: shortResult });
     expect(secondCalled).toBe(false);
   });
 
-  test("cli-end에서 shortCircuit 반환 → 무시됨, null 반환", async () => {
+  test("command-end에서 shortCircuit 반환 → 무시됨, null 반환", async () => {
     const reg = new Registry();
 
     reg.register({
       name: "ext",
       init(api) {
-        api.registerHook("cli-end", async () => ({ shortCircuit: { exitCode: 0, stdout: "", stderr: "" } }));
+        api.registerHook("command-end", async () => ({ shortCircuit: { exitCode: 0, stdout: "", stderr: "" } }));
       },
     });
     await reg.initAll();
 
-    const ret = await reg.runHooks("cli-end", {
-      phase: "cli-end",
+    const ret = await reg.runHooks("command-end", {
+      phase: "command-end",
       argv: [],
       startedAt: "2026-05-08T00:00:00.000Z",
       exitCode: 0,
@@ -277,26 +303,26 @@ describe("Registry / short-circuit", () => {
     expect(ret).toBeNull();
   });
 
-  test("target-end에서 shortCircuit 반환 → 무시됨", async () => {
+  test("subcommand-end에서 shortCircuit 반환 → 무시됨", async () => {
     const reg = new Registry();
 
     reg.register({
       name: "ext",
       init(api) {
-        api.registerHook("target-end", async () => ({ shortCircuit: { exitCode: 0, stdout: "", stderr: "" } }));
+        api.registerHook("subcommand-end", async () => ({ shortCircuit: { exitCode: 0, stdout: "", stderr: "" } }));
       },
     });
     await reg.initAll();
 
-    const ret = await reg.runHooks("target-end", makeCtx({ phase: "target-end" }));
+    const ret = await reg.runHooks("subcommand-end", makeCtx({ phase: "subcommand-end" }));
     expect(ret).toBeNull();
   });
 });
 
-// --- target-end 역순 ---
+// --- subcommand-end 역순 ---
 
-describe("Registry / target-end 역순", () => {
-  test("target-end는 priority 내림차순 실행 (높은 게 먼저)", async () => {
+describe("Registry / subcommand-end 역순", () => {
+  test("subcommand-end는 priority 내림차순 실행 (높은 게 먼저)", async () => {
     const reg = new Registry();
     const order: number[] = [];
 
@@ -304,14 +330,14 @@ describe("Registry / target-end 역순", () => {
       name: "ext",
       init(api) {
         api.registerHook(
-          "target-end",
+          "subcommand-end",
           async () => {
             order.push(1);
           },
           { priority: 10 },
         );
         api.registerHook(
-          "target-end",
+          "subcommand-end",
           async () => {
             order.push(2);
           },
@@ -321,11 +347,11 @@ describe("Registry / target-end 역순", () => {
     });
     await reg.initAll();
 
-    await reg.runHooks("target-end", makeCtx({ phase: "target-end" }));
+    await reg.runHooks("subcommand-end", makeCtx({ phase: "subcommand-end" }));
     expect(order).toEqual([2, 1]);
   });
 
-  test("target-start는 priority 오름차순 실행 (낮은 게 먼저)", async () => {
+  test("subcommand-start는 priority 오름차순 실행 (낮은 게 먼저)", async () => {
     const reg = new Registry();
     const order: number[] = [];
 
@@ -333,14 +359,14 @@ describe("Registry / target-end 역순", () => {
       name: "ext",
       init(api) {
         api.registerHook(
-          "target-start",
+          "subcommand-start",
           async () => {
             order.push(1);
           },
           { priority: 10 },
         );
         api.registerHook(
-          "target-start",
+          "subcommand-start",
           async () => {
             order.push(2);
           },
@@ -350,7 +376,7 @@ describe("Registry / target-end 역순", () => {
     });
     await reg.initAll();
 
-    await reg.runHooks("target-start", makeCtx());
+    await reg.runHooks("subcommand-start", makeCtx());
     expect(order).toEqual([1, 2]);
   });
 });
@@ -364,7 +390,7 @@ describe("Registry / 타임아웃", () => {
     reg.register({
       name: "ext",
       init(api) {
-        api.registerHook("target-start", async () => {
+        api.registerHook("subcommand-start", async () => {
           await new Promise((r) => setTimeout(r, 300));
         });
       },
@@ -374,7 +400,7 @@ describe("Registry / 타임아웃", () => {
     const prev = process.env.CLIP_EXT_TIMEOUT_MS;
     process.env.CLIP_EXT_TIMEOUT_MS = "50";
     try {
-      await expect(reg.runHooks("target-start", makeCtx())).rejects.toThrow("timed out");
+      await expect(reg.runHooks("subcommand-start", makeCtx())).rejects.toThrow("timed out");
     } finally {
       if (prev === undefined) process.env.CLIP_EXT_TIMEOUT_MS = undefined;
       else process.env.CLIP_EXT_TIMEOUT_MS = prev;
@@ -661,44 +687,80 @@ describe("Registry / 중복 등록 거부", () => {
     await expect(reg.initAll()).rejects.toThrow("owned by a builtin extension");
   });
 
-  test("allowVerbOverride() 없이 builtin verb를 user extension이 탈취 시도 → throw", async () => {
+  test("commands.register()로 builtin command를 user extension이 탈취 시도 → throw", async () => {
     const reg = new Registry();
 
     reg.register({
       name: "builtin:cmds",
       init(api) {
-        api.registerInternalCommand("myverb", async () => {});
+        api.commands.register({ name: "myverb", async run() {} });
       },
     });
     reg.register({
       name: "user:ext",
       init(api) {
-        api.registerInternalCommand("myverb", async () => {});
+        api.commands.register({ name: "myverb", async run() {} });
       },
     });
 
     await expect(reg.initAll()).rejects.toThrow("owned by a builtin extension");
   });
 
-  test("allowVerbOverride() 호출 시 builtin verb를 user extension이 override 가능", async () => {
+  test("commands.override()로 builtin command를 명시적으로 override 가능", async () => {
     const reg = new Registry();
+    let output = "";
 
     reg.register({
       name: "builtin:cmds",
       init(api) {
-        api.registerInternalCommand("myverb", async () => {});
+        api.commands.register({
+          name: "add",
+          async run() {
+            output = "builtin";
+          },
+        });
       },
     });
-    reg.allowVerbOverride("myverb");
     reg.register({
       name: "user:ext",
       init(api) {
-        api.registerInternalCommand("myverb", async () => {});
+        api.commands.override("add", {
+          async run() {
+            output = "override";
+          },
+        });
       },
     });
 
     await expect(reg.initAll()).resolves.toBeUndefined();
-    expect(reg.getInternalCommand("myverb")).toBeDefined();
+    await reg.getCommandHandler("add")?.({
+      args: [],
+      options: {},
+      globalOptions: {},
+      argv: [],
+      logger: console,
+      signal: new AbortController().signal,
+    });
+    expect(output).toBe("override");
+  });
+
+  test("user extension끼리 같은 command를 중복 등록하면 throw", async () => {
+    const reg = new Registry();
+
+    reg.register({
+      name: "user:one",
+      init(api) {
+        api.commands.register({ name: "same", async run() {} });
+      },
+    });
+    reg.register({
+      name: "user:two",
+      init(api) {
+        api.commands.register({ name: "same", async run() {} });
+      },
+    });
+
+    await expect(reg.initAll()).rejects.toThrow("already registered");
   });
 });
 
@@ -711,13 +773,13 @@ describe("Registry / hooks 결과 머지", () => {
     reg.register({
       name: "ext",
       init(api) {
-        api.registerHook("target-start", async () => ({ headers: { a: "1" } }), { priority: 10 });
-        api.registerHook("target-start", async () => ({ headers: { b: "2" } }), { priority: 20 });
+        api.registerHook("subcommand-start", async () => ({ headers: { a: "1" } }), { priority: 10 });
+        api.registerHook("subcommand-start", async () => ({ headers: { b: "2" } }), { priority: 20 });
       },
     });
     await reg.initAll();
 
-    const ret = await reg.runHooks("target-start", makeCtx());
+    const ret = await reg.runHooks("subcommand-start", makeCtx());
     expect(ret).toEqual({ headers: { a: "1", b: "2" } });
   });
 
@@ -727,31 +789,31 @@ describe("Registry / hooks 결과 머지", () => {
     reg.register({
       name: "ext",
       init(api) {
-        api.registerHook("target-start", async () => ({ headers: { auth: "v1" } }), { priority: 10 });
-        api.registerHook("target-start", async () => ({ headers: { auth: "v2" } }), { priority: 20 });
+        api.registerHook("subcommand-start", async () => ({ headers: { auth: "v1" } }), { priority: 10 });
+        api.registerHook("subcommand-start", async () => ({ headers: { auth: "v2" } }), { priority: 20 });
       },
     });
     await reg.initAll();
 
-    const ret = await reg.runHooks("target-start", makeCtx());
+    const ret = await reg.runHooks("subcommand-start", makeCtx());
     expect(ret).toEqual({ headers: { auth: "v2" } });
   });
 
-  test("target-end result 부분 머지", async () => {
+  test("subcommand-end result 부분 머지", async () => {
     const reg = new Registry();
 
     reg.register({
       name: "ext",
       init(api) {
-        api.registerHook("target-end", async () => ({ result: { stdout: "modified" } }));
+        api.registerHook("subcommand-end", async () => ({ result: { stdout: "modified" } }));
       },
     });
     await reg.initAll();
 
     const ret = await reg.runHooks(
-      "target-end",
+      "subcommand-end",
       makeCtx({
-        phase: "target-end",
+        phase: "subcommand-end",
         result: { exitCode: 0, stdout: "original", stderr: "" },
       }),
     );
@@ -763,24 +825,24 @@ describe("Registry / hooks 결과 머지", () => {
     reg.register({ name: "empty", init() {} });
     await reg.initAll();
 
-    expect(await reg.runHooks("target-start", makeCtx())).toBeNull();
+    expect(await reg.runHooks("subcommand-start", makeCtx())).toBeNull();
   });
 
-  test("target-end 낮은 priority 훅이 나중에 실행되어 같은 키를 덮어씀", async () => {
+  test("subcommand-end 낮은 priority 훅이 나중에 실행되어 같은 키를 덮어씀", async () => {
     const reg = new Registry();
 
     reg.register({
       name: "ext",
       init(api) {
         // priority 20 → 역순이므로 먼저 실행
-        api.registerHook("target-end", async () => ({ result: { stdout: "high-prio" } }), { priority: 20 });
+        api.registerHook("subcommand-end", async () => ({ result: { stdout: "high-prio" } }), { priority: 20 });
         // priority 10 → 나중에 실행 → 동일 키는 이 값이 승리
-        api.registerHook("target-end", async () => ({ result: { stdout: "low-prio" } }), { priority: 10 });
+        api.registerHook("subcommand-end", async () => ({ result: { stdout: "low-prio" } }), { priority: 10 });
       },
     });
     await reg.initAll();
 
-    const ret = await reg.runHooks("target-end", makeCtx({ phase: "target-end" }));
+    const ret = await reg.runHooks("subcommand-end", makeCtx({ phase: "subcommand-end" }));
     expect(ret).toEqual({ result: { stdout: "low-prio" } });
   });
 
@@ -790,13 +852,13 @@ describe("Registry / hooks 결과 머지", () => {
     reg.register({
       name: "ext",
       init(api) {
-        api.registerHook("target-start", async () => {
+        api.registerHook("subcommand-start", async () => {
           /* no return */
         });
       },
     });
     await reg.initAll();
 
-    expect(await reg.runHooks("target-start", makeCtx())).toBeNull();
+    expect(await reg.runHooks("subcommand-start", makeCtx())).toBeNull();
   });
 });

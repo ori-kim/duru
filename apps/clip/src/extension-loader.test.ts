@@ -20,7 +20,7 @@ function createTmpExtension(
   name: string,
   opts: {
     hooks?: boolean;
-    internalCommands?: string[];
+    commands?: string[];
     targetTypes?: string[];
   },
 ): string {
@@ -49,7 +49,7 @@ function createTmpManifest(
     name: string;
     path: string;
     hooks?: boolean;
-    internalCommands?: string[];
+    commands?: string[];
     targetTypes?: string[];
   }>,
 ): string {
@@ -59,11 +59,11 @@ function createTmpManifest(
     lines.push(`  - name: ${e.name}`);
     lines.push(`    path: ${e.path}`);
     lines.push("    entry: index.ts");
-    const cmds = e.internalCommands ?? [];
+    const cmds = e.commands ?? [];
     const types = e.targetTypes ?? [];
     const hooks = e.hooks ? ["startup"] : [];
     lines.push("    contributes:");
-    lines.push(`      internalCommands: [${cmds.map((c) => JSON.stringify(c)).join(", ")}]`);
+    lines.push(`      commands: [${cmds.map((c) => JSON.stringify(c)).join(", ")}]`);
     lines.push(`      targetTypes: [${types.map((t) => JSON.stringify(t)).join(", ")}]`);
     lines.push(`      hooks: [${hooks.map((h) => JSON.stringify(h)).join(", ")}]`);
   }
@@ -78,8 +78,8 @@ function createTmpManifest(
 describe("extension-loader / Phase 2 lazy init", () => {
   test("argv='list' — extension metadata 조회를 위해 skills extension도 import됨", async () => {
     const dir = mkdtempSync(join(tmpdir(), "clip-ext-test-"));
-    const extDir = createTmpExtension(dir, "skills-ext", { internalCommands: ["skills"] });
-    const manifestPath = createTmpManifest(dir, [{ name: "skills-ext", path: extDir, internalCommands: ["skills"] }]);
+    const extDir = createTmpExtension(dir, "skills-ext", { commands: ["skills"] });
+    const manifestPath = createTmpManifest(dir, [{ name: "skills-ext", path: extDir, commands: ["skills"] }]);
 
     // globalThis.__imported 초기화
     (globalThis as Record<string, unknown>).__imported = new Set<string>();
@@ -99,8 +99,8 @@ describe("extension-loader / Phase 2 lazy init", () => {
 
   test("argv='skills' — skills extension은 import 됨", async () => {
     const dir = mkdtempSync(join(tmpdir(), "clip-ext-test-"));
-    const extDir = createTmpExtension(dir, "skills-ext2", { internalCommands: ["skills"] });
-    const manifestPath = createTmpManifest(dir, [{ name: "skills-ext2", path: extDir, internalCommands: ["skills"] }]);
+    const extDir = createTmpExtension(dir, "skills-ext2", { commands: ["skills"] });
+    const manifestPath = createTmpManifest(dir, [{ name: "skills-ext2", path: extDir, commands: ["skills"] }]);
 
     (globalThis as Record<string, unknown>).__imported = new Set<string>();
 

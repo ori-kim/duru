@@ -71,6 +71,13 @@ Install via [skills.sh](https://skills.sh) — GitHub repo-based skill registry.
 eval "$(clip completion zsh)"
 ```
 
+**Update:**
+
+```sh
+clip update --check
+clip update --yes
+```
+
 ## Quick Start
 
 ```sh
@@ -112,6 +119,7 @@ clip gql query --query '{ users { id name } }'
 | `clip list` | List all targets |
 | `clip login / logout <target>` | OAuth authentication |
 | `clip refresh <target>` | Re-fetch spec or schema |
+| `clip update [--check]` | Update the local clip binary from the latest release |
 | `clip <target> tools` | List available tools/operations |
 | `clip <target> describe <op>` | Show method/type details |
 | `clip <target> types` | List all types (gRPC/GraphQL) |
@@ -140,7 +148,7 @@ Drop a `.ts` file into `~/.clip/extensions/` to add hooks or new target types:
 export default {
   name: "my:trace",
   init(api) {
-    api.registerHook("target-start", (ctx) => {
+    api.registerHook("subcommand-start", (ctx) => {
       api.logger.info(`→ ${ctx.targetName} ${ctx.subcommand}`);
     });
   },

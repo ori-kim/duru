@@ -1,6 +1,6 @@
 # clip sanitizer extension
 
-Optional `target-end` hook that redacts sensitive-looking output and warns on prompt-injection text.
+Optional `subcommand-end` hook that redacts sensitive-looking output and warns on prompt-injection text.
 
 Example manifest entry:
 
@@ -10,7 +10,7 @@ extensions:
     path: /path/to/clip/extensions/sanitizer/src
     entry: extension.ts
     contributes:
-      hooks: [target-end]
+      hooks: [subcommand-end]
 ```
 
 For passthrough CLI targets, use `--pipe` when you need captured output to be sanitized.

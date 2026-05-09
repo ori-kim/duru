@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CliHookCtx } from "@clip/core";
+import type { CommandHookCtx } from "@clip/core";
 import {
   type HistoryRecord,
   appendHistoryRecord,
@@ -56,7 +56,7 @@ describe("history records", () => {
       "--api-key=dummy-api-key",
       "--author",
       "@me",
-      "Authorization=Bearer dummy-bearer-token",
+      "Authorization=Bearer dummy-token-value",
     ]);
 
     expect(result.argv).toEqual([
@@ -94,24 +94,24 @@ describe("history records", () => {
     expect(target.records.map((item) => item.id)).toEqual(["new", "old"]);
   });
 
-  test("cli-end recorder skips clip history commands and records target result byte counts", () => {
+  test("command-end recorder skips clip history commands and records target result byte counts", () => {
     const home = tempHome();
 
     recordCliEnd(
       {
-        phase: "cli-end",
+        phase: "command-end",
         argv: ["history", "list"],
         startedAt: "2026-05-08T04:00:00.000Z",
         durationMs: 3,
         exitCode: 0,
-        command: { kind: "internal", argv: ["history", "list"], name: "history", args: ["list"] },
+        command: { kind: "command", argv: ["history", "list"], name: "history", args: ["list"] },
       },
       home,
     );
     expect(queryHistory({}, home).records).toEqual([]);
 
-    const ctx: CliHookCtx = {
-      phase: "cli-end",
+    const ctx: CommandHookCtx = {
+      phase: "command-end",
       argv: ["catservice", "list-cats", "--json"],
       startedAt: "2026-05-08T05:00:00.000Z",
       durationMs: 9,

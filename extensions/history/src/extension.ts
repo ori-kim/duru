@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { CONFIG_DIR, die } from "@clip/core";
-import type { CliHookCtx, ClipExtension } from "@clip/core";
+import type { ClipExtension, CommandHookCtx } from "@clip/core";
 import {
   type HistoryQueryOptions,
   type HistoryQueryResult,
@@ -407,18 +407,16 @@ function zshCompletion(): string {
 export const extension: ClipExtension = {
   name: "history",
   init(api) {
-    api.registerInternalCommand(
-      "history",
-      async ({ args }) => {
+    api.commands.register({
+      name: "history",
+      description: "list local clip history",
+      completion: zshCompletion,
+      async run({ args }) {
         await runHistoryCmd(args);
       },
-      {
-        description: "list local clip history",
-        completion: zshCompletion,
-      },
-    );
+    });
 
-    api.registerHook("cli-end", (ctx: CliHookCtx) => {
+    api.registerHook("command-end", (ctx: CommandHookCtx) => {
       recordCliEnd(ctx);
     });
   },

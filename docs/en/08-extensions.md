@@ -34,7 +34,7 @@ The simplest form: add behavior to existing target types (logging, header inject
 export const extension = {
   name: "my:audit",
   init(api) {
-    api.registerHook("target-start", (ctx) => {
+    api.registerHook("subcommand-start", (ctx) => {
       api.logger.info(`→ ${ctx.targetName} ${ctx.subcommand} ${ctx.args.join(" ")}`);
     });
   },
@@ -50,7 +50,7 @@ extensions:
     path: /Users/me/.clip/extensions/audit
     entry: index.ts
     contributes:
-      hooks: ["target-start"]   # eager init — hooks-declaring extensions always load
+      hooks: ["subcommand-start"]   # eager init — hooks-declaring extensions always load
 ```
 
 **3. Run**
@@ -70,6 +70,7 @@ Adding a new target type integrates it with `clip add`, `clip list`, and executi
 
 ```ts
 // ~/.clip/extensions/sqlite/index.ts
+import { addTarget } from "@clip/core";
 import { z } from "zod";
 
 const schema = z.object({
@@ -112,7 +113,7 @@ export const extension = {
       addHandler: async ({ name, positionals, flags }) => {
         const file = flags["file"] ?? positionals[0];
         if (!file) throw new Error("Usage: clip add <name> <file.db> --sqlite");
-        await api.addTarget(name, "sqlite", { file });
+        await addTarget(name, "sqlite", { file });
         console.log(`Added SQLite target "${name}" → ${file}`);
       },
 
@@ -186,33 +187,35 @@ Use hooks to observe CLI runs or modify the behavior of existing target types.
 
 | Phase | When | Can return |
 |-------|------|-----------|
-| `cli-start` | After extensions initialize, before command execution | `void` |
-| `cli-end` | After command execution completes | `void` |
-| `target-start` | After ACL check, before executor | Modify headers/args/subcommand, or short-circuit |
-| `target-end` | After executor returns | Partial-merge the result |
+| `command-start` | After extensions initialize, before command execution | `void` |
+| `command-end` | After command execution completes | `void` |
+| `subcommand-start` | After ACL check, before executor | Modify headers/args/subcommand, or short-circuit |
+| `subcommand-end` | After executor returns | Partial-merge the result |
+
+`subcommand-*` hooks run for both target calls (`clip <target> <subcommand>`) and top-level commands (`clip add`, `clip history`, etc.). The context includes `kind`, `command`, `subcommand`, and `subcommandIndex` so hooks can distinguish where the subcommand token came from.
 
 ```ts
 // Inject headers
-api.registerHook("target-start", async (ctx) => {
+api.registerHook("subcommand-start", async (ctx) => {
   if (ctx.targetType !== "api") return;
   const token = await fetchToken(api.env["TOKEN_URL"]!);
   return { headers: { Authorization: `Bearer ${token}` } };
 });
 
 // Filter by type / target
-api.registerHook("target-start", injectAuth, {
+api.registerHook("subcommand-start", injectAuth, {
   match: { type: ["api", "graphql"], target: [/^prod-/] },
 });
 
 // Short-circuit
-api.registerHook("target-start", (ctx) => {
+api.registerHook("subcommand-start", (ctx) => {
   if (ctx.dryRun) {
     return { shortCircuit: { exitCode: 0, stdout: "[dry-run] skipped", stderr: "" } };
   }
 });
 
 // Rewrite result
-api.registerHook("target-end", (ctx) => {
+api.registerHook("subcommand-end", (ctx) => {
   if (!ctx.result) return;
   return { result: { stdout: ctx.result.stdout.replace(/secret=\S+/g, "secret=***") } };
 });
@@ -257,7 +260,7 @@ NAME              KIND     STATUS    CONTRIBUTES
 protocol-cli      builtin  enabled   types=[cli]
 protocol-mcp      builtin  enabled   types=[mcp]
 user-sqlite       user     enabled   types=[sqlite]
-my-audit          user     disabled  hooks=[target-start]
+my-audit          user     disabled  hooks=[subcommand-start]
 ```
 
 ### Installing From GitHub
@@ -282,7 +285,7 @@ name: myext
 version: 0.1.0
 entry: src/extension.ts
 contributes:
-  internalCommands: [myext]
+  commands: [myext]
   targetTypes: []
   hooks: []
 runtime:
@@ -301,10 +304,83 @@ extensions:
     path: myext
     entry: src/extension.ts
     contributes:
-      internalCommands: [myext]
+      commands: [myext]
       targetTypes: []
       hooks: []
 ```
+
+---
+
+## Top-Level Commands
+
+Built-in top-level commands are registered before user extensions. A user extension can add a new command with `api.commands.register()`:
+
+```ts
+api.commands.register({
+  name: "hello",
+  description: "print a greeting",
+  options: [
+    { name: "check", type: "boolean" },
+    { name: "version", type: "value", valueName: "tag" },
+    { name: "yes", type: "boolean", aliases: ["y"] },
+  ],
+  async run(ctx) {
+    console.log(
+      JSON.stringify({
+        args: ctx.args,
+        options: ctx.options,
+        globalOptions: ctx.globalOptions,
+      }),
+    );
+  },
+});
+```
+
+To replace a built-in command such as `clip add`, use the explicit override API:
+
+```ts
+api.commands.override("add", {
+  async run(ctx) {
+    console.log(`custom add flow: ${ctx.args.join(" ")}`);
+  },
+});
+```
+
+The extension manifest must still declare the command so the lazy loader imports it when that verb is used:
+
+```yaml
+contributes:
+  commands: [add]
+```
+
+`clip update` is an early built-in command. It runs before user extensions and hooks so it can repair a broken local install. It is not overrideable.
+
+---
+
+## Global Options
+
+Extensions can register leading or anywhere-style global options. Leading options are parsed before the top-level command; anywhere options can also be stripped from target invocations.
+
+```ts
+api.options.registerGlobal({
+  name: "trace-id",
+  type: "value",
+  placement: "leading",
+  valueName: "id",
+});
+```
+
+Declare global options in the manifest so the lazy loader can skip them while finding the command verb:
+
+```yaml
+contributes:
+  commands: [hello]
+  globalOptions:
+    - name: trace-id
+      type: value
+```
+
+Parsed values are available as `ctx.globalOptions` in command handlers, executors, and `subcommand-*` hooks.
 
 ---
 
@@ -321,7 +397,7 @@ targetTypes-only extensions → Phase 2 only when that type is used (lazy)
 Execution flow after init:
 
 ```
-init()  →  [cli-start]  →  [target-start]  →  executor  →  [target-end]  →  [cli-end]
+init()  →  [command-start]  →  [subcommand-start]  →  executor  →  [subcommand-end]  →  [command-end]
                                                      ↓
                                         [errorHandler on throw]
 dispose()  ←  SIGINT / beforeExit
@@ -366,7 +442,7 @@ Types are optional — extensions work fine without them:
 export const extension = {
   name: "my:hook",
   init(api) {
-    api.registerHook("target-start", (ctx) => {
+    api.registerHook("subcommand-start", (ctx) => {
       console.error(ctx.targetName);
     });
   },

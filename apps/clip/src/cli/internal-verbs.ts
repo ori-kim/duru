@@ -14,6 +14,7 @@ export const BUILTIN_DESC: Record<string, string> = {
   profile: "manage profiles",
   refresh: "re-fetch OpenAPI spec for an API target",
   remove: "unregister a target",
+  update: "update the clip binary from the latest release",
   unbind: "remove a native command shim",
 };
 
@@ -23,8 +24,8 @@ export type ClassifiedVerbs = {
 };
 
 export function classifyInternalVerbs(registry: Registry, phase1Verbs?: Set<string>): ClassifiedVerbs {
-  const all = new Set(registry.listInternalVerbs());
-  const userInit = new Set(registry.listUserInternalVerbs());
+  const all = new Set(registry.listCommandNames());
+  const userInit = new Set(registry.listUserCommandNames());
   const userAll = new Set([...userInit, ...(phase1Verbs ?? [])]);
   const builtin = [...all].filter((v) => !userAll.has(v)).sort();
   const extensions = [...userAll].sort();

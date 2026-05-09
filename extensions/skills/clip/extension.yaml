@@ -3,7 +3,7 @@ version: 0.1.0
 description: Manage reusable prompt-template skills and install them into agents.
 entry: src/extension.ts
 contributes:
-  internalCommands:
+  commands:
     - skills
   targetTypes: []
   hooks: []

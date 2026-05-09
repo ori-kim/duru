@@ -1318,27 +1318,23 @@ function fail(message: string): never {
 export const extension: ClipExtension = {
   name: "clip-context-mode",
   init(api) {
-    api.registerInternalCommand(
-      "context",
-      async ({ args }) => {
+    api.commands.register({
+      name: "context",
+      description: "enable or disable context-mode for clip targets",
+      async run({ args }) {
         await handleContextCommand(args);
       },
-      {
-        description: "enable or disable context-mode for clip targets",
-      },
-    );
+    });
 
-    api.registerInternalCommand(
-      "ctx",
-      async ({ args }) => {
+    api.commands.register({
+      name: "ctx",
+      description: "search and manage context-mode indexed output",
+      async run({ args }) {
         await handleCtxCommand(args);
       },
-      {
-        description: "search and manage context-mode indexed output",
-      },
-    );
+    });
 
-    api.registerHook("target-start", async (ctx) => {
+    api.registerHook("subcommand-start", async (ctx) => {
       if (process.env[BYPASS_ENV] === "1") return;
 
       const parsed = extractContextFlag(ctx.args);
@@ -1356,7 +1352,7 @@ export const extension: ClipExtension = {
       if (parsed.changed) return { args: parsed.args };
     });
 
-    api.registerHook("target-end", async (ctx) => {
+    api.registerHook("subcommand-end", async (ctx) => {
       if (process.env[BYPASS_ENV] === "1") return;
       if (!ctx.result) return;
       const compacted = await applyContextMode(ctx, ctx.result, ctx.args, invocationOverride, invocationJsonChunkMode);

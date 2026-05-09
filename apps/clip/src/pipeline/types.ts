@@ -1,4 +1,4 @@
-import type { TargetResult } from "@clip/core";
+import type { OptionValue, TargetResult } from "@clip/core";
 
 // --- Brand System ---
 
@@ -8,7 +8,7 @@ export type Brand<T, B> = T & { readonly [__brand]: B };
 // --- Internal Verbs ---
 
 // 동적 registry로 전환: 리터럴 유니언 대신 string 사용.
-// 등록된 verb는 Registry.listInternalVerbs()로 조회한다.
+// 등록된 verb는 Registry.listCommandNames()로 조회한다.
 export type InternalVerb = string;
 
 // --- Late Flags ---
@@ -17,6 +17,7 @@ export type LateFlags = {
   jsonMode: boolean;
   pipeMode: boolean;
   dryRun: boolean;
+  options: Record<string, OptionValue>;
   format?: string;
 };
 

@@ -8,7 +8,13 @@ type P = {
   baseName: string | undefined;
   explicitProfile: string | undefined;
   userArgs: readonly string[];
-  lateFlags: { jsonMode: boolean; pipeMode: boolean; dryRun: boolean; format?: string };
+  lateFlags: {
+    jsonMode: boolean;
+    pipeMode: boolean;
+    dryRun: boolean;
+    options: Record<string, unknown>;
+    format?: string;
+  };
   configPath: string | undefined;
   internalVerb: string | undefined;
 };
@@ -26,6 +32,7 @@ const DEFAULT_VERBS = new Set([
   "refresh",
   "login",
   "logout",
+  "update",
   "config",
   "ext",
 ]);
@@ -78,7 +85,12 @@ describe("global flags", () => {
 
   test("multiple global flags combined", () => {
     const p = parse(["--json-output", "--pipe", "--dry-run", "slack", "list"]);
-    expect(p.lateFlags).toEqual({ jsonMode: true, pipeMode: true, dryRun: true });
+    expect(p.lateFlags).toEqual({
+      jsonMode: true,
+      pipeMode: true,
+      dryRun: true,
+      options: { "json-output": true, pipe: true, "dry-run": true },
+    });
     expect(p.baseName).toBe("slack");
   });
 
@@ -264,6 +276,12 @@ describe("internal verbs", () => {
     const p = parse(["ext", "list"]);
     expect(p.internalVerb).toBe("ext");
     expect(p.userArgs).toEqual(["list"]);
+  });
+
+  test("update check", () => {
+    const p = parse(["update", "--check"]);
+    expect(p.internalVerb).toBe("update");
+    expect(p.userArgs).toEqual(["--check"]);
   });
 
   test("extension internal command keeps its own output flags", () => {

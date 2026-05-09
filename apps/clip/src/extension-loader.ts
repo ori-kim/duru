@@ -6,7 +6,7 @@
  *
  * Phase 2 선택 규칙:
  *   - hooks 선언 entry (contributes.hooks.length > 0) → eager: 항상 init
- *   - hooks 없는 entry → argv의 verb/target이 contributes.internalCommands 또는
+ *   - hooks 없는 entry → argv의 command/target이 contributes.commands 또는
  *     contributes.targetTypes와 일치할 때만 init (일치 없으면 import 자체 skip)
  *
  * 환경변수:
@@ -16,7 +16,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import type { ClipExtension, ExtensionApi, Registry, TargetTypeManifestSpec } from "@clip/core";
+import type { ClipExtension, ExtensionApi, OptionSpec, Registry, TargetTypeManifestSpec } from "@clip/core";
 import { CONFIG_DIR } from "@clip/core";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 
@@ -25,9 +25,10 @@ import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 // ---------------------------------------------------------------------------
 
 export type ContributesSpec = {
-  internalCommands?: string[];
+  commands?: string[];
   targetTypes?: (string | TargetTypeManifestSpec)[];
   hooks?: string[];
+  globalOptions?: (string | OptionSpec)[];
   outputFormats?: string[];
   initOrder?: number;
 };
@@ -138,11 +139,11 @@ export type ExtensionLoader = {
   phase1Entries: LoadedExtensionEntry[];
 
   /**
-   * Phase 1에서 수집한 user extension의 internalCommands 전체 세트.
+   * Phase 1에서 수집한 user extension의 commands 전체 세트.
    * main.ts에서 setInternalVerbSet()에 포함시켜 parseInvocation이 올바르게 분류할 수 있게 한다.
-   * Phase 2 init 여부와 관계없이 manifest에 선언된 verb는 모두 포함된다.
+   * Phase 2 init 여부와 관계없이 manifest에 선언된 command는 모두 포함된다.
    */
-  phase1InternalVerbs: Set<string>;
+  phase1Commands: Set<string>;
 
   /**
    * Phase 2 (type-matched): bindTarget() 이후 실제 target type이 확정된 뒤 호출.
@@ -163,34 +164,78 @@ export type ExtensionLoader = {
  * argv에서 첫 번째 non-flag 토큰(verb)을 추출한다.
  * global flag(--json/--json-output, --dry-run 등)는 건너뛴다.
  */
-function extractVerb(argv: string[]): string | undefined {
-  const GLOBAL_FLAGS = new Set(["--json", "--json-output", "--pipe", "--dry-run", "--debug"]);
-  const VALUE_FLAGS = new Set(["--config", "-c"]); // 다음 토큰이 값인 플래그
+function normalizeGlobalOptionNames(options: (string | OptionSpec)[]): {
+  booleanFlags: Set<string>;
+  valueFlags: Set<string>;
+} {
+  const booleanFlags = new Set([
+    "--json",
+    "--json-output",
+    "--pipe",
+    "--dry-run",
+    "--debug",
+    "--help",
+    "-h",
+    "--version",
+    "-v",
+  ]);
+  const valueFlags = new Set(["--config", "-c", "--format"]);
+  for (const option of options) {
+    const spec = typeof option === "string" ? { name: option, type: "boolean" as const } : option;
+    const names = [spec.name, ...(spec.aliases ?? [])].map((name) => (name.length === 1 ? `-${name}` : `--${name}`));
+    const target = spec.type === "value" ? valueFlags : booleanFlags;
+    for (const name of names) target.add(name);
+  }
+  return { booleanFlags, valueFlags };
+}
+
+function extractVerb(argv: string[], globalOptions: (string | OptionSpec)[]): string | undefined {
+  const { booleanFlags, valueFlags } = normalizeGlobalOptionNames(globalOptions);
   let i = 0;
   while (i < argv.length) {
     const a = argv[i] ?? "";
-    if (VALUE_FLAGS.has(a)) {
+    if (valueFlags.has(a)) {
       i += 2;
       continue;
     } // 플래그 + 값 모두 skip
-    if (a.startsWith("-")) {
-      if (!GLOBAL_FLAGS.has(a)) {
-        i++;
-        continue;
-      }
+    if ([...valueFlags].some((flag) => a.startsWith(`${flag}=`))) {
       i++;
       continue;
     }
-    return a; // 첫 번째 positional
+    if (booleanFlags.has(a) || [...booleanFlags].some((flag) => a.startsWith(`${flag}=`))) {
+      i++;
+      continue;
+    }
+    if (a.startsWith("-")) i++;
+    else return a;
   }
   return undefined;
 }
 
+function hasDeclaredGlobalOption(argv: string[], globalOptions: (string | OptionSpec)[]): boolean {
+  if (globalOptions.length === 0) return false;
+  const booleanFlags = new Set<string>();
+  const valueFlags = new Set<string>();
+  for (const option of globalOptions) {
+    const spec = typeof option === "string" ? { name: option, type: "boolean" as const } : option;
+    const names = [spec.name, ...(spec.aliases ?? [])].map((name) => (name.length === 1 ? `-${name}` : `--${name}`));
+    const target = spec.type === "value" ? valueFlags : booleanFlags;
+    for (const name of names) target.add(name);
+  }
+  const declared = new Set([...booleanFlags, ...valueFlags]);
+  for (const arg of argv) {
+    for (const flag of declared) {
+      if (arg === flag || arg.startsWith(`${flag}=`)) return true;
+    }
+  }
+  return false;
+}
+
 /**
- * entry의 Phase 2 (hooks/internalCommands) init이 필요한지 판단한다.
+ * entry의 Phase 2 (hooks/commands) init이 필요한지 판단한다.
  *
  * - hasHooks → 항상 init (eager)
- * - argv의 verb가 contributes.internalCommands에 있음 → init
+ * - argv의 command가 contributes.commands에 있음 → init
  * - targetTypes 선언 entry는 이 함수에서 판단하지 않는다.
  *   실제 target type이 확정된 뒤 initMatchingType()에서 별도 처리한다.
  * - 그 외 → skip
@@ -200,16 +245,20 @@ const METADATA_VERBS = new Set(["list", "completion"]);
 
 function shouldInit(entry: ExtensionEntry, argv: string[] | undefined, hasHooks: boolean): boolean {
   if (hasHooks) return true;
+  if (argv && hasDeclaredGlobalOption(argv, entry.contributes?.globalOptions ?? [])) {
+    trace(`[lazy-match] "${entry.name}" matched global option`);
+    return true;
+  }
 
-  const verb = argv ? extractVerb(argv) : undefined;
+  const verb = argv ? extractVerb(argv, entry.contributes?.globalOptions ?? []) : undefined;
   if (!verb) return false;
 
   // list / completion need all extension metadata — init everything
   if (METADATA_VERBS.has(verb)) return true;
 
-  const cmds = entry.contributes?.internalCommands ?? [];
+  const cmds = entry.contributes?.commands ?? [];
   if (cmds.includes(verb)) {
-    trace(`[lazy-match] "${entry.name}" matched internalCommand "${verb}"`);
+    trace(`[lazy-match] "${entry.name}" matched command "${verb}"`);
     return true;
   }
 
@@ -275,7 +324,7 @@ export async function loadUserExtensions(registry: Registry, argv?: string[]): P
     const hasHooks = (entry.contributes?.hooks ?? []).length > 0;
     const hasOnlyTargetTypes =
       !hasHooks &&
-      (entry.contributes?.internalCommands ?? []).length === 0 &&
+      (entry.contributes?.commands ?? []).length === 0 &&
       normalizeTypeSpecs(entry.contributes?.targetTypes ?? []).length > 0;
 
     if (hasOnlyTargetTypes) {
@@ -293,17 +342,17 @@ export async function loadUserExtensions(registry: Registry, argv?: string[]): P
     registry.register(makeLazyExtension(entry, entryAbsPath, loaded, hasHooks, argv));
   }
 
-  // Phase 1에서 선언된 internalCommands 전체 수집 (enabled entry만)
-  const phase1InternalVerbs = new Set<string>();
+  // Phase 1에서 선언된 commands 전체 수집 (enabled entry만)
+  const phase1Commands = new Set<string>();
   for (const { entry } of phase1Entries) {
-    for (const verb of entry.contributes?.internalCommands ?? []) {
-      phase1InternalVerbs.add(verb);
+    for (const command of entry.contributes?.commands ?? []) {
+      phase1Commands.add(command);
     }
   }
 
   const loader: ExtensionLoader = {
     phase1Entries,
-    phase1InternalVerbs,
+    phase1Commands,
 
     initMatchingType: async (actualType: string, reg: Registry) => {
       // bindTarget() 이후 호출. actualType과 매칭되는 targetTypes entry만 init.
@@ -373,7 +422,7 @@ function makeLazyExtension(
 function makeEmptyLoader(): ExtensionLoader {
   return {
     phase1Entries: [],
-    phase1InternalVerbs: new Set(),
+    phase1Commands: new Set(),
     initMatchingType: async () => {},
     listEntries: () => [],
   };

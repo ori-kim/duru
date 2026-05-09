@@ -368,6 +368,7 @@ clip remove <name>
 clip refresh <target>
 clip login <target>
 clip logout <target>
+clip update --check
 clip bind <target>       # create native shim at ~/.clip/bin/<name>
 clip unbind <target>
 clip binds

@@ -1,8 +1,8 @@
 import { checkAcl } from "./acl.ts";
 import { type HasAliases, resolveAlias } from "./alias.ts";
 import type { AclTree, Config, ResolvedTarget } from "./config.ts";
-import type { ErrorCtx, ExecutorContext, TargetResult } from "./extension.ts";
-import type { Registry, TargetHookCtx } from "./extension.ts";
+import type { ErrorCtx, ExecutorContext, OptionValue, TargetResult } from "./extension.ts";
+import type { Registry, SubcommandHookCtx } from "./extension.ts";
 
 export type DispatchInput = {
   targetName: string;
@@ -14,6 +14,9 @@ export type DispatchInput = {
   jsonMode: boolean;
   passthrough: boolean;
   env: Record<string, string>;
+  globalOptions?: Record<string, OptionValue>;
+  argv?: readonly string[];
+  subcommandIndex?: number;
 };
 
 type AclCheckTarget = {
@@ -43,13 +46,17 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
   const subcommand = aliasHit?.subcommand ?? input.subcommand;
   const args = aliasHit?.args ?? input.args;
 
-  const baseCtx: TargetHookCtx = {
-    phase: "target-start",
+  const baseCtx: SubcommandHookCtx = {
+    phase: "subcommand-start",
+    kind: "target",
+    command: input.targetName,
     targetName: input.targetName,
     targetType: type,
     target: Object.freeze(target),
     subcommand,
+    subcommandIndex: input.subcommandIndex ?? 1,
     args,
+    globalOptions: input.globalOptions ?? {},
     headers: input.headers,
     dryRun: input.dryRun,
     jsonMode: input.jsonMode,
@@ -75,8 +82,8 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
       }
     }
 
-    // target-start 훅
-    const beforeResult = await reg.runHooks("target-start", baseCtx);
+    // subcommand-start 훅
+    const beforeResult = await reg.runHooks("subcommand-start", baseCtx);
 
     if (beforeResult && "shortCircuit" in beforeResult) {
       return beforeResult.shortCircuit;
@@ -99,6 +106,7 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
       headers: effectiveHeaders,
       dryRun: input.dryRun,
       jsonMode: input.jsonMode,
+      globalOptions: input.globalOptions ?? {},
       passthrough: input.passthrough,
     };
 
@@ -114,16 +122,16 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
 
     let result = await def.executor(validTarget, ctx);
 
-    // target-end 훅 — rewrite된 값으로 ctx 구성
-    const afterCtx: TargetHookCtx = {
+    // subcommand-end 훅 — rewrite된 값으로 ctx 구성
+    const afterCtx: SubcommandHookCtx = {
       ...baseCtx,
-      phase: "target-end",
+      phase: "subcommand-end",
       subcommand: effectiveSubcommand,
       args: effectiveArgs,
       headers: effectiveHeaders,
       result,
     };
-    const afterResult = await reg.runHooks("target-end", afterCtx);
+    const afterResult = await reg.runHooks("subcommand-end", afterCtx);
 
     if (afterResult && "result" in afterResult) {
       result = { ...result, ...(afterResult as { result: Partial<TargetResult> }).result };
@@ -133,7 +141,7 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
   } catch (e) {
     const errorCtx: ErrorCtx = {
       ...baseCtx,
-      phase: "target-error",
+      phase: "subcommand-error",
       subcommand: effectiveSubcommand,
       args: effectiveArgs,
       headers: effectiveHeaders,

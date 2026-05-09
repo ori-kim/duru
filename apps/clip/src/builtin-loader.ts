@@ -39,7 +39,7 @@ export function deriveBuiltinEntries(registry: Registry): ExtensionEntry[] {
       builtin: true,
       contributes: {
         targetTypes: hasType ? [typeName] : [],
-        internalCommands: [],
+        commands: [],
         hooks: [],
         outputFormats: [],
       },

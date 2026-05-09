@@ -4,7 +4,7 @@ import { sanitizeTargetResult } from "./sanitize.ts";
 export const extension: ClipExtension = {
   name: "sanitizer",
   init(api) {
-    api.registerHook("target-end", (ctx) => {
+    api.registerHook("subcommand-end", (ctx) => {
       if (!ctx.result) return;
       return { result: sanitizeTargetResult(ctx.result) };
     });

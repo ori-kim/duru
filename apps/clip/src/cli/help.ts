@@ -19,6 +19,7 @@ Usage:
   clip refresh <target>
   clip login <target>
   clip logout <target>
+  clip update [--check] [--yes]
   clip profile add <target> <profile> [--args a,b,c] [--url ...] [--env K=V]
   clip profile use <target> <profile>   Set active profile
   clip profile list <target>            List profiles
@@ -68,6 +69,7 @@ Examples:
   clip add gh https://api.github.com/graphql --graphql
   clip login notion      # OAuth flow
   clip logout notion     # Remove token
+  clip update --check    # Check latest clip release
   clip refresh petstore  # Re-fetch OpenAPI spec
   clip refresh grpcserver  # Re-fetch gRPC schema
   clip refresh gh          # Re-fetch GraphQL schema

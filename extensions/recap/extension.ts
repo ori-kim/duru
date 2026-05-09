@@ -333,9 +333,24 @@ export const extension = {
     // clip recap <target> <key> → look up specific entry
     // clip recap list [target]  → list entries
     // clip recap search <kw>    → search across all entries
-    api.registerInternalCommand(
-      "recap",
-      async ({ args }) => {
+    api.commands.register({
+      name: "recap",
+      description: "query and manage stored tacit knowledge",
+      completion: () => `
+  if (( CURRENT == 3 )); then
+    local recap_dir="\${CLIP_HOME:-$HOME/.clip}/recap"
+    local -a rtargets=()
+    for d in "$recap_dir/"*(N/); do
+      rtargets+=("\${d:t}")
+    done
+    local -a subcmds=(
+      'list:list entries (all or for a target)'
+      'search:search across all entries'
+    )
+    (( \${#rtargets} )) && _describe -t recap-targets 'recap targets' rtargets
+    _describe -t recap-commands 'recap commands' subcmds
+  fi`,
+      async run({ args }) {
         const first = args[0];
 
         if (!first) {
@@ -373,29 +388,13 @@ export const extension = {
         const key = args.slice(1).find((a) => !a.startsWith("--"));
         printResult(renderRecap(first, key, isJson));
       },
-      {
-        description: "query and manage stored tacit knowledge",
-        completion: () => `
-  if (( CURRENT == 3 )); then
-    local recap_dir="\${CLIP_HOME:-$HOME/.clip}/recap"
-    local -a rtargets=()
-    for d in "$recap_dir/"*(N/); do
-      rtargets+=("\${d:t}")
-    done
-    local -a subcmds=(
-      'list:list entries (all or for a target)'
-      'search:search across all entries'
-    )
-    (( \${#rtargets} )) && _describe -t recap-targets 'recap targets' rtargets
-    _describe -t recap-commands 'recap commands' subcmds
-  fi`,
-      },
-    );
+    });
 
-    api.registerHook("target-start", (ctx) => {
+    api.registerHook("subcommand-start", (ctx) => {
       if (ctx.subcommand !== "recap") return;
 
       const targetName = ctx.targetName;
+      if (!targetName) return;
       const args = ctx.args;
 
       // Default: show recap for this target
