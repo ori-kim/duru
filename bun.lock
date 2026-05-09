@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "clip",
@@ -14,7 +15,7 @@
     },
     "apps/clip": {
       "name": "clip",
-      "version": "0.2619.119",
+      "version": "0.2619.127",
       "dependencies": {
         "@clack/prompts": "^1.3.0",
         "@clip/auth": "workspace:*",
@@ -42,6 +43,13 @@
         "@clip/core": "workspace:*",
         "context-mode": "^1.0.104",
         "yaml": "^2.7.0",
+      },
+    },
+    "extensions/history": {
+      "name": "@clip/ext-history",
+      "version": "0.9.0",
+      "dependencies": {
+        "@clip/core": "workspace:*",
       },
     },
     "extensions/protocol-api": {
@@ -163,6 +171,8 @@
     "@clip/core": ["@clip/core@workspace:packages/core"],
 
     "@clip/ext-context-mode": ["@clip/ext-context-mode@workspace:extensions/context-mode"],
+
+    "@clip/ext-history": ["@clip/ext-history@workspace:extensions/history"],
 
     "@clip/ext-sanitizer": ["@clip/ext-sanitizer@workspace:extensions/sanitizer"],
 
