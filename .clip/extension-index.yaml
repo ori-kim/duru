@@ -11,3 +11,6 @@ extensions:
   - name: sanitizer
     dir: extensions/sanitizer
     description: Redact sensitive-looking output and warn on prompt-injection text.
+  - name: history
+    dir: extensions/history
+    description: Record and query local clip command history.

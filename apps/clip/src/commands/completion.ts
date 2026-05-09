@@ -12,12 +12,19 @@ function zshArrayItems(verbs: string[], descMap?: Record<string, string>): strin
     .join("\n");
 }
 
+function zshWords(values: string[]): string {
+  return values.map((value) => `    '${value.replace(/'/g, "'\\''")}'`).join("\n");
+}
+
 function buildZshCompletionCore(cmd: string, builtinVerbs: string[], extVerbs: string[]): string {
   const fn = `_${cmd.replace(/-/g, "_")}`;
   const builtinItems = zshArrayItems(builtinVerbs, BUILTIN_DESC);
   const extItems = zshArrayItems(extVerbs);
+  const extensionVerbItems = zshWords(extVerbs);
   const extArrayDecl =
     extVerbs.length > 0 ? `    local -a extensions=(\n${extItems}\n    )` : "    local -a extensions=()";
+  const extVerbArrayDecl =
+    extVerbs.length > 0 ? `  local -a extension_verbs=(\n${extensionVerbItems}\n  )` : "  local -a extension_verbs=()";
   return `\
 zmodload zsh/complist 2>/dev/null
 
@@ -107,10 +114,14 @@ ${extArrayDecl}
   fi
 
   local target="\${words[2]}"
+${extVerbArrayDecl}
 
   # extension internal commands: delegate to per-verb helper function
   if typeset -f "${fn}_ext_\${target//-/_}" > /dev/null 2>&1; then
     "${fn}_ext_\${target//-/_}"
+    return
+  fi
+  if (( \${extension_verbs[(Ie)$target]} )); then
     return
   fi
 
