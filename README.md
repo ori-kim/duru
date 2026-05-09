@@ -140,7 +140,7 @@ Drop a `.ts` file into `~/.clip/extensions/` to add hooks or new target types:
 export default {
   name: "my:trace",
   init(api) {
-    api.registerHook("toolcall", (ctx) => {
+    api.registerHook("target-start", (ctx) => {
       api.logger.info(`→ ${ctx.targetName} ${ctx.subcommand}`);
     });
   },

@@ -2,7 +2,7 @@ import { checkAcl } from "./acl.ts";
 import { type HasAliases, resolveAlias } from "./alias.ts";
 import type { AclTree, Config, ResolvedTarget } from "./config.ts";
 import type { ErrorCtx, ExecutorContext, TargetResult } from "./extension.ts";
-import type { HookCtx, Registry } from "./extension.ts";
+import type { Registry, TargetHookCtx } from "./extension.ts";
 
 export type DispatchInput = {
   targetName: string;
@@ -43,9 +43,8 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
   const subcommand = aliasHit?.subcommand ?? input.subcommand;
   const args = aliasHit?.args ?? input.args;
 
-  // toolcall 훅 (관찰 전용)
-  const baseCtx: HookCtx = {
-    phase: "toolcall",
+  const baseCtx: TargetHookCtx = {
+    phase: "target-start",
     targetName: input.targetName,
     targetType: type,
     target: Object.freeze(target),
@@ -63,8 +62,6 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
   let effectiveHeaders = input.headers;
 
   try {
-    await reg.runHooks("toolcall", baseCtx);
-
     const def = reg.getTargetType(type);
     if (!def) throw new Error(`Unknown target type: "${type}"`);
 
@@ -78,9 +75,8 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
       }
     }
 
-    // beforeExecute 훅
-    const beforeCtx: HookCtx = { ...baseCtx, phase: "beforeExecute" };
-    const beforeResult = await reg.runHooks("beforeExecute", beforeCtx);
+    // target-start 훅
+    const beforeResult = await reg.runHooks("target-start", baseCtx);
 
     if (beforeResult && "shortCircuit" in beforeResult) {
       return beforeResult.shortCircuit;
@@ -118,16 +114,16 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
 
     let result = await def.executor(validTarget, ctx);
 
-    // afterExecute 훅 — rewrite된 값으로 ctx 구성
-    const afterCtx: HookCtx = {
+    // target-end 훅 — rewrite된 값으로 ctx 구성
+    const afterCtx: TargetHookCtx = {
       ...baseCtx,
-      phase: "afterExecute",
+      phase: "target-end",
       subcommand: effectiveSubcommand,
       args: effectiveArgs,
       headers: effectiveHeaders,
       result,
     };
-    const afterResult = await reg.runHooks("afterExecute", afterCtx);
+    const afterResult = await reg.runHooks("target-end", afterCtx);
 
     if (afterResult && "result" in afterResult) {
       result = { ...result, ...(afterResult as { result: Partial<TargetResult> }).result };
@@ -137,6 +133,7 @@ export async function dispatch(cfg: Config, input: DispatchInput, registry: Regi
   } catch (e) {
     const errorCtx: ErrorCtx = {
       ...baseCtx,
+      phase: "target-error",
       subcommand: effectiveSubcommand,
       args: effectiveArgs,
       headers: effectiveHeaders,

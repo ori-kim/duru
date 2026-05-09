@@ -6,6 +6,6 @@ contributes:
   internalCommands: []
   targetTypes: []
   hooks:
-    - afterExecute
+    - target-end
 runtime:
   dependencies: {}

@@ -97,12 +97,12 @@ import type { ClipExtension } from "@clip/core";
 export const extension: ClipExtension = {
   name: "ext:audit",
   init(api) {
-    api.registerHook("toolcall", (ctx) => {
+    api.registerHook("target-start", (ctx) => {
       api.logger.info(`${ctx.targetName} ${ctx.subcommand} ${ctx.args.join(" ")}`);
     });
 
     api.registerHook(
-      "beforeExecute",
+      "target-start",
       async (ctx) => {
         if (ctx.targetType !== "api") return;
         return { headers: { "X-Trace-Source": "clip" } };
@@ -110,7 +110,7 @@ export const extension: ClipExtension = {
       { match: { type: ["api"] } },
     );
 
-    api.registerHook("afterExecute", (ctx) => {
+    api.registerHook("target-end", (ctx) => {
       if (!ctx.result) return;
       return { result: { stdout: ctx.result.stdout.replace(/token=\S+/g, "token=***") } };
     });
@@ -124,16 +124,17 @@ Manifest:
 contributes:
   internalCommands: []
   targetTypes: []
-  hooks: [toolcall, beforeExecute, afterExecute]
+  hooks: [target-start, target-end]
 ```
 
 Hook phases:
 
 | Phase | Timing | Return |
 |---|---|---|
-| `toolcall` | after alias expansion, before ACL | observe only |
-| `beforeExecute` | after ACL, before executor | change headers/args/subcommand or short-circuit |
-| `afterExecute` | after executor | merge partial result |
+| `cli-start` | after extension init, before command execution | observe only |
+| `cli-end` | after command execution completes | observe only |
+| `target-start` | after ACL, before executor | change headers/args/subcommand or short-circuit |
+| `target-end` | after executor | merge partial result |
 
 ## Target Type Pattern
 

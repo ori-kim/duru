@@ -57,7 +57,7 @@ NAME              KIND     STATUS    CONTRIBUTES
 protocol-cli      builtin  enabled   types=[cli]
 protocol-mcp      builtin  enabled   types=[mcp]
 user-sqlite       user     enabled   types=[sqlite]
-my-audit          user     disabled  hooks=[toolcall]
+my-audit          user     disabled  hooks=[target-start]
 ```
 
 ## Manifest Basics

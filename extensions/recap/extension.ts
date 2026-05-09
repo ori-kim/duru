@@ -392,7 +392,7 @@ export const extension = {
       },
     );
 
-    api.registerHook("beforeExecute", (ctx) => {
+    api.registerHook("target-start", (ctx) => {
       if (ctx.subcommand !== "recap") return;
 
       const targetName = ctx.targetName;

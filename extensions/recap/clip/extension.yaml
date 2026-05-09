@@ -7,6 +7,6 @@ contributes:
     - recap
   targetTypes: []
   hooks:
-    - beforeExecute
+    - target-start
 runtime:
   dependencies: {}

@@ -1338,7 +1338,7 @@ export const extension: ClipExtension = {
       },
     );
 
-    api.registerHook("beforeExecute", async (ctx) => {
+    api.registerHook("target-start", async (ctx) => {
       if (process.env[BYPASS_ENV] === "1") return;
 
       const parsed = extractContextFlag(ctx.args);
@@ -1356,7 +1356,7 @@ export const extension: ClipExtension = {
       if (parsed.changed) return { args: parsed.args };
     });
 
-    api.registerHook("afterExecute", async (ctx) => {
+    api.registerHook("target-end", async (ctx) => {
       if (process.env[BYPASS_ENV] === "1") return;
       if (!ctx.result) return;
       const compacted = await applyContextMode(ctx, ctx.result, ctx.args, invocationOverride, invocationJsonChunkMode);

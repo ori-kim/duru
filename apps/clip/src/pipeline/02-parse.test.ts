@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createRawInvocation } from "./01-raw.ts";
-import { parseInvocation } from "./02-parse.ts";
+import { parseInvocation, setInternalVerbSet } from "./02-parse.ts";
 
 type P = {
   argv: readonly string[];
@@ -12,6 +12,23 @@ type P = {
   configPath: string | undefined;
   internalVerb: string | undefined;
 };
+
+const DEFAULT_VERBS = new Set([
+  "add",
+  "list",
+  "remove",
+  "bind",
+  "unbind",
+  "binds",
+  "completion",
+  "profile",
+  "alias",
+  "refresh",
+  "login",
+  "logout",
+  "config",
+  "ext",
+]);
 
 function parse(args: string[], env: Record<string, string> = {}): P {
   const raw = createRawInvocation(args, env);
@@ -247,6 +264,17 @@ describe("internal verbs", () => {
     const p = parse(["ext", "list"]);
     expect(p.internalVerb).toBe("ext");
     expect(p.userArgs).toEqual(["list"]);
+  });
+
+  test("extension internal command keeps its own output flags", () => {
+    setInternalVerbSet(new Set(["history"]));
+    try {
+      const p = parse(["history", "--format", "fzf", "--limit", "100"]);
+      expect(p.internalVerb).toBe("history");
+      expect(p.userArgs).toEqual(["--format", "fzf", "--limit", "100"]);
+    } finally {
+      setInternalVerbSet(DEFAULT_VERBS);
+    }
   });
 
   test("config with global flag before it", () => {

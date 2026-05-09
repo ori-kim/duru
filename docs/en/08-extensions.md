@@ -34,7 +34,7 @@ The simplest form: add behavior to existing target types (logging, header inject
 export const extension = {
   name: "my:audit",
   init(api) {
-    api.registerHook("toolcall", (ctx) => {
+    api.registerHook("target-start", (ctx) => {
       api.logger.info(`→ ${ctx.targetName} ${ctx.subcommand} ${ctx.args.join(" ")}`);
     });
   },
@@ -50,7 +50,7 @@ extensions:
     path: /Users/me/.clip/extensions/audit
     entry: index.ts
     contributes:
-      hooks: ["toolcall"]   # eager init — hooks-declaring extensions always load
+      hooks: ["target-start"]   # eager init — hooks-declaring extensions always load
 ```
 
 **3. Run**
@@ -182,36 +182,37 @@ extensions:
 
 ## Lifecycle hooks
 
-Use hooks to modify the behavior of existing target types.
+Use hooks to observe CLI runs or modify the behavior of existing target types.
 
 | Phase | When | Can return |
 |-------|------|-----------|
-| `toolcall` | After alias expansion, before ACL check | `void` (observe only) |
-| `beforeExecute` | After ACL check, before executor | Modify headers/args/subcommand, or short-circuit |
-| `afterExecute` | After executor returns | Partial-merge the result |
+| `cli-start` | After extensions initialize, before command execution | `void` |
+| `cli-end` | After command execution completes | `void` |
+| `target-start` | After ACL check, before executor | Modify headers/args/subcommand, or short-circuit |
+| `target-end` | After executor returns | Partial-merge the result |
 
 ```ts
 // Inject headers
-api.registerHook("beforeExecute", async (ctx) => {
+api.registerHook("target-start", async (ctx) => {
   if (ctx.targetType !== "api") return;
   const token = await fetchToken(api.env["TOKEN_URL"]!);
   return { headers: { Authorization: `Bearer ${token}` } };
 });
 
 // Filter by type / target
-api.registerHook("beforeExecute", injectAuth, {
+api.registerHook("target-start", injectAuth, {
   match: { type: ["api", "graphql"], target: [/^prod-/] },
 });
 
 // Short-circuit
-api.registerHook("beforeExecute", (ctx) => {
+api.registerHook("target-start", (ctx) => {
   if (ctx.dryRun) {
     return { shortCircuit: { exitCode: 0, stdout: "[dry-run] skipped", stderr: "" } };
   }
 });
 
 // Rewrite result
-api.registerHook("afterExecute", (ctx) => {
+api.registerHook("target-end", (ctx) => {
   if (!ctx.result) return;
   return { result: { stdout: ctx.result.stdout.replace(/secret=\S+/g, "secret=***") } };
 });
@@ -256,7 +257,7 @@ NAME              KIND     STATUS    CONTRIBUTES
 protocol-cli      builtin  enabled   types=[cli]
 protocol-mcp      builtin  enabled   types=[mcp]
 user-sqlite       user     enabled   types=[sqlite]
-my-audit          user     disabled  hooks=[toolcall]
+my-audit          user     disabled  hooks=[target-start]
 ```
 
 ### Installing From GitHub
@@ -320,9 +321,9 @@ targetTypes-only extensions → Phase 2 only when that type is used (lazy)
 Execution flow after init:
 
 ```
-init()  →  [toolcall]  →  [beforeExecute]  →  executor  →  [afterExecute]  →  result
-                                                                   ↓
-                                                      [errorHandler on throw]
+init()  →  [cli-start]  →  [target-start]  →  executor  →  [target-end]  →  [cli-end]
+                                                     ↓
+                                        [errorHandler on throw]
 dispose()  ←  SIGINT / beforeExit
 ```
 
@@ -365,7 +366,7 @@ Types are optional — extensions work fine without them:
 export const extension = {
   name: "my:hook",
   init(api) {
-    api.registerHook("toolcall", (ctx) => {
+    api.registerHook("target-start", (ctx) => {
       console.error(ctx.targetName);
     });
   },

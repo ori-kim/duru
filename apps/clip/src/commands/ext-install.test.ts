@@ -47,7 +47,7 @@ describe("buildManifestEntry", () => {
       buildManifestEntry("foo", {
         name: "upstream-foo",
         entry: "src/extension.ts",
-        contributes: { internalCommands: ["foo"], hooks: ["beforeExecute"] },
+        contributes: { internalCommands: ["foo"], hooks: ["target-start"] },
       }),
     ).toEqual({
       name: "foo",
@@ -57,7 +57,7 @@ describe("buildManifestEntry", () => {
       contributes: {
         internalCommands: ["foo"],
         targetTypes: [],
-        hooks: ["beforeExecute"],
+        hooks: ["target-start"],
         outputFormats: [],
       },
     });

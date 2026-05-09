@@ -9,8 +9,17 @@
  * skills entry를 선언해야 `clip skills` 동작.
  */
 import "./virtual-modules.ts";
-import { checkAcl, dispatch, formatToolHelp, getTarget, loadConfig, outputRegistry, printAndExit } from "@clip/core";
-import type { AclTree, ClipExtension, HasAliases, ResolvedTarget } from "@clip/core";
+import {
+  ClipError,
+  checkAcl,
+  dispatch,
+  formatToolHelp,
+  getTarget,
+  loadConfig,
+  outputRegistry,
+  printAndExit,
+} from "@clip/core";
+import type { AclTree, CliCommandSummary, ClipExtension, HasAliases, ResolvedTarget, TargetResult } from "@clip/core";
 import type { Registry } from "@clip/core";
 import { createDefaultRegistry } from "./builtin-loader.ts";
 import { runAdd } from "./cli/add.ts";
@@ -97,12 +106,55 @@ function registerInternalCommands(reg: Registry): void {
 
 registerInternalCommands(registry);
 
+type CliRunState = {
+  command?: CliCommandSummary;
+  result?: TargetResult;
+};
+
+function exitCodeFromError(error: unknown): number {
+  return error instanceof ClipError ? error.exitCode : 1;
+}
+
 async function main(): Promise<number> {
-  // argv를 Phase 1 완료 후 loader에 전달 — hooks 없는 extension은 argv 매칭 시만 Phase 2 실행
   const rawArgv = Bun.argv.slice(2);
+  const startedAt = new Date().toISOString();
+  const startedMs = performance.now();
+  const state: CliRunState = {};
+  let exitCode = 1;
+  let thrown: unknown;
+
+  // argv를 Phase 1 완료 후 loader에 전달 — hooks 없는 extension은 argv 매칭 시만 Phase 2 실행
   _extLoader = await loadUserExtensions(registry, rawArgv);
   await registry.initAll();
 
+  await registry.runHooks("cli-start", { phase: "cli-start", argv: rawArgv, startedAt });
+
+  try {
+    exitCode = await runMain(rawArgv, state);
+    return exitCode;
+  } catch (error) {
+    thrown = error;
+    exitCode = exitCodeFromError(error);
+    throw error;
+  } finally {
+    await registry
+      .runHooks("cli-end", {
+        phase: "cli-end",
+        argv: rawArgv,
+        startedAt,
+        durationMs: Math.max(0, Math.round(performance.now() - startedMs)),
+        exitCode,
+        ...(state.command ? { command: state.command } : {}),
+        ...(state.result ? { result: state.result } : {}),
+        ...(thrown ? { error: thrown } : {}),
+      })
+      .catch((error) => {
+        if (process.env.CLIP_EXT_TRACE === "1") process.stderr.write(`[clip:debug] cli-end hook failed: ${error}\n`);
+      });
+  }
+}
+
+async function runMain(rawArgv: string[], state: CliRunState): Promise<number> {
   // builtin + user(Phase 1 선언) internal verbs를 모두 포함해 parseInvocation이 올바르게 분류하도록 한다.
   // Phase 2 init이 안 된 user verb도 포함: handler 없으면 "unknown command" 출력 (main.ts:matched.kind==="internal" 분기).
   const allVerbs = new Set([...registry.listInternalVerbs(), ...(_extLoader?.phase1InternalVerbs ?? [])]);
@@ -120,6 +172,7 @@ async function main(): Promise<number> {
   const parsed = parseInvocation(raw);
 
   if ((parsed as unknown as { internalVerb: string | undefined }).internalVerb === "version") {
+    state.command = { kind: "version", argv: rawArgv };
     console.log(`clip ${VERSION}`);
     return 0;
   }
@@ -127,11 +180,13 @@ async function main(): Promise<number> {
   const matched: MatchedCommand = matchCommand(parsed);
 
   if (matched.kind === "help") {
+    state.command = { kind: "help", argv: rawArgv };
     console.log(HELP);
     return 0;
   }
 
   if (matched.kind === "internal") {
+    state.command = { kind: "internal", argv: rawArgv, name: matched.verb, args: matched.rest };
     const handler = registry.getInternalCommand(matched.verb);
     if (!handler) {
       process.stderr.write(`clip: unknown command "${matched.verb}"\n`);
@@ -141,7 +196,10 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  if (matched.kind !== "target") return 0;
+  if (matched.kind !== "target") {
+    state.command = { kind: "none", argv: rawArgv };
+    return 0;
+  }
   const { invocation } = matched;
   const { baseName, subcommand: rawSubcommand, targetArgs } = invocation;
   const { jsonMode, pipeMode, dryRun } = invocation.lateFlags;
@@ -165,6 +223,20 @@ async function main(): Promise<number> {
     type: string;
     target: unknown;
     invocation: TargetInvocationHandle;
+  };
+  state.command = {
+    kind: "target",
+    argv: rawArgv,
+    token: invocation.token,
+    target: baseName,
+    targetType: type,
+    ...(invocation.explicitProfile !== undefined ? { profile: invocation.explicitProfile } : {}),
+    ...(rawSubcommand !== undefined ? { subcommand: rawSubcommand } : {}),
+    args: [...targetArgs],
+    dryRun,
+    jsonMode,
+    pipeMode,
+    ...(invocation.lateFlags.format !== undefined ? { format: invocation.lateFlags.format } : {}),
   };
 
   if (!rawSubcommand || rawSubcommand === "--help" || rawSubcommand === "-h") {
@@ -197,7 +269,7 @@ async function main(): Promise<number> {
     const def = registry.getTargetType(type);
     if (def?.describeTools) {
       const helpHookCtx = {
-        phase: "beforeExecute" as const,
+        phase: "target-start" as const,
         targetName: baseName,
         targetType: type,
         target: Object.freeze(target),
@@ -208,7 +280,7 @@ async function main(): Promise<number> {
         jsonMode: effectiveJsonMode,
         passthrough: false,
       };
-      const beforeResult = await registry.runHooks("beforeExecute", helpHookCtx);
+      const beforeResult = await registry.runHooks("target-start", helpHookCtx);
       const helpHeaders =
         beforeResult && "headers" in beforeResult && beforeResult.headers
           ? { ...(config.headers ?? {}), ...beforeResult.headers }
@@ -219,6 +291,7 @@ async function main(): Promise<number> {
         const tool = tools.find((t) => t.name === rawSubcommand);
         if (tool) {
           const r = formatToolHelp(tool);
+          state.result = r;
           process.stdout.write(r.stdout);
           return r.exitCode;
         }
@@ -245,6 +318,11 @@ async function main(): Promise<number> {
   );
 
   const shouldPassthrough = effectivePassthrough && !effectiveDryRun;
+  state.command = {
+    ...(state.command as Extract<CliCommandSummary, { kind: "target" }>),
+    passthrough: shouldPassthrough,
+  };
+  state.result = result;
   if (shouldPassthrough) {
     return result.exitCode;
   }

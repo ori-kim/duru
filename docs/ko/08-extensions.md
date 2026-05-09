@@ -34,7 +34,7 @@ $CLIP_HOME/types/
 export const extension = {
   name: "my:audit",
   init(api) {
-    api.registerHook("toolcall", (ctx) => {
+    api.registerHook("target-start", (ctx) => {
       api.logger.info(`→ ${ctx.targetName} ${ctx.subcommand} ${ctx.args.join(" ")}`);
     });
   },
@@ -50,7 +50,7 @@ extensions:
     path: /Users/me/.clip/extensions/audit
     entry: index.ts
     contributes:
-      hooks: ["toolcall"]   # Phase 1에서 eager init (hooks가 있으면 항상 로드)
+      hooks: ["target-start"]   # Phase 1에서 eager init (hooks가 있으면 항상 로드)
 ```
 
 **3. 실행**
@@ -182,36 +182,37 @@ extensions:
 
 ## 라이프사이클 훅
 
-기존 target type의 동작을 수정할 때 씁니다.
+CLI 실행을 관찰하거나 기존 target type의 동작을 수정할 때 씁니다.
 
 | 단계 | 시점 | 반환 가능 |
 |------|------|-----------|
-| `toolcall` | alias 확장 후, ACL 검사 전 | `void` (관찰 전용) |
-| `beforeExecute` | ACL 검사 후, executor 실행 전 | headers/args/subcommand 수정, 또는 단락 |
-| `afterExecute` | executor 반환 후 | result 부분 머지 |
+| `cli-start` | extension 초기화 후, command 실행 전 | `void` |
+| `cli-end` | command 실행 완료 후 | `void` |
+| `target-start` | ACL 검사 후, executor 실행 전 | headers/args/subcommand 수정, 또는 단락 |
+| `target-end` | executor 반환 후 | result 부분 머지 |
 
 ```ts
 // 헤더 주입
-api.registerHook("beforeExecute", async (ctx) => {
+api.registerHook("target-start", async (ctx) => {
   if (ctx.targetType !== "api") return;
   const token = await fetchToken(api.env["TOKEN_URL"]!);
   return { headers: { Authorization: `Bearer ${token}` } };
 });
 
 // type / target 필터
-api.registerHook("beforeExecute", injectAuth, {
+api.registerHook("target-start", injectAuth, {
   match: { type: ["api", "graphql"], target: [/^prod-/] },
 });
 
 // 단락 처리
-api.registerHook("beforeExecute", (ctx) => {
+api.registerHook("target-start", (ctx) => {
   if (ctx.dryRun) {
     return { shortCircuit: { exitCode: 0, stdout: "[dry-run] 건너뜀", stderr: "" } };
   }
 });
 
 // 결과 재작성
-api.registerHook("afterExecute", (ctx) => {
+api.registerHook("target-end", (ctx) => {
   if (!ctx.result) return;
   return { result: { stdout: ctx.result.stdout.replace(/secret=\S+/g, "secret=***") } };
 });
@@ -256,7 +257,7 @@ NAME              KIND     STATUS    CONTRIBUTES
 protocol-cli      builtin  enabled   types=[cli]
 protocol-mcp      builtin  enabled   types=[mcp]
 user-sqlite       user     enabled   types=[sqlite]
-my-audit          user     disabled  hooks=[toolcall]
+my-audit          user     disabled  hooks=[target-start]
 ```
 
 ### GitHub에서 설치
@@ -320,9 +321,9 @@ targetTypes 전용  → 해당 type의 target이 사용될 때만 Phase 2 (lazy)
 이후 실행 흐름:
 
 ```
-init()  →  [toolcall]  →  [beforeExecute]  →  executor  →  [afterExecute]  →  result
-                                                                   ↓
-                                                      [throw 시 errorHandler]
+init()  →  [cli-start]  →  [target-start]  →  executor  →  [target-end]  →  [cli-end]
+                                                     ↓
+                                        [throw 시 errorHandler]
 dispose()  ←  SIGINT / beforeExit
 ```
 
@@ -365,7 +366,7 @@ import { parse } from "yaml";
 export const extension = {
   name: "my:hook",
   init(api) {
-    api.registerHook("toolcall", (ctx) => {
+    api.registerHook("target-start", (ctx) => {
       console.error(ctx.targetName);
     });
   },

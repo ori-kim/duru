@@ -23,10 +23,42 @@ export type ExecutorContext = {
 
 export type Executor<T> = (target: T, ctx: ExecutorContext) => Promise<TargetResult>;
 
-export type HookPhase = "toolcall" | "beforeExecute" | "afterExecute";
+export type HookPhase = "cli-start" | "cli-end" | "target-start" | "target-end";
 
-export type HookCtx = Readonly<{
-  phase: HookPhase;
+export type CliCommandSummary =
+  | { kind: "none"; argv: readonly string[] }
+  | { kind: "help"; argv: readonly string[] }
+  | { kind: "version"; argv: readonly string[] }
+  | { kind: "internal"; argv: readonly string[]; name: string; args: readonly string[] }
+  | {
+      kind: "target";
+      argv: readonly string[];
+      token: string;
+      target: string;
+      targetType?: string;
+      profile?: string;
+      subcommand?: string;
+      args: readonly string[];
+      dryRun: boolean;
+      jsonMode: boolean;
+      pipeMode: boolean;
+      passthrough?: boolean;
+      format?: string;
+    };
+
+export type CliHookCtx = Readonly<{
+  phase: "cli-start" | "cli-end";
+  argv: readonly string[];
+  startedAt: string;
+  durationMs?: number;
+  exitCode?: number;
+  command?: CliCommandSummary;
+  result?: TargetResult;
+  error?: unknown;
+}>;
+
+export type TargetHookCtx = Readonly<{
+  phase: "target-start" | "target-end";
   targetName: string;
   targetType: string;
   target: Readonly<unknown>;
@@ -39,15 +71,18 @@ export type HookCtx = Readonly<{
   result?: TargetResult;
 }>;
 
+export type HookCtx = CliHookCtx | TargetHookCtx;
+
 export type HookReturn =
   | undefined
   | { headers?: Record<string, string>; args?: string[]; subcommand?: string }
   | { shortCircuit: TargetResult }
   | { result: Partial<TargetResult> };
 
-export type HookFn = (ctx: HookCtx) => HookReturn | Promise<HookReturn>;
+export type HookCtxFor<P extends HookPhase> = Extract<HookCtx, { phase: P }>;
+export type HookFn<P extends HookPhase = HookPhase> = (ctx: HookCtxFor<P>) => HookReturn | Promise<HookReturn>;
 
-export type ErrorCtx = HookCtx & { error: unknown; aclDenied?: boolean };
+export type ErrorCtx = Omit<TargetHookCtx, "phase"> & { phase: "target-error"; error: unknown; aclDenied?: boolean };
 export type ErrorReturn = undefined | { result: TargetResult } | { rethrow: unknown };
 export type ErrorHandler = (ctx: ErrorCtx) => ErrorReturn | Promise<ErrorReturn>;
 
@@ -189,7 +224,7 @@ export type ExtensionApi = {
   registerTargetType<T>(def: TargetTypeDef<T>): void;
   registerContribution(contribution: TargetTypeContribution): void;
   registerInternalCommand(verb: string, handler: InternalCommandHandler, opts?: InternalCommandOpts): void;
-  registerHook(phase: HookPhase, fn: HookFn, opts?: HookOpts): void;
+  registerHook<P extends HookPhase>(phase: P, fn: HookFn<P>, opts?: HookOpts): void;
   registerErrorHandler(fn: ErrorHandler, opts?: HookOpts): void;
   registerResultPresenter(presenter: ResultPresenter): void;
   registerOutputRenderer(renderer: OutputRenderer): void;
@@ -207,7 +242,7 @@ export type ClipExtension = {
 // --- internals ---
 
 type NormalizedOpts = { priority: number } & HookOpts;
-type RegisteredHook = { fn: HookFn; opts: NormalizedOpts };
+type RegisteredHook = { fn: HookFn<HookPhase>; opts: NormalizedOpts };
 type RegisteredErrorHandler = { fn: ErrorHandler; opts: NormalizedOpts };
 
 const defaultLogger: Logger = {
@@ -219,9 +254,14 @@ const defaultLogger: Logger = {
   },
 };
 
-function matchesHook(opts: HookOpts, ctx: HookCtx): boolean {
+function isTargetLikeCtx(ctx: HookCtx | ErrorCtx): ctx is TargetHookCtx | ErrorCtx {
+  return "targetType" in ctx;
+}
+
+function matchesHook(opts: HookOpts, ctx: HookCtx | ErrorCtx): boolean {
   const { match } = opts;
   if (!match) return true;
+  if (!isTargetLikeCtx(ctx)) return false;
   if (match.type && !match.type.includes(ctx.targetType)) return false;
   if (match.target) {
     const ok = match.target.some((m) => (typeof m === "string" ? m === ctx.targetName : m.test(ctx.targetName)));
@@ -258,9 +298,10 @@ export class Registry {
   private readonly _internalCommandDescs = new Map<string, string>();
   private readonly _internalCommandCompletions = new Map<string, () => string>();
   private readonly _hooks: Map<HookPhase, RegisteredHook[]> = new Map([
-    ["toolcall", []],
-    ["beforeExecute", []],
-    ["afterExecute", []],
+    ["cli-start", []],
+    ["cli-end", []],
+    ["target-start", []],
+    ["target-end", []],
   ]);
   private readonly _errorHandlers: RegisteredErrorHandler[] = [];
   private _disposed = false;
@@ -372,7 +413,9 @@ export class Registry {
         if (opts?.completion) this._internalCommandCompletions.set(verb, opts.completion);
       },
       registerHook: (phase, fn, opts = {}): void => {
-        (this._hooks.get(phase) ?? []).push({ fn, opts: { priority: 100, ...opts } });
+        const hooks = this._hooks.get(phase);
+        if (!hooks) throw new Error(`Unknown hook phase: ${phase}`);
+        hooks.push({ fn: fn as HookFn<HookPhase>, opts: { priority: 100, ...opts } });
       },
       registerErrorHandler: (fn, opts = {}): void => {
         this._errorHandlers.push({ fn, opts: { priority: 100, ...opts } });
@@ -517,9 +560,16 @@ export class Registry {
       .filter((h) => matchesHook(h.opts, ctx))
       .sort((a, b) => a.opts.priority - b.opts.priority);
 
-    // afterExecute는 priority 내림차순 (onion 역방향)
-    const ordered = phase === "afterExecute" ? [...base].reverse() : base;
+    // target-end는 priority 내림차순 (onion 역방향)
+    const ordered = phase === "target-end" ? [...base].reverse() : base;
     const timeoutMs = Number(process.env.CLIP_EXT_TIMEOUT_MS ?? "5000");
+
+    if (phase === "cli-start" || phase === "cli-end") {
+      for (const { fn } of ordered) {
+        await withTimeout(Promise.resolve(fn(ctx)), timeoutMs);
+      }
+      return null;
+    }
 
     const mergedHeaders: Record<string, string> = {};
     let mergedArgs: string[] | undefined;
@@ -533,8 +583,8 @@ export class Registry {
       anyReturn = true;
 
       if (typeof ret === "object" && "shortCircuit" in ret) {
-        if (phase !== "beforeExecute") {
-          process.stderr.write("clip: warning: shortCircuit from hook outside beforeExecute, ignoring\n");
+        if (phase !== "target-start") {
+          process.stderr.write("clip: warning: shortCircuit from hook outside target-start, ignoring\n");
           anyReturn = false; // shortCircuit이 무시되면 이 훅은 없던 것으로
           continue;
         }
@@ -542,8 +592,17 @@ export class Registry {
       }
 
       if (typeof ret === "object" && "result" in ret) {
+        if (phase !== "target-end") {
+          process.stderr.write("clip: warning: result rewrite from hook outside target-end, ignoring\n");
+          anyReturn = false;
+          continue;
+        }
         mergedResult = { ...mergedResult, ...(ret as { result: Partial<TargetResult> }).result };
       } else if (typeof ret === "object") {
+        if (phase !== "target-start") {
+          anyReturn = false;
+          continue;
+        }
         const r = ret as { headers?: Record<string, string>; args?: string[]; subcommand?: string };
         if (r.headers) Object.assign(mergedHeaders, r.headers);
         if (r.args !== undefined) mergedArgs = r.args;

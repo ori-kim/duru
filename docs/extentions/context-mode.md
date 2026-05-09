@@ -27,7 +27,7 @@ extensions:
     enabled: true
     contributes:
       internalCommands: [context, ctx]
-      hooks: [beforeExecute, afterExecute]
+      hooks: [target-start, target-end]
 ```
 
 With the extension installer, the runtime copy can be created from this repo source:

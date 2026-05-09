@@ -8,8 +8,8 @@ contributes:
     - ctx
   targetTypes: []
   hooks:
-    - beforeExecute
-    - afterExecute
+    - target-start
+    - target-end
 runtime:
   dependencies:
     context-mode: ^1.0.104

@@ -83,7 +83,7 @@ describe("API executor injected header args", () => {
     expect(request.headers["X-Custom-Header"]).toBe("manual-custom");
   });
 
-  test("beforeExecute/global headers override target headers before injection", () => {
+  test("target-start/global headers override target headers before injection", () => {
     const request = buildApiRequest(catserviceTarget, requiredCustomHeaderTool, undefined, [], {
       "X-Custom-Header": "hook-custom",
     });
@@ -92,7 +92,7 @@ describe("API executor injected header args", () => {
     expect(request.headers["X-Custom-Header"]).toBe("hook-custom");
   });
 
-  test("beforeExecute/global headers override target headers case-insensitively", () => {
+  test("target-start/global headers override target headers case-insensitively", () => {
     const request = buildApiRequest(catserviceTarget, requiredCustomHeaderTool, undefined, [], {
       "x-custom-header": "hook-custom",
     });

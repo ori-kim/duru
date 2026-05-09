@@ -162,20 +162,24 @@ export function parseInvocation(raw: RawInvocation): ParsedInvocation {
   let effectiveFormat: string | undefined;
   const filteredArgs: string[] = [];
 
-  for (let i = 0; i < rawTargetArgs.length; i++) {
-    const a = rawTargetArgs[i] ?? "";
-    if (a === "--dry-run") {
-      effectiveDryRun = true;
-    } else if (JSON_FLAGS.has(a)) {
-      effectiveJsonMode = true;
-    } else if (a === "--pipe") {
-      effectivePipeMode = true;
-    } else if (a === "--debug") {
-      process.env.CLIP_EXT_TRACE = "1";
-    } else if (a === "--format") {
-      effectiveFormat = rawTargetArgs[++i] ?? "plain";
-    } else {
-      filteredArgs.push(a);
+  if (internalVerb && !token) {
+    filteredArgs.push(...rawTargetArgs);
+  } else {
+    for (let i = 0; i < rawTargetArgs.length; i++) {
+      const a = rawTargetArgs[i] ?? "";
+      if (a === "--dry-run") {
+        effectiveDryRun = true;
+      } else if (JSON_FLAGS.has(a)) {
+        effectiveJsonMode = true;
+      } else if (a === "--pipe") {
+        effectivePipeMode = true;
+      } else if (a === "--debug") {
+        process.env.CLIP_EXT_TRACE = "1";
+      } else if (a === "--format") {
+        effectiveFormat = rawTargetArgs[++i] ?? "plain";
+      } else {
+        filteredArgs.push(a);
+      }
     }
   }
 
