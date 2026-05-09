@@ -58,6 +58,26 @@ async function runClip(args: string[], home: string, manifest: string) {
 }
 
 describe("early built-in commands", () => {
+  test("clip --version runs before user extensions are loaded", async () => {
+    const { home, manifest } = setupBrokenExtension();
+
+    const result = await runClip(["--version"], home, manifest);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("clip ");
+  });
+
+  test("clip --help runs before user extensions are loaded", async () => {
+    const { home, manifest } = setupBrokenExtension();
+
+    const result = await runClip(["--help"], home, manifest);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("Usage:");
+  });
+
   test("clip update --help runs before user extensions are loaded", async () => {
     const { home, manifest } = setupBrokenExtension();
 

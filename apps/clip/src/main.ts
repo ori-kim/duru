@@ -258,7 +258,9 @@ function parseRegisteredOptions(
   return out;
 }
 
-function splitEarlyInternalCommand(argv: readonly string[]): { verb: string; args: string[] } | null {
+function splitEarlyBuiltinCommand(
+  argv: readonly string[],
+): { verb: "help" | "version" | "update"; args: string[] } | null {
   const valueFlags = new Set(["--config", "-c", "--format"]);
   const skipFlags = new Set(["--json", "--json-output", "--pipe", "--dry-run", "--debug"]);
   const args = [...argv];
@@ -281,6 +283,8 @@ function splitEarlyInternalCommand(argv: readonly string[]): { verb: string; arg
   }
 
   const verb = args[i];
+  if (verb === "--help" || verb === "-h") return { verb: "help", args: [] };
+  if (verb === "--version" || verb === "-v") return { verb: "version", args: [] };
   if (verb !== "update") return null;
   return { verb, args: [...leadingArgs, ...args.slice(i + 1)] };
 }
@@ -293,10 +297,20 @@ async function main(): Promise<number> {
   let exitCode = 1;
   let thrown: unknown;
 
-  const earlyCommand = splitEarlyInternalCommand(rawArgv);
-  if (earlyCommand?.verb === "update") {
-    await runUpdate(earlyCommand.args);
-    return 0;
+  const earlyCommand = splitEarlyBuiltinCommand(rawArgv);
+  if (earlyCommand) {
+    if (earlyCommand.verb === "help") {
+      console.log(HELP);
+      return 0;
+    }
+    if (earlyCommand.verb === "version") {
+      console.log(`clip ${VERSION}`);
+      return 0;
+    }
+    if (earlyCommand.verb === "update") {
+      await runUpdate(earlyCommand.args);
+      return 0;
+    }
   }
 
   // argv를 Phase 1 완료 후 loader에 전달 — hooks 없는 extension은 argv 매칭 시만 Phase 2 실행
