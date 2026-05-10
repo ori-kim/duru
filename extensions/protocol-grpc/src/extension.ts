@@ -81,7 +81,7 @@ export const extension: ClipExtension = {
       },
       urlHeuristic: () => false,
       addHandler: async (args: AddArgs) => {
-        const { name, positionals, flags, allow, deny } = args;
+        const { name, positionals, flags, allow, deny, timeoutMs } = args;
         const address = flags.address ?? positionals[0];
         if (!address) die("gRPC target requires an address (e.g. clip add petstore grpc.example.com:443 --grpc)");
         const proto = flags.proto ?? undefined;
@@ -92,6 +92,7 @@ export const extension: ClipExtension = {
           ...(plaintext ? { plaintext } : {}),
           allow,
           deny,
+          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
         });
         console.log(`Added gRPC target "${name}" → ${address}`);
       },

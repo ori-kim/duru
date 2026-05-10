@@ -11,7 +11,7 @@ clip — CLI proxy for MCP servers and CLI tools
 
 Usage:
   clip [--json-output] [--pipe] <target> <subcommand> [...args]
-  clip add <name> <command-or-url> [--allow x,y] [--deny z]
+  clip add <name> <command-or-url> [--allow x,y] [--deny z] [--timeout-ms N]
   clip add <name> <https://...openapi.json> [--api]
   clip add <name> <https://...> --sse
   clip remove <name>
@@ -20,7 +20,7 @@ Usage:
   clip login <target>
   clip logout <target>
   clip update [--check] [--yes]
-  clip profile add <target> <profile> [--args a,b,c] [--url ...] [--env K=V]
+  clip profile add <target> <profile> [--args a,b,c] [--url ...] [--env K=V] [--timeout-ms N]
   clip profile use <target> <profile>   Set active profile
   clip profile list <target>            List profiles
   clip profile remove <target> <profile>
@@ -49,6 +49,7 @@ Global flags:
 Config:
   ~/.clip/target/{mcp,cli,api,grpc,graphql,script}/<name>/config.yml
   Set CLIP_HOME to use a different root directory (default: ~/.clip)
+  Set CLIP_TARGET_TIMEOUT_MS to override target timeout globally (default: 30000)
 
 Native bind PATH setup (add to shell profile):
   export PATH="${BIND_DIR}:$PATH"

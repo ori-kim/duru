@@ -24,6 +24,10 @@ export const aliasFields = {
   aliases: z.record(aliasSchema).optional(),
 };
 
+export const timeoutFields = {
+  timeoutMs: z.number().positive().optional(),
+};
+
 export const profileOverrideSchema = z.object({
   args: z.array(z.string()).optional(),
   env: z.record(z.string()).optional(),
@@ -35,6 +39,7 @@ export const profileOverrideSchema = z.object({
   openapiUrl: z.string().url().optional(),
   headers: z.record(z.string()).optional(),
   metadata: z.record(z.string()).optional(),
+  timeoutMs: z.number().positive().optional(),
 });
 
 export const profileFields = {
@@ -42,7 +47,7 @@ export const profileFields = {
   active: z.string().optional(),
 };
 
-export const commonTargetFields = { ...aclFields, ...aliasFields, ...profileFields };
+export const commonTargetFields = { ...aclFields, ...aliasFields, ...profileFields, ...timeoutFields };
 
 export type ProfileOverride = z.infer<typeof profileOverrideSchema>;
 export type AliasDef = z.infer<typeof aliasSchema>;

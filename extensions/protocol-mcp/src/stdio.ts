@@ -1,4 +1,11 @@
-import { die, formatToolHelp, parseToolArgs as parseToolArgsTyped } from "@clip/core";
+import {
+  ClipError,
+  die,
+  formatToolHelp,
+  parseToolArgs as parseToolArgsTyped,
+  resolveTargetTimeoutMs,
+  targetTimeoutMessage,
+} from "@clip/core";
 import type { ExecutorContext, TargetResult } from "@clip/core";
 import { isMcpIntrospectionSubcommand, maybeFormatMcpIntrospection } from "./introspection.ts";
 import type { McpStdioTarget } from "./schema.ts";
@@ -68,6 +75,7 @@ function shellQuote(arg: string): string {
 type SendFn = (req: JsonRpcRequest) => Promise<JsonRpcResponse>;
 
 async function runStdioSession<T>(target: McpStdioTarget, action: (send: SendFn) => Promise<T>): Promise<T> {
+  const timeoutMs = resolveTargetTimeoutMs(target);
   const proc = Bun.spawn({
     cmd: [target.command, ...(target.args ?? [])],
     stdin: "pipe",
@@ -88,10 +96,12 @@ async function runStdioSession<T>(target: McpStdioTarget, action: (send: SendFn)
     const id = nextId++;
     await write(JSON.stringify({ ...req, id }));
 
-    const TIMEOUT_MS = 10_000;
     let timeoutHandle: ReturnType<typeof setTimeout>;
     const deadline = new Promise<JsonRpcResponse>((_, reject) => {
-      timeoutHandle = setTimeout(() => reject(new Error(`MCP STDIO timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS);
+      timeoutHandle = setTimeout(() => {
+        proc.kill();
+        reject(new ClipError(targetTimeoutMessage("MCP STDIO request", timeoutMs), 124));
+      }, timeoutMs);
     });
 
     const findResponse = async (): Promise<JsonRpcResponse> => {

@@ -1,4 +1,4 @@
-import { aclFields, aliasFields, profileFields } from "@clip/core";
+import { aclFields, aliasFields, profileFields, timeoutFields } from "@clip/core";
 import { z } from "zod";
 
 export const grpcTargetSchema = z.object({
@@ -9,6 +9,7 @@ export const grpcTargetSchema = z.object({
   metadata: z.record(z.string()).optional(),
   reflectMetadata: z.record(z.string()).optional(),
   deadline: z.number().positive().optional(),
+  ...timeoutFields,
   emitDefaults: z.boolean().optional(),
   allowUnknownFields: z.boolean().optional(),
   oauth: z.boolean().optional(),

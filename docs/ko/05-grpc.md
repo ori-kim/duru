@@ -50,7 +50,8 @@ metadata:
 reflectMetadata:
   authorization: "Bearer ${API_TOKEN}"
 
-deadline: 30                # 초 단위; 생략하면 deadline 없음
+timeoutMs: 30000            # 실행 timeout (ms); 생략하면 CLIP_TARGET_TIMEOUT_MS 또는 기본 30000
+# deadline: 30              # 하위 호환용 초 단위 timeout
 emitDefaults: false         # 응답에 zero-value 필드 포함 여부
 allowUnknownFields: false   # 요청에 알 수 없는 필드 허용 여부
 ```

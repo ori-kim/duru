@@ -183,6 +183,7 @@ export type AddArgs = {
   flags: Record<string, string>;
   allow: string[] | undefined;
   deny: string[] | undefined;
+  timeoutMs: number | undefined;
 };
 
 /**

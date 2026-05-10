@@ -1,4 +1,4 @@
-import { aclFields, aliasFields, profileFields } from "@clip/core";
+import { aclFields, aliasFields, profileFields, timeoutFields } from "@clip/core";
 import { z } from "zod";
 
 export const apiTargetSchema = z.object({
@@ -9,6 +9,7 @@ export const apiTargetSchema = z.object({
     .union([z.literal("oauth"), z.literal("apikey"), z.literal(false)])
     .optional()
     .default(false),
+  ...timeoutFields,
   ...aclFields,
   ...profileFields,
   ...aliasFields,

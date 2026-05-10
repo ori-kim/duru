@@ -50,7 +50,8 @@ metadata:
 reflectMetadata:
   authorization: "Bearer ${API_TOKEN}"
 
-deadline: 30                # seconds; omit for no deadline
+timeoutMs: 30000            # execution timeout (ms); falls back to CLIP_TARGET_TIMEOUT_MS or 30000
+# deadline: 30              # legacy seconds-based timeout
 emitDefaults: false         # include zero-value fields in response output
 allowUnknownFields: false   # allow unrecognized fields in request input
 ```

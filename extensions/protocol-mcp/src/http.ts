@@ -1,5 +1,5 @@
 import { AuthenticatedClient, resolveAuthDir } from "@clip/auth";
-import { die, formatToolHelp, parseToolArgs } from "@clip/core";
+import { die, formatToolHelp, parseToolArgs, resolveTargetTimeoutMs, withTargetTimeoutSignal } from "@clip/core";
 import type { ExecutorContext, TargetResult } from "@clip/core";
 import { isMcpIntrospectionSubcommand, maybeFormatMcpIntrospection } from "./introspection.ts";
 import type { McpHttpTarget } from "./schema.ts";
@@ -76,50 +76,54 @@ type McpSession = {
   sessionId: string | null;
   nextId: number;
   client: AuthenticatedClient;
+  timeoutMs: number;
 };
 
 async function mcpPost(session: McpSession, body: JsonRpcRequest): Promise<unknown> {
-  const reqHeaders: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json, text/event-stream",
-    ...session.headers,
-    // 최신 auth 헤더를 client에서 가져와 주입
-    ...(await session.client.getAuthHeaders()),
-  };
-  if (session.sessionId) {
-    reqHeaders["Mcp-Session-Id"] = session.sessionId;
-  }
+  return withTargetTimeoutSignal(session.timeoutMs, `MCP HTTP ${body.method}`, async (signal) => {
+    const reqHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+      ...session.headers,
+      // 최신 auth 헤더를 client에서 가져와 주입
+      ...(await session.client.getAuthHeaders()),
+    };
+    if (session.sessionId) {
+      reqHeaders["Mcp-Session-Id"] = session.sessionId;
+    }
 
-  const resp = await session.client.fetch(session.url, {
-    method: "POST",
-    headers: reqHeaders,
-    body: JSON.stringify(body),
-  });
+    const resp = await session.client.fetch(session.url, {
+      method: "POST",
+      headers: reqHeaders,
+      body: JSON.stringify(body),
+      signal,
+    });
 
-  // 세션 ID 캡처
-  const sid = resp.headers.get("Mcp-Session-Id");
-  if (sid) session.sessionId = sid;
+    // 세션 ID 캡처
+    const sid = resp.headers.get("Mcp-Session-Id");
+    if (sid) session.sessionId = sid;
 
-  if (!resp.ok && resp.status !== 202) {
+    if (!resp.ok && resp.status !== 202) {
+      const text = await resp.text();
+      die(`MCP server returned HTTP ${resp.status}: ${text}`);
+    }
+
     const text = await resp.text();
-    die(`MCP server returned HTTP ${resp.status}: ${text}`);
-  }
 
-  const text = await resp.text();
+    // notification은 응답 바디 없음(204/202)
+    if (!text.trim()) return null;
 
-  // notification은 응답 바디 없음(204/202)
-  if (!text.trim()) return null;
+    const contentType = resp.headers.get("Content-Type") ?? "";
+    if (contentType.includes("text/event-stream")) {
+      return parseSSE(text, body.id ?? -1);
+    }
 
-  const contentType = resp.headers.get("Content-Type") ?? "";
-  if (contentType.includes("text/event-stream")) {
-    return parseSSE(text, body.id ?? -1);
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    die(`Failed to parse MCP response: ${text}`);
-  }
+    try {
+      return JSON.parse(text);
+    } catch {
+      die(`Failed to parse MCP response: ${text}`);
+    }
+  });
 }
 
 function nextId(session: McpSession): number {
@@ -186,6 +190,7 @@ export async function executeMcp(target: McpHttpTarget, ctx: ExecutorContext): P
     sessionId: null,
     nextId: 1,
     client,
+    timeoutMs: resolveTargetTimeoutMs(target),
   };
 
   // 1. Initialize

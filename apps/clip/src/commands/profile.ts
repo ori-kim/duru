@@ -40,10 +40,10 @@ export function resolveProfile<T extends HasProfiles>(
 async function runProfileAdd(args: string[]): Promise<void> {
   const [targetName, profileName, ...rest] = args;
   if (!targetName || !profileName)
-    die("Usage: clip profile add <target> <profile> [--args a,b] [--url ...] [--env K=V ...]");
+    die("Usage: clip profile add <target> <profile> [--args a,b] [--url ...] [--env K=V ...] [--timeout-ms N]");
   validateIdentifier(profileName, "Profile name");
 
-  const flags: Record<string, string | string[] | Record<string, string>> = {};
+  const flags: Record<string, string | number | string[] | Record<string, string>> = {};
   for (let i = 0; i < rest.length; i++) {
     const flag = rest[i] ?? "";
     const val = rest[i + 1];
@@ -82,6 +82,11 @@ async function runProfileAdd(args: string[]): Promise<void> {
       const [k, v] = val.split("=", 2);
       if (!k || v === undefined) die(`--metadata must be KEY=VALUE, got: ${val}`);
       flags.metadata = { ...((flags.metadata as Record<string, string> | undefined) ?? {}), [k]: v };
+      i++;
+    } else if ((flag === "--timeout-ms" || flag === "--timeoutMs") && val) {
+      const timeoutMs = Number(val);
+      if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) die(`--timeout-ms must be a positive number, got: ${val}`);
+      flags.timeoutMs = timeoutMs;
       i++;
     }
   }
@@ -134,7 +139,9 @@ async function runProfileList(args: string[]): Promise<void> {
     const marker = name === active ? " (active)" : "";
     const p = profiles[name];
     if (!p) continue;
-    const detail = p.args ? `args: [${p.args.join(", ")}]` : (p.url ?? p.address ?? p.endpoint ?? p.baseUrl ?? "");
+    const detail = p.args
+      ? `args: [${p.args.join(", ")}]`
+      : (p.url ?? p.address ?? p.endpoint ?? p.baseUrl ?? (p.timeoutMs ? `timeoutMs: ${p.timeoutMs}` : ""));
     console.log(`  ${name}${marker}  — ${detail}`);
   }
 }
@@ -174,7 +181,7 @@ export async function runProfileCmd(args: string[]): Promise<void> {
   else if (sub === "unset") await runProfileUnset(rest);
   else {
     console.log("Usage: clip profile <add|remove|list|use|unset> ...");
-    console.log("  clip profile add <target> <profile> [--args a,b,c] [--url ...] [--env K=V]");
+    console.log("  clip profile add <target> <profile> [--args a,b,c] [--url ...] [--env K=V] [--timeout-ms N]");
     console.log("  clip profile remove <target> <profile>");
     console.log("  clip profile list <target>");
     console.log("  clip profile use <target> <profile>");

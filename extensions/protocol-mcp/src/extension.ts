@@ -29,7 +29,18 @@ function normalizeMcp(t: McpTarget, ctx: NormalizeCtx): McpTarget {
   } as McpTarget;
 }
 
-const STDIO_ADD_CONTROL_FLAGS = new Set(["stdio", "sse", "url", "command", "args", "allow", "deny", "type"]);
+const STDIO_ADD_CONTROL_FLAGS = new Set([
+  "stdio",
+  "sse",
+  "url",
+  "command",
+  "args",
+  "allow",
+  "deny",
+  "type",
+  "timeout-ms",
+  "timeoutMs",
+]);
 
 export function collectStdioCommandArgs(positionals: string[], flags: Record<string, string>): string[] | undefined {
   const explicitArgs = flags.args ? flags.args.split(",").map((s) => s.trim()) : positionals.slice(1);
@@ -125,7 +136,7 @@ export const extension: ClipExtension = {
         return true;
       },
       addHandler: async (args: AddArgs) => {
-        const { name, positionals, flags, allow, deny } = args;
+        const { name, positionals, flags, allow, deny, timeoutMs } = args;
         if (flags.stdio) {
           const command = flags.command ?? positionals[0];
           if (!command)
@@ -133,17 +144,38 @@ export const extension: ClipExtension = {
               "STDIO MCP target requires a command (e.g. clip add fs --stdio npx -y @modelcontextprotocol/server-filesystem /)",
             );
           const prependArgs = collectStdioCommandArgs(positionals, flags);
-          await addTarget(name, "mcp", { transport: "stdio", command, args: prependArgs, allow, deny });
+          await addTarget(name, "mcp", {
+            transport: "stdio",
+            command,
+            args: prependArgs,
+            allow,
+            deny,
+            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+          });
           console.log(`Added STDIO MCP target "${name}" → ${command}${prependArgs ? ` ${prependArgs.join(" ")}` : ""}`);
         } else if (flags.sse) {
           const url = flags.url ?? positionals[0];
           if (!url) die("SSE MCP target requires a URL (e.g. clip add myserver --sse https://example.com/sse)");
-          await addTarget(name, "mcp", { transport: "sse", url, auth: false, allow, deny });
+          await addTarget(name, "mcp", {
+            transport: "sse",
+            url,
+            auth: false,
+            allow,
+            deny,
+            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+          });
           console.log(`Added SSE MCP target "${name}" → ${url}`);
         } else {
           const url = flags.url ?? positionals[0];
           if (!url) die("MCP target requires a URL (e.g. clip add myserver https://...mcp)");
-          await addTarget(name, "mcp", { transport: "http", url, auth: false, allow, deny });
+          await addTarget(name, "mcp", {
+            transport: "http",
+            url,
+            auth: false,
+            allow,
+            deny,
+            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+          });
           console.log(`Added MCP target "${name}" → ${url}`);
         }
       },

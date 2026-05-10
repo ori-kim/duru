@@ -1,5 +1,13 @@
 import { AuthenticatedClient, resolveAuthDir } from "@clip/auth";
-import { die, formatToolHelp, parseToolArgs } from "@clip/core";
+import {
+  ClipError,
+  die,
+  formatToolHelp,
+  parseToolArgs,
+  resolveTargetTimeoutMs,
+  targetTimeoutMessage,
+  withTargetTimeoutSignal,
+} from "@clip/core";
 import type { ExecutorContext, TargetResult } from "@clip/core";
 import { isMcpIntrospectionSubcommand, maybeFormatMcpIntrospection } from "./introspection.ts";
 import type { McpSseTarget } from "./schema.ts";
@@ -73,6 +81,7 @@ async function openSseSession(
   externalHeaders: Record<string, string> = {},
 ): Promise<SseSession> {
   const oauthEnabled = target.auth === "oauth";
+  const timeoutMs = resolveTargetTimeoutMs(target);
   const client = new AuthenticatedClient({
     targetName,
     targetType: "mcp",
@@ -90,7 +99,10 @@ async function openSseSession(
     ...authHeaders,
   };
 
-  const sseResp = await client.fetch(target.url, { headers: connectHeaders }).catch((e: unknown) => {
+  const sseResp = await withTargetTimeoutSignal(timeoutMs, "MCP SSE connect", (signal) =>
+    client.fetch(target.url, { headers: connectHeaders, signal }),
+  ).catch((e: unknown) => {
+    if (e instanceof ClipError) throw e;
     die(`Failed to connect to SSE endpoint at ${target.url}: ${e}`);
   });
 
@@ -147,11 +159,10 @@ async function openSseSession(
   })();
 
   const timeoutId = setTimeout(
-    () => endpointReject?.(new Error("Timeout (10s) waiting for SSE endpoint event")),
-    10_000,
+    () => endpointReject?.(new ClipError(targetTimeoutMessage("MCP SSE endpoint event", timeoutMs), 124)),
+    timeoutMs,
   );
-  const messageUrl = await endpointPromise;
-  clearTimeout(timeoutId);
+  const messageUrl = await endpointPromise.finally(() => clearTimeout(timeoutId));
 
   const postBaseHeaders: Record<string, string> = {
     "Content-Type": "application/json",
@@ -167,18 +178,22 @@ async function openSseSession(
       setTimeout(() => {
         if (pending.has(id)) {
           pending.delete(id);
-          reject(new Error(`Timeout waiting for response (id=${id})`));
+          reject(new ClipError(targetTimeoutMessage(`MCP SSE response (id=${id})`, timeoutMs), 124));
         }
-      }, 30_000);
+      }, timeoutMs);
     });
 
-    const postResp = await client
-      .fetch(messageUrl, {
+    const postResp = await withTargetTimeoutSignal(timeoutMs, `MCP SSE POST ${method}`, (signal) =>
+      client.fetch(messageUrl, {
         method: "POST",
         headers: postBaseHeaders,
         body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-      })
-      .catch((e: unknown) => die(`SSE POST failed: ${e}`));
+        signal,
+      }),
+    ).catch((e: unknown) => {
+      if (e instanceof ClipError) throw e;
+      die(`SSE POST failed: ${e}`);
+    });
 
     if (!postResp.ok && postResp.status !== 202) {
       die(`SSE message endpoint returned HTTP ${postResp.status}: ${await postResp.text()}`);
@@ -190,11 +205,14 @@ async function openSseSession(
   };
 
   const notify = async (method: string, params?: unknown): Promise<void> => {
-    await client.fetch(messageUrl, {
-      method: "POST",
-      headers: postBaseHeaders,
-      body: JSON.stringify({ jsonrpc: "2.0", method, params }),
-    });
+    await withTargetTimeoutSignal(timeoutMs, `MCP SSE notify ${method}`, (signal) =>
+      client.fetch(messageUrl, {
+        method: "POST",
+        headers: postBaseHeaders,
+        body: JSON.stringify({ jsonrpc: "2.0", method, params }),
+        signal,
+      }),
+    );
   };
 
   return { call, notify, close: () => sseResp.body?.cancel() };

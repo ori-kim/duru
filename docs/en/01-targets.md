@@ -32,6 +32,7 @@ clip add github https://api.github.com --openapi-url https://raw.githubuserconte
 clip add my-api localhost:50051 --grpc ./api.proto
 clip add gql https://api.example.com/graphql --graphql
 clip add my-scripts --script
+clip add gh gh --timeout-ms 10000
 
 # List all targets
 clip list
@@ -83,6 +84,9 @@ headers:
   Authorization: "Bearer ${GITHUB_TOKEN}"
   X-Custom-Header: "value"
 
+# Execution timeout (ms)
+timeoutMs: 30000
+
 # Aliases — custom subcommand shortcuts
 aliases:
   my-alias:
@@ -92,6 +96,16 @@ aliases:
 ```
 
 `deny` always takes precedence over `allow`.
+
+### Timeout Priority
+
+Target execution timeout is resolved in this order:
+
+1. `timeoutMs` in the target config
+2. `CLIP_TARGET_TIMEOUT_MS` environment variable
+3. Default `30000` ms
+
+When registering a new target, `clip add ... --timeout-ms 10000` stores `timeoutMs` directly.
 
 ## Profiles
 
@@ -150,10 +164,11 @@ clip profile remove mygh personal
 | `--base-url <url>` | API | Replace baseUrl |
 | `--header KEY:VAL` | MCP/API/gRPC/GraphQL | Add header (repeatable) |
 | `--metadata KEY=VAL` | gRPC | Add metadata (repeatable) |
+| `--timeout-ms N` | All targets | Replace execution timeoutMs |
 
 ### Merge Rules
 
-- Scalar/array fields (`args`, `url`, `command`, `address`, …): profile value **replaces** target value
+- Scalar/array fields (`args`, `url`, `command`, `address`, `timeoutMs`, …): profile value **replaces** target value
 - Map fields (`env`, `headers`, `metadata`): profile entries are **merged** on top of target values (profile wins)
 - ACL fields (`allow`, `deny`, `acl`): managed on the target only — profiles cannot bypass ACL
 
