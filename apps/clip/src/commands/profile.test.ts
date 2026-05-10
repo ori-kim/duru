@@ -22,6 +22,11 @@ describe("applyOverride", () => {
     expect(result.env).toEqual({ BASE_VAR: "overridden", PROFILE_VAR: "p" });
   });
 
+  test("timeoutMs replaces base value", () => {
+    const result = applyOverride({ ...base, timeoutMs: 30_000 }, { timeoutMs: 5_000 });
+    expect(result.timeoutMs).toBe(5_000);
+  });
+
   test("acl fields not affected by profile", () => {
     const result = applyOverride(base, { args: ["--hostname", "prod.example.com"] });
     expect(result.allow).toEqual(["pr", "issue"]);

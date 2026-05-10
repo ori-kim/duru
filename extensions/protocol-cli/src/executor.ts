@@ -1,4 +1,4 @@
-import { die } from "@clip/core";
+import { die, resolveTargetTimeoutMs, targetTimeoutMessage, waitForProcessExit } from "@clip/core";
 import type { ExecutorContext, TargetResult } from "@clip/core";
 import type { CliTarget } from "./schema.ts";
 
@@ -10,6 +10,7 @@ function shellQuote(arg: string): string {
 export async function executeCli(target: CliTarget, ctx: ExecutorContext): Promise<TargetResult> {
   const { subcommand, args, dryRun, passthrough } = ctx;
   const cmd = [target.command, ...(target.args ?? []), subcommand, ...args];
+  const timeoutMs = resolveTargetTimeoutMs(target);
 
   if (dryRun) {
     return { exitCode: 0, stdout: `${cmd.map(shellQuote).join(" ")}\n`, stderr: "" };
@@ -20,7 +21,8 @@ export async function executeCli(target: CliTarget, ctx: ExecutorContext): Promi
   try {
     if (passthrough) {
       proc = Bun.spawn(cmd, { stdin: "inherit", stdout: "inherit", stderr: "inherit", env });
-      const exitCode = await proc.exited;
+      const { exitCode, timedOut } = await waitForProcessExit(proc, timeoutMs);
+      if (timedOut) process.stderr.write(`clip: ${targetTimeoutMessage("CLI target", timeoutMs)}\n`);
       return { exitCode, stdout: "", stderr: "" };
     }
 
@@ -29,9 +31,12 @@ export async function executeCli(target: CliTarget, ctx: ExecutorContext): Promi
     die(`Command not found: ${target.command}`, 127);
   }
 
-  const exitCode = await proc.exited;
+  const { exitCode, timedOut } = await waitForProcessExit(proc, timeoutMs);
   const stdout = await new Response(proc.stdout as ReadableStream<Uint8Array>).text();
-  const stderr = await new Response(proc.stderr as ReadableStream<Uint8Array>).text();
+  let stderr = await new Response(proc.stderr as ReadableStream<Uint8Array>).text();
+  if (timedOut) {
+    stderr += `${stderr.endsWith("\n") || stderr.length === 0 ? "" : "\n"}${targetTimeoutMessage("CLI target", timeoutMs)}\n`;
+  }
 
   return { exitCode, stdout, stderr };
 }

@@ -138,6 +138,8 @@ clip gql query --query '{ users { id name } }'
 
 플래그는 명령어 어디에든 붙일 수 있습니다: `clip gh pr list --json`, `clip petstore getPetById --petId 1 --dry-run`
 
+**Target timeout:** target config의 `timeoutMs`가 가장 우선이고, 없으면 `CLIP_TARGET_TIMEOUT_MS`, 없으면 기본 `30000` ms를 사용합니다.
+
 ## 문서
 
 - [Target 개요](docs/ko/01-targets.md) — target 종류, profile, ACL, 글로벌 플래그

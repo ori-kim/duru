@@ -1,4 +1,4 @@
-import { aliasFields, profileFields } from "@clip/core";
+import { aliasFields, profileFields, timeoutFields } from "@clip/core";
 import { z } from "zod";
 
 const aclTreeSchema = z.record(
@@ -15,6 +15,7 @@ export const cliTargetSchema = z.object({
   allow: z.array(z.string()).optional(),
   deny: z.array(z.string()).optional(),
   acl: aclTreeSchema.optional(),
+  ...timeoutFields,
   ...profileFields,
   ...aliasFields,
 });

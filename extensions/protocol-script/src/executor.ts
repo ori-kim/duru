@@ -1,5 +1,5 @@
 import { existsSync, statSync } from "node:fs";
-import { buildAliasSection, die } from "@clip/core";
+import { buildAliasSection, die, resolveTargetTimeoutMs, targetTimeoutMessage, waitForProcessExit } from "@clip/core";
 import type { HasAliases } from "@clip/core";
 import type { ExecutorContext, TargetResult } from "@clip/core";
 import type { ScriptCommandDef, ScriptTarget } from "./schema.ts";
@@ -61,6 +61,7 @@ function buildSpawnArgs(subcommand: string, def: ScriptCommandDef, userArgs: str
 
 export async function executeScript(target: ScriptTarget, ctx: ExecutorContext): Promise<TargetResult> {
   const { subcommand, args, dryRun, passthrough } = ctx;
+  const timeoutMs = resolveTargetTimeoutMs(target);
   if (subcommand === "tools") {
     return { exitCode: 0, stdout: `${buildToolsOutput(target)}\n`, stderr: "" };
   }
@@ -83,12 +84,17 @@ export async function executeScript(target: ScriptTarget, ctx: ExecutorContext):
 
   if (passthrough) {
     const proc = Bun.spawn(cmd, { stdin: "inherit", stdout: "inherit", stderr: "inherit", env });
-    return { exitCode: await proc.exited, stdout: "", stderr: "" };
+    const { exitCode, timedOut } = await waitForProcessExit(proc, timeoutMs);
+    if (timedOut) process.stderr.write(`clip: ${targetTimeoutMessage("Script target", timeoutMs)}\n`);
+    return { exitCode, stdout: "", stderr: "" };
   }
 
   const proc = Bun.spawn(cmd, { stdin: "inherit", stdout: "pipe", stderr: "pipe", env });
-  const exitCode = await proc.exited;
+  const { exitCode, timedOut } = await waitForProcessExit(proc, timeoutMs);
   const stdout = await new Response(proc.stdout as ReadableStream<Uint8Array>).text();
-  const stderr = await new Response(proc.stderr as ReadableStream<Uint8Array>).text();
+  let stderr = await new Response(proc.stderr as ReadableStream<Uint8Array>).text();
+  if (timedOut) {
+    stderr += `${stderr.endsWith("\n") || stderr.length === 0 ? "" : "\n"}${targetTimeoutMessage("Script target", timeoutMs)}\n`;
+  }
   return { exitCode, stdout, stderr };
 }

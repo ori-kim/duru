@@ -83,11 +83,18 @@ export const extension: ClipExtension = {
         return /\/(openapi|swagger)\.(json|ya?ml)$/.test(lower) || /\/openapi\.json$/.test(lower);
       },
       addHandler: async (args: AddArgs) => {
-        const { name, positionals, flags, allow, deny } = args;
+        const { name, positionals, flags, allow, deny, timeoutMs } = args;
         const baseUrl = flags["base-url"] ?? flags.baseUrl ?? positionals[0];
         if (!baseUrl) die("API target requires a base URL (e.g. clip add petstore https://api.example.com)");
         const openapiUrl = flags["openapi-url"] ?? flags.openapiUrl;
-        await addTarget(name, "api", { auth: false, baseUrl, ...(openapiUrl ? { openapiUrl } : {}), allow, deny });
+        await addTarget(name, "api", {
+          auth: false,
+          baseUrl,
+          ...(openapiUrl ? { openapiUrl } : {}),
+          allow,
+          deny,
+          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+        });
         console.log(`Added API target "${name}" → ${baseUrl}`);
         try {
           const resp = await fetch(openapiUrl ?? baseUrl);

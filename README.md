@@ -139,6 +139,8 @@ clip gql query --query '{ users { id name } }'
 
 Flags can be placed anywhere: `clip gh pr list --json`, `clip petstore getPetById --petId 1 --dry-run`
 
+**Target timeout:** `timeoutMs` in target config wins, then `CLIP_TARGET_TIMEOUT_MS`, then default `30000` ms.
+
 ## Extensions
 
 Drop a `.ts` file into `~/.clip/extensions/` to add hooks or new target types:

@@ -80,11 +80,16 @@ export const extension: ClipExtension = {
       },
       urlHeuristic: (url) => url.toLowerCase().endsWith("/graphql"),
       addHandler: async (args: AddArgs) => {
-        const { name, positionals, flags, allow, deny } = args;
+        const { name, positionals, flags, allow, deny, timeoutMs } = args;
         const endpoint = flags.endpoint ?? positionals[0];
         if (!endpoint)
-          die("GraphQL target requires an endpoint URL (e.g. clip add gh https://api.github.com/graphql --graphql)");
-        await addTarget(name, "graphql", { endpoint, allow, deny });
+          die("GraphQL target requires an endpoint URL (e.g. clip add gql https://api.example.com/graphql --graphql)");
+        await addTarget(name, "graphql", {
+          endpoint,
+          allow,
+          deny,
+          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+        });
         console.log(`Added GraphQL target "${name}" → ${endpoint}`);
       },
       helpRenderer: async (_name, target) => {

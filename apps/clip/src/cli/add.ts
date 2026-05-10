@@ -1,7 +1,7 @@
 import type { Registry } from "@clip/core";
 import { die, validateIdentifier } from "@clip/core";
 
-const RESERVED_VALUE_FLAGS = new Set(["allow", "deny", "type"]);
+const RESERVED_VALUE_FLAGS = new Set(["allow", "deny", "type", "timeout-ms", "timeoutMs"]);
 
 export async function runAdd(args: string[], registry: Registry): Promise<void> {
   const name = args[0];
@@ -43,8 +43,13 @@ export async function runAdd(args: string[], registry: Registry): Promise<void> 
 
   const allow = flags.allow ? flags.allow.split(",").map((s) => s.trim()) : undefined;
   const deny = flags.deny ? flags.deny.split(",").map((s) => s.trim()) : undefined;
+  const rawTimeoutMs = flags["timeout-ms"] ?? flags.timeoutMs;
+  const timeoutMs = rawTimeoutMs === undefined ? undefined : Number(rawTimeoutMs);
+  if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+    die(`--timeout-ms must be a positive number, got: ${rawTimeoutMs}`);
+  }
 
-  const addArgs = { name, positionals, flags, allow, deny };
+  const addArgs = { name, positionals, flags, allow, deny, timeoutMs };
 
   // --type 명시: 직접 dispatch
   const explicitType = flags.type;

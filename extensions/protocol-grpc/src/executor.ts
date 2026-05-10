@@ -1,7 +1,17 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { AuthenticatedClient, resolveAuthDir } from "@clip/auth";
-import { CONFIG_DIR, buildAliasSection, die, findTargetConfigDir, formatToolHelp, parseToolArgs } from "@clip/core";
+import {
+  CONFIG_DIR,
+  buildAliasSection,
+  die,
+  findTargetConfigDir,
+  formatToolHelp,
+  parseToolArgs,
+  resolveTargetTimeoutMs,
+  targetTimeoutMessage,
+  waitForProcessExit,
+} from "@clip/core";
 import type { ExecutorContext, TargetResult, Tool } from "@clip/core";
 import { buildJsonSchema, isWellKnownOrScalar, parseMessageDescribe, parseServiceDescribe } from "./grpc.ts";
 import type { ParsedDescribe } from "./grpc.ts";
@@ -50,13 +60,20 @@ async function ensureGrpcurl(): Promise<void> {
   }
 }
 
-async function spawnGrpcurl(args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+async function spawnGrpcurl(
+  args: string[],
+  timeoutMs: number,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn(["grpcurl", ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([
+  const [stdout, rawStderr, exit] = await Promise.all([
     new Response(proc.stdout as ReadableStream<Uint8Array>).text(),
     new Response(proc.stderr as ReadableStream<Uint8Array>).text(),
-    proc.exited,
+    waitForProcessExit(proc, timeoutMs),
   ]);
+  const stderr = exit.timedOut
+    ? `${rawStderr}${rawStderr.endsWith("\n") || rawStderr.length === 0 ? "" : "\n"}${targetTimeoutMessage("gRPC target", timeoutMs)}\n`
+    : rawStderr;
+  const exitCode = exit.exitCode;
   return { stdout, stderr, exitCode };
 }
 
@@ -79,8 +96,14 @@ function makeReflectFlags(target: GrpcTarget, token?: string): string[] {
   return Object.entries(meta).flatMap(([k, v]) => ["-reflect-header", `${k}: ${v}`]);
 }
 
-function makeRpcFlags(target: GrpcTarget, token?: string): string[] {
-  const flags = ["-format-error", "-max-time", String(target.deadline ?? 30)];
+function resolveGrpcTargetTimeoutMs(target: GrpcTarget): number {
+  return resolveTargetTimeoutMs({
+    timeoutMs: target.timeoutMs ?? (target.deadline === undefined ? undefined : target.deadline * 1000),
+  });
+}
+
+function makeRpcFlags(target: GrpcTarget, token?: string, timeoutMs = resolveGrpcTargetTimeoutMs(target)): string[] {
+  const flags = ["-format-error", "-max-time", String(timeoutMs / 1000)];
   if (target.emitDefaults !== false) flags.push("-emit-defaults");
   if (target.allowUnknownFields) flags.push("-allow-unknown-fields");
   const meta = { ...(target.metadata ?? {}) };
@@ -126,6 +149,7 @@ async function loadSchema(
   targetName: string,
   forceRefresh = false,
   authHeaders: Record<string, string> = {},
+  timeoutMs = resolveGrpcTargetTimeoutMs(target),
 ): Promise<GrpcSchemaCache> {
   const cachePath = schemaCachePath(targetName);
   const cacheFile = Bun.file(cachePath);
@@ -147,7 +171,7 @@ async function loadSchema(
   const reflectFlags = makeReflectFlags(target, token);
 
   // 1. Service 목록
-  const listResult = await spawnGrpcurl([...baseFlags, ...reflectFlags, target.address, "list"]);
+  const listResult = await spawnGrpcurl([...baseFlags, ...reflectFlags, target.address, "list"], timeoutMs);
   if (listResult.exitCode !== 0) {
     die(
       `Failed to list gRPC services for "${targetName}":\n${listResult.stderr.trim()}\n\nIf reflection is disabled, add "proto: ./service.proto" to config.yml.`,
@@ -166,7 +190,7 @@ async function loadSchema(
 
   for (const svcName of serviceNames) {
     if (HIDDEN_SERVICES.has(svcName)) continue;
-    const r = await spawnGrpcurl([...baseFlags, ...reflectFlags, target.address, "describe", svcName]);
+    const r = await spawnGrpcurl([...baseFlags, ...reflectFlags, target.address, "describe", svcName], timeoutMs);
     if (r.exitCode !== 0) continue;
     const methods = parseServiceDescribe(r.stdout);
     parsedServiceMethods.set(svcName, methods);
@@ -186,7 +210,7 @@ async function loadSchema(
     if (descSeen.has(typeName) || isWellKnownOrScalar(typeName)) continue;
     descSeen.add(typeName);
 
-    const r = await spawnGrpcurl([...baseFlags, ...reflectFlags, target.address, "describe", typeName]);
+    const r = await spawnGrpcurl([...baseFlags, ...reflectFlags, target.address, "describe", typeName], timeoutMs);
     const parsed: ParsedDescribe = r.exitCode === 0 ? parseMessageDescribe(r.stdout) : { kind: "unknown" };
     knownTypes.set(typeName, parsed);
 
@@ -263,11 +287,12 @@ export function buildGrpcurlCommand(args: string[]): string {
 export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Promise<TargetResult> {
   const { subcommand, args: rawArgs, targetName, headers: ctxHeaders, dryRun } = ctx;
   const forceRefresh = subcommand === "refresh";
+  const timeoutMs = resolveGrpcTargetTimeoutMs(target);
   if (!dryRun || forceRefresh) await ensureGrpcurl();
   validateTls(target);
 
   if (subcommand === "refresh") {
-    const schema = await loadSchema(target, targetName, true, ctxHeaders);
+    const schema = await loadSchema(target, targetName, true, ctxHeaders, timeoutMs);
     const total = schema.services.reduce((n, s) => n + s.methods.length, 0);
     return {
       exitCode: 0,
@@ -276,7 +301,7 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
     };
   }
 
-  const schema = await loadSchema(target, targetName, forceRefresh, ctxHeaders);
+  const schema = await loadSchema(target, targetName, forceRefresh, ctxHeaders, timeoutMs);
 
   if (subcommand === "tools") {
     const visible = schema.services.filter((s) => !HIDDEN_SERVICES.has(s.name));
@@ -378,14 +403,14 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
   const body = Object.keys(args).length > 0 ? args : {};
   const token = tokenFromHeaders(ctxHeaders);
   const baseFlags = makeBaseFlags(target);
-  const rpcFlags = makeRpcFlags(target, token);
+  const rpcFlags = makeRpcFlags(target, token, timeoutMs);
   const callArgs = [...baseFlags, ...rpcFlags, "-d", JSON.stringify(body), target.address, fqn];
 
   if (dryRun) {
     return { exitCode: 0, stdout: buildGrpcurlCommand(callArgs), stderr: "" };
   }
 
-  const result = await spawnGrpcurl(callArgs);
+  const result = await spawnGrpcurl(callArgs, timeoutMs);
 
   if (result.exitCode === 0) {
     let stdout: string;
@@ -404,14 +429,10 @@ export async function executeGrpc(target: GrpcTarget, ctx: ExecutorContext): Pro
   if (grpcCode === "UNAUTHENTICATED" && target.oauth) {
     const newToken = await getAuthToken(target, targetName);
     if (newToken) {
-      const retry = await spawnGrpcurl([
-        ...baseFlags,
-        ...makeRpcFlags(target, newToken),
-        "-d",
-        JSON.stringify(body),
-        target.address,
-        fqn,
-      ]);
+      const retry = await spawnGrpcurl(
+        [...baseFlags, ...makeRpcFlags(target, newToken, timeoutMs), "-d", JSON.stringify(body), target.address, fqn],
+        timeoutMs,
+      );
       if (retry.exitCode === 0) {
         let stdout: string;
         try {

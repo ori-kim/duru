@@ -44,11 +44,17 @@ export const extension: ClipExtension = {
       },
       urlHeuristic: (url) => !url.startsWith("http://") && !url.startsWith("https://"),
       addHandler: async (args: AddArgs) => {
-        const { name, positionals, flags, allow, deny } = args;
+        const { name, positionals, flags, allow, deny, timeoutMs } = args;
         const command = flags.command ?? positionals[0];
         if (!command) die("CLI target requires a command (e.g. clip add gh gh)");
         const prependArgs = flags.args ? flags.args.split(",").map((s) => s.trim()) : undefined;
-        await addTarget(name, "cli", { command, args: prependArgs, allow, deny });
+        await addTarget(name, "cli", {
+          command,
+          args: prependArgs,
+          allow,
+          deny,
+          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+        });
         console.log(`Added CLI target "${name}" → ${command}`);
       },
       helpRenderer: async (_name, target) => {

@@ -27,6 +27,7 @@ const FILES: Array<{ path: string; src: string }> = [
   { path: "src/utils/output.ts", src: "src/utils/output.ts" },
   { path: "src/utils/agent-safety.ts", src: "src/utils/agent-safety.ts" },
   { path: "src/utils/target-schema.ts", src: "src/utils/target-schema.ts" },
+  { path: "src/utils/timeout.ts", src: "src/utils/timeout.ts" },
   { path: "src/utils/tool-args.ts", src: "src/utils/tool-args.ts" },
 ];
 

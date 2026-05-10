@@ -1,7 +1,16 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { AuthenticatedClient, resolveAuthDir } from "@clip/auth";
-import { CONFIG_DIR, buildAliasSection, die, findTargetConfigDir, formatToolHelp, parseToolArgs } from "@clip/core";
+import {
+  CONFIG_DIR,
+  buildAliasSection,
+  die,
+  findTargetConfigDir,
+  formatToolHelp,
+  parseToolArgs,
+  resolveTargetTimeoutMs,
+  withTargetTimeoutSignal,
+} from "@clip/core";
 import type { ExecutorContext, TargetResult, Tool } from "@clip/core";
 import {
   INTROSPECTION_QUERY,
@@ -48,6 +57,7 @@ async function postGraphql(
   targetName: string,
   body: Record<string, unknown>,
   existingHeaders?: Record<string, string>,
+  timeoutMs = resolveTargetTimeoutMs(target),
 ): Promise<{ resp: Response; json: Record<string, unknown> }> {
   const client = new AuthenticatedClient({
     targetName,
@@ -61,13 +71,16 @@ async function postGraphql(
   const authHeaders = await client.getAuthHeaders();
   const mergedHeaders = { ...headers, ...authHeaders };
 
-  const resp = await client.fetch(target.endpoint, {
-    method: "POST",
-    headers: mergedHeaders,
-    body: JSON.stringify(body),
-  });
+  return withTargetTimeoutSignal(timeoutMs, `GraphQL ${targetName}`, async (signal) => {
+    const resp = await client.fetch(target.endpoint, {
+      method: "POST",
+      headers: mergedHeaders,
+      body: JSON.stringify(body),
+      signal,
+    });
 
-  return { resp, json: await safeJson(resp) };
+    return { resp, json: await safeJson(resp) };
+  });
 }
 
 async function loadSchema(
@@ -94,8 +107,9 @@ async function loadSchema(
     );
   }
 
+  const timeoutMs = resolveTargetTimeoutMs(target);
   const headers = buildHeaders(target, extraHeaders);
-  const { resp, json } = await postGraphql(target, targetName, { query: INTROSPECTION_QUERY }, headers);
+  const { resp, json } = await postGraphql(target, targetName, { query: INTROSPECTION_QUERY }, headers, timeoutMs);
 
   if (!resp.ok) {
     die(`Failed to introspect "${targetName}": HTTP ${resp.status}\n${JSON.stringify(json).slice(0, 400)}`);

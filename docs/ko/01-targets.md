@@ -32,6 +32,7 @@ clip add github https://api.github.com --openapi-url https://raw.githubuserconte
 clip add my-api localhost:50051 --grpc ./api.proto
 clip add gql https://api.example.com/graphql --graphql
 clip add my-scripts --script
+clip add gh gh --timeout-ms 10000
 
 # 목록 확인
 clip list
@@ -83,6 +84,9 @@ headers:
   Authorization: "Bearer ${GITHUB_TOKEN}"
   X-Custom-Header: "value"
 
+# 실행 timeout (ms)
+timeoutMs: 30000
+
 # Alias — 커스텀 서브커맨드 단축키
 aliases:
   my-alias:
@@ -92,6 +96,16 @@ aliases:
 ```
 
 `deny`가 `allow`보다 항상 우선합니다.
+
+### Timeout 우선순위
+
+target 실행 timeout은 다음 순서로 결정됩니다.
+
+1. target config의 `timeoutMs`
+2. 환경변수 `CLIP_TARGET_TIMEOUT_MS`
+3. 기본값 `30000` ms
+
+신규 등록 시에는 `clip add ... --timeout-ms 10000`으로 `timeoutMs`를 바로 저장할 수 있습니다.
 
 ## Profile
 
@@ -150,10 +164,11 @@ clip profile remove mygh personal
 | `--base-url <url>` | API | baseUrl 교체 |
 | `--header KEY:VAL` | MCP/API/gRPC/GraphQL | 헤더 추가 (반복 사용 가능) |
 | `--metadata KEY=VAL` | gRPC | metadata 추가 (반복 사용 가능) |
+| `--timeout-ms N` | 모든 target | 실행 timeoutMs 교체 |
 
 ### Merge 규칙
 
-- `args`, `url`, `command`, `address` 등: profile 값이 target 값을 **교체**
+- `args`, `url`, `command`, `address`, `timeoutMs` 등: profile 값이 target 값을 **교체**
 - `env`, `headers`, `metadata`: target 기본값 위에 profile 값을 **병합** (profile 우선)
 - `allow`, `deny`, `acl`: target에서만 관리 (profile이 ACL 우회 불가)
 

@@ -1,4 +1,4 @@
-import { aclFields, aliasFields, profileFields } from "@clip/core";
+import { aclFields, aliasFields, profileFields, timeoutFields } from "@clip/core";
 import { z } from "zod";
 
 export const graphqlTargetSchema = z.object({
@@ -6,6 +6,7 @@ export const graphqlTargetSchema = z.object({
   introspect: z.boolean().optional(),
   headers: z.record(z.string()).optional(),
   oauth: z.boolean().optional(),
+  ...timeoutFields,
   ...aclFields,
   ...profileFields,
   ...aliasFields,

@@ -1,4 +1,4 @@
-import { aclFields, aliasFields, profileFields } from "@clip/core";
+import { aclFields, aliasFields, profileFields, timeoutFields } from "@clip/core";
 import { z } from "zod";
 
 export const mcpHttpTargetSchema = z.object({
@@ -9,6 +9,7 @@ export const mcpHttpTargetSchema = z.object({
     .union([z.literal("oauth"), z.literal("apikey"), z.literal(false)])
     .optional()
     .default(false),
+  ...timeoutFields,
   ...aclFields,
   ...profileFields,
   ...aliasFields,
@@ -19,6 +20,7 @@ export const mcpStdioTargetSchema = z.object({
   command: z.string().min(1),
   args: z.array(z.string()).optional(),
   env: z.record(z.string()).optional(),
+  ...timeoutFields,
   ...aclFields,
   ...profileFields,
   ...aliasFields,
@@ -32,6 +34,7 @@ export const mcpSseTargetSchema = z.object({
     .union([z.literal("oauth"), z.literal("apikey"), z.literal(false)])
     .optional()
     .default(false),
+  ...timeoutFields,
   ...aclFields,
   ...profileFields,
   ...aliasFields,

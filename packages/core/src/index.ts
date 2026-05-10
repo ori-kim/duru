@@ -97,11 +97,23 @@ export { parseToolArgs, formatToolHelp, extractHelpFlag } from "./utils/tool-arg
 export { IDENTIFIER_RE, validateIdentifier, hardenAgentInput, hardenToolInput } from "./utils/agent-safety.ts";
 
 // Target schema helpers — extension schema 정의에서 사용
-export { aclFields, aliasFields, profileFields, commonTargetFields } from "./utils/target-schema.ts";
+export { aclFields, aliasFields, profileFields, timeoutFields, commonTargetFields } from "./utils/target-schema.ts";
 export type { ProfileOverride, AliasDef, AclNode, AclTree } from "./utils/target-schema.ts";
 
 // ACL
 export { checkAcl } from "./acl.ts";
+
+// Target timeout
+export {
+  CLIP_TARGET_TIMEOUT_ENV,
+  DEFAULT_TARGET_TIMEOUT_MS,
+  formatTimeoutMs,
+  resolveTargetTimeoutMs,
+  targetTimeoutMessage,
+  waitForProcessExit,
+  withTargetTimeoutSignal,
+} from "./utils/timeout.ts";
+export type { HasTargetTimeout, TimeoutProcess } from "./utils/timeout.ts";
 
 // OutputRegistry
 export { OutputRegistry, outputRegistry } from "./output-registry.ts";
