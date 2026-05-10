@@ -22,6 +22,7 @@ export type {
   ErrorReturn,
   InternalCommandHandler,
   InternalCommandCtx,
+  InternalCommandLateFlags,
   Executor,
   Logger,
 } from "./extension.ts";
@@ -68,7 +69,15 @@ export { die, ClipError, printAndExit } from "./utils/errors.ts";
 export { subRecord, subProfiles } from "./utils/env-sub.ts";
 
 // Alias — extension executor의 tools 출력에서 사용
-export { buildAliasSection, listAliases, resolveAlias, expandArgs, expandInput, flattenInput, formatAliasDef } from "./alias.ts";
+export {
+  buildAliasSection,
+  listAliases,
+  resolveAlias,
+  expandArgs,
+  expandInput,
+  flattenInput,
+  formatAliasDef,
+} from "./alias.ts";
 export type { HasAliases } from "./alias.ts";
 
 // Tool args — extension executor에서 공통 사용

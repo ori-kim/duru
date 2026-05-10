@@ -9,6 +9,7 @@
 5. [gRPC target](en/05-grpc.md) — protobuf services, schema refresh, dry run
 6. [GraphQL target](en/06-graphql.md) — introspection, queries, mutations, auth
 7. [Aliases & Scripts](en/07-aliases.md) — shortcut macros and script bundles
+8. [skills-flow](en/11-skills-flow.md) — graph-shaped agent skill scaffolding
 
 ## 한국어
 
@@ -19,6 +20,7 @@
 5. [gRPC target](ko/05-grpc.md) — protobuf 서비스, 스키마 갱신, dry run
 6. [GraphQL target](ko/06-graphql.md) — introspection, 쿼리, mutation, 인증
 7. [Aliases & Scripts](ko/07-aliases.md) — 단축 매크로와 스크립트 번들
+8. [skills-flow](ko/11-skills-flow.md) — 그래프 기반 agent skill 스캐폴딩
 
 ---
 

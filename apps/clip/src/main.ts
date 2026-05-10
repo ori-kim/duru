@@ -11,7 +11,7 @@
 import "./virtual-modules.ts";
 import { checkAcl, dispatch, loadConfig, getTarget, outputRegistry, printAndExit, formatToolHelp } from "@clip/core";
 import type { ClipExtension, HasAliases, ResolvedTarget } from "@clip/core";
-import { Registry } from "@clip/core";
+import type { Registry } from "@clip/core";
 import { createDefaultRegistry } from "./builtin-loader.ts";
 import { runAdd } from "./cli/add.ts";
 import { runConfigCmd } from "./cli/config-cmd.ts";
@@ -106,7 +106,7 @@ async function main(): Promise<number> {
       process.stderr.write(`clip: unknown command "${matched.verb}"\n`);
       return 1;
     }
-    await handler({ args: matched.rest as string[] });
+    await handler({ args: matched.rest as string[], lateFlags: parsed.lateFlags });
     return 0;
   }
 

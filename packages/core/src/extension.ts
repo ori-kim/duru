@@ -144,8 +144,16 @@ export type TargetTypeContribution = {
 
 // --- InternalCommandHandler ---
 
+export type InternalCommandLateFlags = {
+  jsonMode: boolean;
+  pipeMode: boolean;
+  dryRun: boolean;
+  format?: string;
+};
+
 export type InternalCommandCtx = {
   args: string[];
+  lateFlags?: InternalCommandLateFlags;
 };
 
 export type InternalCommandHandler = (ctx: InternalCommandCtx) => Promise<void>;
@@ -303,7 +311,6 @@ export class Registry {
     registerResultPresenter(p: ResultPresenter): void;
     registerOutputRenderer(r: OutputRenderer): void;
   }): Promise<void> {
-
     const api: ExtensionApi = {
       registerTargetType: <T>(def: TargetTypeDef<T>): void => {
         const isBuiltin = this._currentExtName.startsWith("builtin:");
@@ -312,7 +319,7 @@ export class Registry {
           if (!isBuiltin && !this._allowedTypeOverrides.has(def.type)) {
             throw new Error(
               `Target type "${def.type}" is owned by a builtin extension and cannot be overridden. ` +
-              `To override, disable the builtin entry in your extensions manifest.`,
+                `To override, disable the builtin entry in your extensions manifest.`,
             );
           }
           if (!isBuiltin) {
@@ -343,7 +350,7 @@ export class Registry {
           if (!isBuiltin && !this._allowedVerbOverrides.has(verb)) {
             throw new Error(
               `Internal command "${verb}" is owned by a builtin extension and cannot be overridden. ` +
-              `To override, disable the builtin entry in your extensions manifest.`,
+                `To override, disable the builtin entry in your extensions manifest.`,
             );
           }
           if (!isBuiltin) {
