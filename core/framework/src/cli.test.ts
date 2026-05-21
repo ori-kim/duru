@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createCli } from "./index.ts";
+import { createCli, createRouter, renderer } from "./index.ts";
 import type { Renderer } from "./types.ts";
 
 describe("createCli", () => {
   test("routes commands with params and options into actions", async () => {
-    const cli = createCli({ defaultRenderer: "test" }).renderer(testRenderer());
+    const cli = createCli().use(renderer(testRenderer()));
 
     cli
       .command("build <entry>", "Build project")
@@ -20,7 +20,7 @@ describe("createCli", () => {
 
   test("runs middleware before command actions", async () => {
     const calls: string[] = [];
-    const cli = createCli({ defaultRenderer: "test" }).renderer(testRenderer());
+    const cli = createCli().use(renderer(testRenderer()));
 
     cli.use(async (ctx, next) => {
       calls.push("before");
@@ -41,13 +41,27 @@ describe("createCli", () => {
   });
 
   test("returns usage output for help", async () => {
-    const cli = createCli({ name: "clip", defaultRenderer: "test" }).renderer(testRenderer());
+    const cli = createCli({ name: "clip" }).use(renderer(testRenderer()));
     cli.command("hello <name>", "Say hello").action(() => undefined);
 
     const result = await cli.run(["--help"]);
 
     expect(result.rendered?.stdout).toContain("Usage: clip <command>");
     expect(result.rendered?.stdout).toContain("hello <name>");
+  });
+
+  test("installs standalone routers through use", async () => {
+    const router = createRouter().option("--json");
+    router.command("inspect", "Inspect app").action((options, ctx) => {
+      ctx.output.data({ json: options.json });
+      return undefined;
+    });
+    const cli = createCli({ name: "clip" }).use(renderer(testRenderer())).use(router);
+
+    const result = await cli.run(["inspect", "--json"]);
+
+    expect(result.ok).toBe(true);
+    expect(result.outputs).toEqual([{ kind: "data", value: { json: true } }]);
   });
 });
 

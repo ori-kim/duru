@@ -1,6 +1,6 @@
 import { describe, test } from "bun:test";
-import { createCli } from "./index.ts";
-import type { OptionSpecOptions, PatternParams } from "./types.ts";
+import { createCli, createRouter, renderer } from "./index.ts";
+import type { OptionSpecOptions, PatternParams, Renderer } from "./types.ts";
 
 type Equal<TLeft, TRight> = (<T>() => T extends TLeft ? 1 : 2) extends <T>() => T extends TRight ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
@@ -30,4 +30,36 @@ describe("public type inference", () => {
         return { typedEntry, typedArgs, typedJson, typedWatch, typedTimeout, typedParam };
       });
   });
+
+  test("carries option types installed by use plugins into commands", () => {
+    createCli()
+      .use(renderer(typeRenderer()))
+      .command("inspect")
+      .action((options, ctx) => {
+        const typedJson: boolean | undefined = options.json;
+        const typedCtxJson: boolean | undefined = ctx.options.json;
+        return { typedJson, typedCtxJson };
+      });
+  });
+
+  test("carries router option types through cli.use(router)", () => {
+    const router = createRouter().option("--json");
+
+    router.command("inspect").action((options, ctx) => {
+      const typedJson: boolean | undefined = options.json;
+      const typedCtxJson: boolean | undefined = ctx.options.json;
+      return { typedJson, typedCtxJson };
+    });
+
+    createCli().use(router);
+  });
 });
+
+function typeRenderer(): Renderer {
+  return {
+    id: "json",
+    render() {
+      return { stdout: "", stderr: "", exitCode: 0 };
+    },
+  };
+}

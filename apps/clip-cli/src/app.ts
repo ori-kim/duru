@@ -1,19 +1,11 @@
-import { createCli } from "@clip/core";
+import { createCli, renderer } from "@clip/core";
 import { jsonRenderer } from "@clip/renderer-json";
 import { textRenderer } from "@clip/renderer-text";
 
 export function createAppCli() {
-  const cli = createCli<{ json?: boolean }>({
+  const cli = createCli({
     name: "clip",
-    defaultRenderer: "text",
-    selectRenderer(ctx) {
-      return ctx.options.json ? "json" : "text";
-    },
-  });
-
-  cli.option("--json", "Render structured JSON output");
-  cli.renderer(textRenderer());
-  cli.renderer(jsonRenderer());
+  }).use(renderer(jsonRenderer(), textRenderer()));
 
   cli
     .command("hello <name>", "Run a framework demo command")
