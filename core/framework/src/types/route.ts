@@ -2,13 +2,13 @@ import type { Awaitable } from "./common.ts";
 import type { Context } from "./context.ts";
 import type { Options } from "./options.ts";
 import type { ActionResult } from "./output.ts";
-import type { Params, PatternParamTuple, PatternParams } from "./pattern.ts";
+import type { Params, PatternParams } from "./pattern.ts";
 
-export type PatternActionArgs<TPattern extends string, TOptions extends Options = Options> = [
-  ...PatternParamTuple<TPattern>,
-  TOptions,
-  Context<TOptions, PatternParams<TPattern>>,
-];
+export type RouteAction<
+  TPattern extends string,
+  TOptions extends Options = Options,
+  TResult extends ActionResult = ActionResult,
+> = (ctx: Context<TOptions, PatternParams<TPattern>>) => Awaitable<TResult>;
 
 export type RoutePresenter<TValue, TOptions extends Options = Options, TParams extends object = Params> = (
   value: TValue,

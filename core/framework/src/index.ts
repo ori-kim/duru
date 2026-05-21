@@ -26,7 +26,6 @@ export type {
   Output,
   Params,
   ParsedOptions,
-  PatternActionArgs,
   PatternParams,
   RenderedOutput,
   Renderer,
@@ -34,5 +33,7 @@ export type {
   Request,
   Router,
   RouterOptions,
+  RouteAction,
+  RoutePresenter,
   RouteRender,
 } from "./types/index.ts";

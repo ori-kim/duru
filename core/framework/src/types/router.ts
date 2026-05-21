@@ -1,10 +1,10 @@
-import type { Awaitable, EmptyObject } from "./common.ts";
+import type { EmptyObject } from "./common.ts";
 import type { Middleware } from "./middleware.ts";
 import type { MergeOptions, OptionDefinition, OptionSpecOptions, Options } from "./options.ts";
 import type { ActionResult } from "./output.ts";
 import type { PatternParams } from "./pattern.ts";
 import type { CliPlugin } from "./plugin.ts";
-import type { PatternActionArgs, RoutePresenter, RouteRender } from "./route.ts";
+import type { RouteAction, RoutePresenter, RouteRender } from "./route.ts";
 
 export type CommandBuilder<
   TPattern extends string = string,
@@ -20,9 +20,7 @@ export type CommandBuilder<
     middleware: Middleware<MergeOptions<TRouterOptions, TLocalOptions>, PatternParams<TPattern>>,
   ): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, TResult>;
   action<TResultNext extends ActionResult>(
-    handler: (
-      ...args: PatternActionArgs<TPattern, MergeOptions<TRouterOptions, TLocalOptions>>
-    ) => Awaitable<TResultNext>,
+    handler: RouteAction<TPattern, MergeOptions<TRouterOptions, TLocalOptions>, TResultNext>,
   ): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, Awaited<TResultNext>>;
   text(
     handler: RoutePresenter<TResult, MergeOptions<TRouterOptions, TLocalOptions>, PatternParams<TPattern>>,

@@ -19,12 +19,12 @@ describe("public type inference", () => {
       .command("build <entry> [...args]")
       .option("-w, --watch")
       .option("--timeout-ms <ms>")
-      .action((entry, args, options, ctx) => {
-        const typedEntry: string = entry;
-        const typedArgs: string[] = args;
-        const typedJson: boolean | undefined = options.json;
-        const typedWatch: boolean | undefined = options.watch;
-        const typedTimeout: string | undefined = options.timeoutMs;
+      .action((ctx) => {
+        const typedEntry: string = ctx.params.entry;
+        const typedArgs: string[] = ctx.params.args;
+        const typedJson: boolean | undefined = ctx.options.json;
+        const typedWatch: boolean | undefined = ctx.options.watch;
+        const typedTimeout: string | undefined = ctx.options.timeoutMs;
         const typedParam: string = ctx.params.entry;
 
         return { typedEntry, typedArgs, typedJson, typedWatch, typedTimeout, typedParam };
@@ -35,9 +35,9 @@ describe("public type inference", () => {
     createCli()
       .use(renderer(typeRenderer()))
       .command("inspect")
-      .action((options, ctx) => {
-        const typedJson: boolean | undefined = options.json;
-        const typedEvents: boolean | undefined = options.events;
+      .action((ctx) => {
+        const typedJson: boolean | undefined = ctx.options.json;
+        const typedEvents: boolean | undefined = ctx.options.events;
         const typedCtxJson: boolean | undefined = ctx.options.json;
         const typedCtxEvents: boolean | undefined = ctx.options.events;
         return { typedJson, typedEvents, typedCtxJson, typedCtxEvents };
@@ -47,8 +47,8 @@ describe("public type inference", () => {
   test("carries router option types through cli.use(router)", () => {
     const router = createRouter().option("--json");
 
-    router.command("inspect").action((options, ctx) => {
-      const typedJson: boolean | undefined = options.json;
+    router.command("inspect").action((ctx) => {
+      const typedJson: boolean | undefined = ctx.options.json;
       const typedCtxJson: boolean | undefined = ctx.options.json;
       return { typedJson, typedCtxJson };
     });
@@ -60,9 +60,9 @@ describe("public type inference", () => {
     const registry = createRouter({ name: "registry" }).option("--url <url>");
     const ext = createRouter({ name: "ext" }).use(registry);
 
-    registry.command("add <name>").action((name, options, ctx) => {
-      const typedName: string = name;
-      const typedUrl: string | undefined = options.url;
+    registry.command("add <name>").action((ctx) => {
+      const typedName: string = ctx.params.name;
+      const typedUrl: string | undefined = ctx.options.url;
       const typedCtxUrl: string | undefined = ctx.options.url;
       return { typedName, typedUrl, typedCtxUrl };
     });
@@ -70,8 +70,8 @@ describe("public type inference", () => {
     createCli()
       .use(ext)
       .command("inspect")
-      .action((options) => {
-        const typedUrl: string | undefined = options.url;
+      .action((ctx) => {
+        const typedUrl: string | undefined = ctx.options.url;
         return { typedUrl };
       });
   });
@@ -79,7 +79,7 @@ describe("public type inference", () => {
   test("infers action return values in command render handlers", () => {
     createCli()
       .command("build <entry>")
-      .action((entry) => ({ entry, ok: true as const }))
+      .action((ctx) => ({ entry: ctx.params.entry, ok: true as const }))
       .render((result, ctx) => {
         const typedEntry: string = result.entry;
         const typedOk: true = result.ok;
@@ -91,7 +91,7 @@ describe("public type inference", () => {
   test("infers action return values in text and json presenters", () => {
     createCli()
       .command("hello <name>")
-      .action((name) => ({ greeting: `hello ${name}`, name }))
+      .action((ctx) => ({ greeting: `hello ${ctx.params.name}`, name: ctx.params.name }))
       .text((result) => {
         const typedGreeting: string = result.greeting;
         return typedGreeting;
@@ -105,7 +105,7 @@ describe("public type inference", () => {
   test("allows actions to emit unknown events", () => {
     createCli()
       .command("run")
-      .action((_options, ctx) => {
+      .action((ctx) => {
         ctx.emit({ type: "custom", value: 1 });
         const typedEvents: readonly unknown[] = ctx.events();
         return { typedEvents };
