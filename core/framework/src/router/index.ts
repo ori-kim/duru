@@ -17,7 +17,7 @@ import type {
   RouterOptions,
 } from "../types/index.ts";
 
-type Action = (...args: unknown[]) => Awaitable<ActionResult>;
+type Action = (ctx: Context) => Awaitable<ActionResult>;
 type RouteRenderer = RoutePresenter<ActionResult>;
 const routerTag = Symbol("clip.router");
 export const routeResultStateKey = "clip.routeResult";
@@ -169,8 +169,7 @@ function createRouterMiddleware(state: RouterState, getGlobalOptions: () => read
 }
 
 async function runAction(route: Route, ctx: Context): Promise<ActionResult> {
-  const args = route.pattern.paramNames.map((name) => ctx.params[name]);
-  return route.action?.(...args, ctx.options, ctx);
+  return route.action?.(ctx);
 }
 
 function collectRouteEntries(state: RouterState, scope: RouteScope = emptyScope()): RouteEntry[] {

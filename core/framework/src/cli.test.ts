@@ -9,7 +9,7 @@ describe("createCli", () => {
     cli
       .command("build <entry>", "Build project")
       .option("-w, --watch", "watch files")
-      .action((entry, options) => ({ entry, watch: options.watch }));
+      .action((ctx) => ({ entry: ctx.params.entry, watch: ctx.options.watch }));
 
     const result = await cli.run(["build", "src/index.ts", "--watch"]);
 
@@ -30,7 +30,7 @@ describe("createCli", () => {
       calls.push("after");
       return value;
     });
-    cli.command("hello").action((_options, ctx) => {
+    cli.command("hello").action((ctx) => {
       calls.push(ctx.service<string>("message") ?? "missing");
       return "done";
     });
@@ -64,7 +64,7 @@ describe("createCli", () => {
 
   test("installs standalone routers through use", async () => {
     const router = createRouter().option("--json");
-    router.command("inspect", "Inspect app").action((options) => ({ json: options.json }));
+    router.command("inspect", "Inspect app").action((ctx) => ({ json: ctx.options.json }));
     const cli = createCli({ name: "clip" }).use(renderer(testRenderer())).use(router);
 
     const result = await cli.run(["inspect", "--json"]);
@@ -75,7 +75,7 @@ describe("createCli", () => {
 
   test("mounts named routers as command namespaces", async () => {
     const ext = createRouter({ name: "ext", description: "Manage extensions" });
-    ext.command("add <name>", "Add extension").action((name) => ({ added: name }));
+    ext.command("add <name>", "Add extension").action((ctx) => ({ added: ctx.params.name }));
     const cli = createCli({ name: "clip" }).use(renderer(testRenderer())).use(ext);
 
     const result = await cli.run(["ext", "add", "example"]);
@@ -86,8 +86,8 @@ describe("createCli", () => {
 
   test("mounts routers inside routers", async () => {
     const registry = createRouter({ name: "registry" }).option("--url <url>");
-    registry.command("add <name>", "Add registry").action((name, options, ctx) => {
-      return { name, pattern: ctx.request.pattern, url: options.url };
+    registry.command("add <name>", "Add registry").action((ctx) => {
+      return { name: ctx.params.name, pattern: ctx.request.pattern, url: ctx.options.url };
     });
     const ext = createRouter({ name: "ext" }).use(registry);
     const cli = createCli({ name: "clip" }).use(renderer(testRenderer())).use(ext);
@@ -130,7 +130,7 @@ describe("createCli", () => {
 
   test("collects unknown events emitted by actions", async () => {
     const cli = createCli().use(renderer(testRenderer()));
-    cli.command("run").action((_options, ctx) => {
+    cli.command("run").action((ctx) => {
       ctx.emit({ type: "log", message: "started" });
       return { ok: true };
     });
@@ -145,7 +145,7 @@ describe("createCli", () => {
     const cli = createCli().use(renderer(testRenderer()));
     cli
       .command("build <entry>")
-      .action((entry) => ({ entry, status: "ok" }))
+      .action((ctx) => ({ entry: ctx.params.entry, status: "ok" }))
       .render("test", (result) => `${result.status}: ${result.entry}`);
 
     const result = await cli.run(["build", "src/index.ts"]);
@@ -158,7 +158,7 @@ describe("createCli", () => {
     const cli = createCli().use(renderer(testRenderer("json"), testRenderer("text")));
     cli
       .command("hello <name>")
-      .action((name) => ({ greeting: `hello ${name}` }))
+      .action((ctx) => ({ greeting: `hello ${ctx.params.name}` }))
       .text((result) => result.greeting)
       .json((result) => result);
 
@@ -171,7 +171,7 @@ describe("createCli", () => {
 
   test("includes emitted events in json rendering when requested", async () => {
     const cli = createCli().use(renderer(testRenderer("json")));
-    cli.command("run").action((_options, ctx) => {
+    cli.command("run").action((ctx) => {
       ctx.emit({ type: "log", message: "started" });
       return { ok: true };
     });
@@ -189,7 +189,7 @@ describe("createCli", () => {
     const cli = createCli().use(renderer(testRenderer()));
     cli
       .command("build <entry>")
-      .action((entry) => ({ entry, status: "ok" }))
+      .action((ctx) => ({ entry: ctx.params.entry, status: "ok" }))
       .render("test", (result) => `${result.status}: ${result.entry}`);
 
     const result = await cli.run(["build", "src/index.ts"]);

@@ -18,9 +18,9 @@ export function createAppCli() {
   cli
     .command("hello <name>", "Run a framework demo command")
     .option("-u, --uppercase", "Uppercase the greeting")
-    .action((name, options) => {
-      const value = String(name);
-      return { greeting: `hello ${options.uppercase ? value.toUpperCase() : value}` };
+    .action((ctx) => {
+      const value = ctx.params.name;
+      return { greeting: `hello ${ctx.options.uppercase ? value.toUpperCase() : value}` };
     })
     .text((result) => result.greeting)
     .json((result) => result);
@@ -30,8 +30,8 @@ export function createAppCli() {
     description: "Manage registries",
   });
 
-  registry.command("add <name>", "Add registry").action((name) => {
-    return { registry: name, status: "added" };
+  registry.command("add <name>", "Add registry").action((ctx) => {
+    return { registry: ctx.params.name, status: "added" };
   });
 
   const ext = createRouter({
@@ -39,8 +39,8 @@ export function createAppCli() {
     description: "Manage extensions",
   }).use(registry);
 
-  ext.command("add <name>", "Add extension").action((name) => {
-    return { extension: name, status: "added" };
+  ext.command("add <name>", "Add extension").action((ctx) => {
+    return { extension: ctx.params.name, status: "added" };
   });
 
   cli.use(ext);
