@@ -2,6 +2,9 @@ node_modules/
 *.js
 *.d.ts
 dist/
+.agents/
+.clip-test/
+bin/
 .env
 .env.*
 *.local

@@ -1,6 +1,6 @@
 {
   "files": {
-    "ignore": ["apps/clip/src/core-type-bundle.generated.ts"]
+    "ignore": ["node_modules", "dist", ".agents", ".claude", ".clip-test"]
   },
   "formatter": {
     "indentStyle": "space",

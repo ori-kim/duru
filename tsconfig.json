@@ -15,14 +15,11 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "paths": {
-      "@clip/core": ["./packages/core/src/index.ts"],
-      "@clip/auth": ["./packages/auth/src/index.ts"],
-      "@clip/protocol-mcp": ["./extensions/protocol-mcp/src/index.ts"],
-      "@clip/protocol-api": ["./extensions/protocol-api/src/index.ts"],
-      "@clip/protocol-graphql": ["./extensions/protocol-graphql/src/index.ts"],
-      "@clip/protocol-grpc": ["./extensions/protocol-grpc/src/index.ts"],
-      "@clip/protocol-cli": ["./extensions/protocol-cli/src/index.ts"],
-      "@clip/protocol-script": ["./extensions/protocol-script/src/index.ts"]
+      "@clip/core": ["./core/framework/src/index.ts"],
+      "@clip/renderer-json": ["./packages/renderer-json/src/index.ts"],
+      "@clip/renderer-text": ["./packages/renderer-text/src/index.ts"]
     }
-  }
+  },
+  "include": ["apps/**/*.ts", "core/**/*.ts", "packages/**/*.ts"],
+  "exclude": ["node_modules", "dist", ".agents", ".claude", ".clip-test"]
 }
