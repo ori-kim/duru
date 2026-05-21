@@ -1,6 +1,6 @@
 import { describe, test } from "bun:test";
 import { createCli, createRouter, renderer } from "./index.ts";
-import type { OptionSpecOptions, PatternParams, Renderer } from "./types.ts";
+import type { OptionSpecOptions, PatternParams, Renderer } from "./index.ts";
 
 type Equal<TLeft, TRight> = (<T>() => T extends TLeft ? 1 : 2) extends <T>() => T extends TRight ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
@@ -52,6 +52,32 @@ describe("public type inference", () => {
     });
 
     createCli().use(router);
+  });
+
+  test("infers action return values in command render handlers", () => {
+    createCli()
+      .command("build <entry>")
+      .action((entry) => ({ entry, ok: true as const }))
+      .render((result, ctx) => {
+        const typedEntry: string = result.entry;
+        const typedOk: true = result.ok;
+        const typedCtxParam: string = ctx.params.entry;
+        return { typedEntry, typedOk, typedCtxParam };
+      });
+  });
+
+  test("allows render handlers to consume custom action result objects", () => {
+    class CustomResult {
+      constructor(readonly value: string) {}
+    }
+
+    createCli()
+      .command("stream")
+      .action(() => new CustomResult("ok"))
+      .render((result) => {
+        const typedValue: string = result.value;
+        return typedValue;
+      });
   });
 });
 

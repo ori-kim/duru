@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createCli, createRouter, renderer } from "./index.ts";
-import type { Renderer } from "./types.ts";
+import type { Renderer } from "./index.ts";
 
 describe("createCli", () => {
   test("routes commands with params and options into actions", async () => {
@@ -62,6 +62,18 @@ describe("createCli", () => {
 
     expect(result.ok).toBe(true);
     expect(result.outputs).toEqual([{ kind: "data", value: { json: true } }]);
+  });
+
+  test("renders action return values through command render handlers", async () => {
+    const cli = createCli().use(renderer(testRenderer()));
+    cli
+      .command("build <entry>")
+      .action((entry) => ({ entry, status: "ok" }))
+      .render((result) => ({ kind: "text", text: `${result.status}: ${result.entry}` }));
+
+    const result = await cli.run(["build", "src/index.ts"]);
+
+    expect(result.outputs).toEqual([{ kind: "text", text: "ok: src/index.ts" }]);
   });
 });
 
