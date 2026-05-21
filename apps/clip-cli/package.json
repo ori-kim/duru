@@ -1,0 +1,14 @@
+{
+  "name": "clip",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "clip": "./src/main.ts"
+  },
+  "dependencies": {
+    "@clip/core": "workspace:*",
+    "@clip/renderer-json": "workspace:*",
+    "@clip/renderer-text": "workspace:*"
+  }
+}
