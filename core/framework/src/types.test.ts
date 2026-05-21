@@ -1,5 +1,5 @@
 import { describe, test } from "bun:test";
-import { createCli, createRouter, renderer } from "./index.ts";
+import { context, createCli, createRouter, renderer } from "./index.ts";
 import type { OptionSpecOptions, PatternParams, Renderer } from "./index.ts";
 
 type Equal<TLeft, TRight> = (<T>() => T extends TLeft ? 1 : 2) extends <T>() => T extends TRight ? 1 : 2 ? true : false;
@@ -106,9 +106,28 @@ describe("public type inference", () => {
     createCli()
       .command("run")
       .action((ctx) => {
-        ctx.emit({ type: "custom", value: 1 });
-        const typedEvents: readonly unknown[] = ctx.events();
+        ctx.emit("custom", { value: 1 });
+        const typedEvents = ctx.events();
         return { typedEvents };
+      });
+  });
+
+  test("carries context value types installed by plugins", () => {
+    const auth = context<{ user: { id: string } }>((ctx, next) => {
+      ctx.set("user", { id: "test-user" });
+      return next();
+    });
+
+    createCli()
+      .use(auth)
+      .on("custom", (ctx) => {
+        const typedId: string | undefined = ctx.get("user")?.id;
+        return typedId;
+      })
+      .command("me")
+      .action((ctx) => {
+        const typedId: string | undefined = ctx.get("user")?.id;
+        return { typedId };
       });
   });
 

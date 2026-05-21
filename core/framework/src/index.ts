@@ -2,13 +2,19 @@ export { createCli } from "./cli/index.ts";
 export { normalizeActionResult } from "./output/index.ts";
 export { parseOptionSpec, parseOptions } from "./options/index.ts";
 export { compilePattern } from "./pattern/index.ts";
-export { createPlugin, isCliPlugin, option, renderer } from "./plugin/index.ts";
+export { context, createPlugin, isCliPlugin, option, renderer } from "./plugin/index.ts";
 export { createRouter } from "./router/index.ts";
 export type {
   ActionResult,
   Awaitable,
   Cli,
   CliOptions,
+  CliEventContext,
+  CliEventHandler,
+  CliEventMap,
+  CliEventName,
+  CliEventPayload,
+  CliEventRecord,
   CliPlugin,
   CliPluginApi,
   CliRunOptions,
@@ -28,6 +34,7 @@ export type {
   ParsedOptions,
   PatternParams,
   RenderedOutput,
+  ExitResult,
   Renderer,
   RendererContext,
   Request,

@@ -131,14 +131,80 @@ describe("createCli", () => {
   test("collects unknown events emitted by actions", async () => {
     const cli = createCli().use(renderer(testRenderer()));
     cli.command("run").action((ctx) => {
-      ctx.emit({ type: "log", message: "started" });
+      ctx.emit("log", { message: "started" });
       return { ok: true };
     });
 
     const result = await cli.run(["run"]);
 
-    expect(result.events).toEqual([{ type: "log", message: "started" }]);
+    expect(result.events).toEqual([{ name: "log", payload: { message: "started" } }]);
     expect(result.value).toEqual({ ok: true });
+  });
+
+  test("notifies event observers from action contexts", async () => {
+    const seen: unknown[] = [];
+    const cli = createCli().use(renderer(testRenderer()));
+    cli.on("log", (ctx) => {
+      seen.push(ctx.event.payload);
+    });
+    cli.command("run").action(async (ctx) => {
+      await ctx.emit("log", { message: "started" });
+      return { ok: true };
+    });
+
+    await cli.run(["run"]);
+
+    expect(seen).toEqual([{ message: "started" }]);
+  });
+
+  test("allows app-level custom event emission", async () => {
+    const seen: unknown[] = [];
+    const cli = createCli();
+    cli.on("custom", (ctx) => {
+      seen.push(ctx.event.payload);
+    });
+
+    await cli.emit("custom", { value: 1 });
+
+    expect(seen).toEqual([{ value: 1 }]);
+  });
+
+  test("allows notFound handlers to override exit results", async () => {
+    const cli = createCli().use(renderer(testRenderer()));
+    cli.notFound((ctx) => ctx.exit(2, { missing: ctx.argv.join(" ") }));
+
+    const result = await cli.run(["missing"], { render: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(2);
+    expect(result.result).toEqual({ missing: "missing" });
+  });
+
+  test("allows error handlers to override thrown action errors", async () => {
+    const cli = createCli().use(renderer(testRenderer()));
+    cli.onError((ctx) => ctx.exit(7, { message: (ctx.error as Error).message }));
+    cli.command("boom").action(() => {
+      throw new Error("failed");
+    });
+
+    const result = await cli.run(["boom"], { render: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(7);
+    expect(result.result).toEqual({ message: "failed" });
+  });
+
+  test("returns command-level help with route options", async () => {
+    const cli = createCli({ name: "clip" }).use(renderer(testRenderer()));
+    cli
+      .command("hello <name>", "Say hello")
+      .option("-u, --uppercase", "Uppercase output")
+      .action(() => undefined);
+
+    const result = await cli.run(["hello", "--help"]);
+
+    expect(result.rendered?.stdout).toContain("Usage: clip hello <name>");
+    expect(result.rendered?.stdout).toContain("-u, --uppercase");
   });
 
   test("uses format presenters for action return values", async () => {
@@ -172,7 +238,7 @@ describe("createCli", () => {
   test("includes emitted events in json rendering when requested", async () => {
     const cli = createCli().use(renderer(testRenderer("json")));
     cli.command("run").action((ctx) => {
-      ctx.emit({ type: "log", message: "started" });
+      ctx.emit("log", { message: "started" });
       return { ok: true };
     });
 
@@ -181,7 +247,7 @@ describe("createCli", () => {
     expect(result.value).toEqual({ ok: true });
     expect(JSON.parse(result.rendered?.stdout ?? "")).toEqual({
       result: { ok: true },
-      events: [{ type: "log", message: "started" }],
+      events: [{ name: "log", payload: { message: "started" } }],
     });
   });
 

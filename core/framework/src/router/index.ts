@@ -9,9 +9,11 @@ import type {
   CompiledPattern,
   Context,
   EmptyObject,
+  HelpRoute,
   Middleware,
   OptionDefinition,
   Options,
+  Params,
   RoutePresenter,
   Router,
   RouterOptions,
@@ -58,11 +60,11 @@ type RouteScope = {
   middleware: readonly Middleware[];
 };
 
-type RouterRuntime = Router<Options> & { readonly [routerTag]: RouterState };
+type RouterRuntime = Router<Options, object> & { readonly [routerTag]: RouterState };
 
-export function createRouter<TRouterOptions extends Options = EmptyObject>(
+export function createRouter<TRouterOptions extends Options = EmptyObject, TValues extends object = EmptyObject>(
   config: RouterOptions = {},
-): Router<TRouterOptions> {
+): Router<TRouterOptions, TValues> {
   const state: RouterState = {
     ...cleanRouterConfig(config),
     routes: [],
@@ -76,7 +78,7 @@ export function createRouter<TRouterOptions extends Options = EmptyObject>(
       state.options.push(parseOptionSpec(spec, description));
       return router as never;
     },
-    use(item: Middleware | Router<Options>) {
+    use(item: Middleware | Router<Options, object>) {
       if (isRouter(item)) {
         state.children.push(item[routerTag]);
         return router as never;
@@ -101,19 +103,23 @@ export function createRouter<TRouterOptions extends Options = EmptyObject>(
     usage(name: string) {
       return usageText(name, state);
     },
-    ...createPlugin<TRouterOptions>((api) => {
+    helpRoutes() {
+      return helpRoutes(state);
+    },
+    ...createPlugin<TRouterOptions, TValues>((api) => {
       for (const item of collectOptionDefinitions(state)) api.option(item);
       api.middleware(createRouterMiddleware(state, api.options));
+      api.helpRoutes(() => helpRoutes(state));
       api.usage((name) => usageText(name, state));
     }),
     [routerTag]: state,
   };
 
-  return router as unknown as Router<TRouterOptions>;
+  return router as unknown as Router<TRouterOptions, TValues>;
 
   function createCommandBuilder<TPattern extends string>(
     route: Route,
-  ): CommandBuilder<TPattern, TRouterOptions, EmptyObject, undefined> {
+  ): CommandBuilder<TPattern, TRouterOptions, EmptyObject, undefined, TValues> {
     const builder = {
       option(spec: string, description?: string) {
         route.options.push(parseOptionSpec(spec, description));
@@ -142,7 +148,7 @@ export function createRouter<TRouterOptions extends Options = EmptyObject>(
         return builder as never;
       },
     };
-    return builder as unknown as CommandBuilder<TPattern, TRouterOptions, EmptyObject, undefined>;
+    return builder as unknown as CommandBuilder<TPattern, TRouterOptions, EmptyObject, undefined, TValues>;
   }
 }
 
@@ -153,7 +159,7 @@ function createRouterMiddleware(state: RouterState, getGlobalOptions: () => read
       const match = entry.pattern.match(parsed.positionals);
       if (!match) continue;
       ctx.request = { ...ctx.request, pattern: entry.pattern.pattern, params: match.params, options: parsed.options };
-      ctx.params = match.params;
+      ctx.params = match.params as Params;
       ctx.options = parsed.options;
       ctx.state.set("handled", true);
       return runPipeline(entry.middleware, ctx, async () => {
@@ -197,6 +203,14 @@ function usageText(name: string, state: RouterState): string {
     lines.push(`  ${entry.pattern.pattern}${entry.route.description ? `  ${entry.route.description}` : ""}`);
   }
   return `${lines.join("\n")}\n`;
+}
+
+function helpRoutes(state: RouterState): HelpRoute[] {
+  return collectRouteEntries(state).map((entry) => ({
+    pattern: entry.pattern.pattern,
+    ...(entry.route.description ? { description: entry.route.description } : {}),
+    options: entry.options,
+  }));
 }
 
 function emptyScope(): RouteScope {
