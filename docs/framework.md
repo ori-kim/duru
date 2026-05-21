@@ -27,8 +27,10 @@ It does not own Clip product concepts such as targets, workflows, auth providers
 The first runnable slice contains:
 
 - `createCli()`
+- `createRouter()`
+- `cli.use()` plugins and middleware
 - `.command().option().action()`
-- global options
+- global and router options
 - middleware
 - structured output collection
 - text and JSON renderer adapters
@@ -40,7 +42,7 @@ The public authoring API is designed around literal-preserving fluent chains:
 
 ```ts
 createCli()
-  .option("--json")
+  .use(renderer(jsonRenderer(), textRenderer()))
   .command("build <entry> [...args]")
   .option("-w, --watch")
   .option("--timeout-ms <ms>")
@@ -55,5 +57,22 @@ createCli()
 ```
 
 Pattern params, option names, option value kinds, `ctx.params`, and `ctx.options` should all be inferred from the fluent declarations. Generic parameters remain available for app-level globals that are installed outside a literal-preserving chain.
+
+`command()`, `option()`, `action()`, and renderer registration are convenience layers over the `use()` primitive:
+
+```ts
+const router = createRouter().option("--json");
+
+router.command("inspect").action((options, ctx) => {
+  options.json satisfies boolean | undefined;
+  ctx.output.data({ ok: true });
+});
+
+const cli = createCli()
+  .use(renderer(jsonRenderer(), textRenderer()))
+  .use(router);
+```
+
+Plugins can install options, middleware, renderers, usage providers, and renderer selectors while carrying their contributed option types into downstream commands.
 
 This keeps the framework shape testable before Clip product modules are reintroduced.
