@@ -1,34 +1,4 @@
-import type { ActionResult, Output, OutputWriter } from "../types/index.ts";
-
-export function createOutputWriter(): OutputWriter {
-  const outputs: Output[] = [];
-  return {
-    emit(output) {
-      outputs.push(output);
-    },
-    text(text) {
-      outputs.push({ kind: "text", text });
-    },
-    data(value) {
-      outputs.push({ kind: "data", value });
-    },
-    table(rows) {
-      outputs.push({ kind: "table", rows });
-    },
-    log(text, stream = "stdout") {
-      outputs.push({ kind: "log", stream, text });
-    },
-    task(title, status, message) {
-      outputs.push({ kind: "task", title, status, ...(message ? { message } : {}) });
-    },
-    view(value) {
-      outputs.push({ kind: "view", value });
-    },
-    list() {
-      return [...outputs];
-    },
-  };
-}
+import type { ActionResult, Output } from "../types/index.ts";
 
 export function normalizeActionResult(value: ActionResult): Output[] {
   if (value === undefined) return [];

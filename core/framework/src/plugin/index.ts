@@ -19,7 +19,7 @@ export function option<TSpec extends string>(spec: TSpec, description?: string):
   });
 }
 
-export function renderer(...renderers: Renderer[]): CliPlugin<{ json?: boolean }> {
+export function renderer(...renderers: Renderer[]): CliPlugin<{ json?: boolean; events?: boolean }> {
   return createPlugin((api) => {
     for (const item of renderers) {
       api.renderer(item);
@@ -29,6 +29,7 @@ export function renderer(...renderers: Renderer[]): CliPlugin<{ json?: boolean }
     if (defaultId) api.defaultRenderer(defaultId);
     if (ids.includes("json")) {
       api.option(parseOptionSpec("--json", "Render structured JSON output"));
+      api.option(parseOptionSpec("--events", "Include emitted events in structured JSON output"));
       api.selectRenderer((ctx) => (ctx.options.json ? "json" : undefined));
     }
   });

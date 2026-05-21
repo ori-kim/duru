@@ -1,5 +1,5 @@
 export { createCli } from "./cli/index.ts";
-export { createOutputWriter, normalizeActionResult } from "./output/index.ts";
+export { normalizeActionResult } from "./output/index.ts";
 export { parseOptionSpec, parseOptions } from "./options/index.ts";
 export { compilePattern } from "./pattern/index.ts";
 export { createPlugin, isCliPlugin, option, renderer } from "./plugin/index.ts";
@@ -24,7 +24,6 @@ export type {
   OptionSpecOptions,
   Options,
   Output,
-  OutputWriter,
   Params,
   ParsedOptions,
   PatternActionArgs,

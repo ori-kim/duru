@@ -10,10 +10,10 @@ export type {
   Options,
   ParsedOptions,
 } from "./options.ts";
-export type { ActionResult, Output, OutputWriter, RenderedOutput } from "./output.ts";
+export type { ActionResult, Output, RenderedOutput, RenderInput } from "./output.ts";
 export type { CompiledPattern, Params, PatternParams } from "./pattern.ts";
 export type { CliPlugin, CliPluginApi } from "./plugin.ts";
 export type { Renderer, RendererContext } from "./renderer.ts";
 export type { Request } from "./request.ts";
-export type { PatternActionArgs, RouteRender } from "./route.ts";
+export type { PatternActionArgs, RoutePresenter, RouteRender } from "./route.ts";
 export type { CommandBuilder, Router, RouterOptions } from "./router.ts";

@@ -10,7 +10,13 @@ export type PatternActionArgs<TPattern extends string, TOptions extends Options 
   Context<TOptions, PatternParams<TPattern>>,
 ];
 
-export type RouteRender<TValue, TOptions extends Options = Options, TParams extends object = Params> = (
+export type RoutePresenter<TValue, TOptions extends Options = Options, TParams extends object = Params> = (
   value: TValue,
   ctx: Context<TOptions, TParams>,
 ) => Awaitable<ActionResult>;
+
+export type RouteRender<TValue, TOptions extends Options = Options, TParams extends object = Params> = RoutePresenter<
+  TValue,
+  TOptions,
+  TParams
+>;

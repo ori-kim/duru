@@ -13,14 +13,20 @@ describe("clip-cli demo app", () => {
     const result = await createAppCli().run(["inspect", "--json"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.rendered?.stdout).toContain('"kind": "data"');
     expect(result.rendered?.stdout).toContain('"app": "clip-cli"');
+  });
+
+  test("renders command json presenters without output envelopes", async () => {
+    const result = await createAppCli().run(["hello", "example", "--json"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.rendered?.stdout ?? "")).toEqual({ greeting: "hello example" });
   });
 
   test("runs nested router commands", async () => {
     const result = await createAppCli().run(["ext", "registry", "add", "example"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.outputs).toEqual([{ kind: "data", value: { registry: "example", status: "added" } }]);
+    expect(result.value).toEqual({ registry: "example", status: "added" });
   });
 });

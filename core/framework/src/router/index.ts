@@ -1,6 +1,5 @@
 import { runPipeline } from "../middleware/pipeline.ts";
 import { parseOptionSpec, parseOptions } from "../options/index.ts";
-import { normalizeActionResult } from "../output/index.ts";
 import { compilePattern } from "../pattern/index.ts";
 import { createPlugin } from "../plugin/index.ts";
 import type {
@@ -13,13 +12,20 @@ import type {
   Middleware,
   OptionDefinition,
   Options,
+  RoutePresenter,
   Router,
   RouterOptions,
 } from "../types/index.ts";
 
 type Action = (...args: unknown[]) => Awaitable<ActionResult>;
-type RouteRenderer = (value: ActionResult, ctx: Context) => Awaitable<ActionResult>;
+type RouteRenderer = RoutePresenter<ActionResult>;
 const routerTag = Symbol("clip.router");
+export const routeResultStateKey = "clip.routeResult";
+
+export type RouteResultState = {
+  result: ActionResult;
+  presenters: ReadonlyMap<string, RouteRenderer>;
+};
 
 type Route = {
   pattern: CompiledPattern;
@@ -27,7 +33,7 @@ type Route = {
   options: OptionDefinition[];
   middleware: Middleware[];
   action?: Action;
-  render?: RouteRenderer;
+  presenters: Map<string, RouteRenderer>;
 };
 
 type RouterState = {
@@ -79,7 +85,13 @@ export function createRouter<TRouterOptions extends Options = EmptyObject>(
       return router as never;
     },
     command<TPattern extends string>(pattern: TPattern, description?: string) {
-      const route: Route = { pattern: compilePattern(pattern), description, options: [], middleware: [] };
+      const route: Route = {
+        pattern: compilePattern(pattern),
+        description,
+        options: [],
+        middleware: [],
+        presenters: new Map(),
+      };
       state.routes.push(route);
       return createCommandBuilder<TPattern>(route);
     },
@@ -102,25 +114,35 @@ export function createRouter<TRouterOptions extends Options = EmptyObject>(
   function createCommandBuilder<TPattern extends string>(
     route: Route,
   ): CommandBuilder<TPattern, TRouterOptions, EmptyObject, undefined> {
-    const builder: CommandBuilder<TPattern, TRouterOptions, Options, ActionResult> = {
-      option(spec, description) {
+    const builder = {
+      option(spec: string, description?: string) {
         route.options.push(parseOptionSpec(spec, description));
         return builder as never;
       },
-      use(fn) {
+      use(fn: Middleware) {
         route.middleware.push(fn as Middleware);
         return builder as never;
       },
-      action(handler) {
+      action(handler: Action) {
         route.action = handler as unknown as Action;
         return builder as never;
       },
-      render(handler) {
-        route.render = handler as unknown as RouteRenderer;
+      text(handler: RouteRenderer) {
+        route.presenters.set("text", handler as unknown as RouteRenderer);
+        return builder as never;
+      },
+      json(handler: RouteRenderer) {
+        route.presenters.set("json", handler as unknown as RouteRenderer);
+        return builder as never;
+      },
+      render(formatOrHandler: string | RouteRenderer, maybeHandler?: RouteRenderer) {
+        const format = typeof formatOrHandler === "string" ? formatOrHandler : "text";
+        const handler = typeof formatOrHandler === "string" ? maybeHandler : formatOrHandler;
+        if (handler) route.presenters.set(format, handler as unknown as RouteRenderer);
         return builder as never;
       },
     };
-    return builder as never;
+    return builder as unknown as CommandBuilder<TPattern, TRouterOptions, EmptyObject, undefined>;
   }
 }
 
@@ -136,8 +158,10 @@ function createRouterMiddleware(state: RouterState, getGlobalOptions: () => read
       ctx.state.set("handled", true);
       return runPipeline(entry.middleware, ctx, async () => {
         const result = await runAction(entry.route, ctx);
-        const rendered = entry.route.render ? await entry.route.render(result, ctx) : result;
-        for (const output of normalizeActionResult(rendered)) ctx.output.emit(output);
+        ctx.state.set(routeResultStateKey, {
+          result,
+          presenters: entry.route.presenters,
+        } satisfies RouteResultState);
       });
     }
     return next();

@@ -7,15 +7,6 @@ export function createAppCli() {
     name: "clip",
   }).use(renderer(jsonRenderer(), textRenderer()));
 
-  cli
-    .command("hello <name>", "Run a framework demo command")
-    .option("-u, --uppercase", "Uppercase the greeting")
-    .action((name, options) => {
-      const value = String(name);
-      return { greeting: `hello ${options.uppercase ? value.toUpperCase() : value}` };
-    })
-    .render((result) => result.greeting);
-
   cli.command("inspect", "Show framework composition").action(() => {
     return {
       app: "clip-cli",
@@ -23,6 +14,16 @@ export function createAppCli() {
       renderers: ["text", "json"],
     };
   });
+
+  cli
+    .command("hello <name>", "Run a framework demo command")
+    .option("-u, --uppercase", "Uppercase the greeting")
+    .action((name, options) => {
+      const value = String(name);
+      return { greeting: `hello ${options.uppercase ? value.toUpperCase() : value}` };
+    })
+    .text((result) => result.greeting)
+    .json((result) => result);
 
   const registry = createRouter({
     name: "registry",

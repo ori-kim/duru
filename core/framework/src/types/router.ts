@@ -4,7 +4,7 @@ import type { MergeOptions, OptionDefinition, OptionSpecOptions, Options } from 
 import type { ActionResult } from "./output.ts";
 import type { PatternParams } from "./pattern.ts";
 import type { CliPlugin } from "./plugin.ts";
-import type { PatternActionArgs, RouteRender } from "./route.ts";
+import type { PatternActionArgs, RoutePresenter, RouteRender } from "./route.ts";
 
 export type CommandBuilder<
   TPattern extends string = string,
@@ -24,7 +24,17 @@ export type CommandBuilder<
       ...args: PatternActionArgs<TPattern, MergeOptions<TRouterOptions, TLocalOptions>>
     ) => Awaitable<TResultNext>,
   ): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, Awaited<TResultNext>>;
+  text(
+    handler: RoutePresenter<TResult, MergeOptions<TRouterOptions, TLocalOptions>, PatternParams<TPattern>>,
+  ): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, TResult>;
+  json(
+    handler: RoutePresenter<TResult, MergeOptions<TRouterOptions, TLocalOptions>, PatternParams<TPattern>>,
+  ): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, TResult>;
   render(
+    handler: RouteRender<TResult, MergeOptions<TRouterOptions, TLocalOptions>, PatternParams<TPattern>>,
+  ): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, TResult>;
+  render(
+    format: string,
     handler: RouteRender<TResult, MergeOptions<TRouterOptions, TLocalOptions>, PatternParams<TPattern>>,
   ): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, TResult>;
 };
