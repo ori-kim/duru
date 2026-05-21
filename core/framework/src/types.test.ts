@@ -37,8 +37,10 @@ describe("public type inference", () => {
       .command("inspect")
       .action((options, ctx) => {
         const typedJson: boolean | undefined = options.json;
+        const typedEvents: boolean | undefined = options.events;
         const typedCtxJson: boolean | undefined = ctx.options.json;
-        return { typedJson, typedCtxJson };
+        const typedCtxEvents: boolean | undefined = ctx.options.events;
+        return { typedJson, typedEvents, typedCtxJson, typedCtxEvents };
       });
   });
 
@@ -83,6 +85,30 @@ describe("public type inference", () => {
         const typedOk: true = result.ok;
         const typedCtxParam: string = ctx.params.entry;
         return { typedEntry, typedOk, typedCtxParam };
+      });
+  });
+
+  test("infers action return values in text and json presenters", () => {
+    createCli()
+      .command("hello <name>")
+      .action((name) => ({ greeting: `hello ${name}`, name }))
+      .text((result) => {
+        const typedGreeting: string = result.greeting;
+        return typedGreeting;
+      })
+      .json((result) => {
+        const typedName: string = result.name;
+        return { typedName };
+      });
+  });
+
+  test("allows actions to emit unknown events", () => {
+    createCli()
+      .command("run")
+      .action((_options, ctx) => {
+        ctx.emit({ type: "custom", value: 1 });
+        const typedEvents: readonly unknown[] = ctx.events();
+        return { typedEvents };
       });
   });
 

@@ -2,7 +2,7 @@ import { createContext, createEmptyContext } from "../context/index.ts";
 import { runPipeline } from "../middleware/pipeline.ts";
 import { parseOptions } from "../options/index.ts";
 import { isCliPlugin, option as optionPlugin } from "../plugin/index.ts";
-import { createRouter } from "../router/index.ts";
+import { type RouteResultState, createRouter, routeResultStateKey } from "../router/index.ts";
 import type {
   Cli,
   CliOptions,
@@ -14,9 +14,18 @@ import type {
   Middleware,
   OptionDefinition,
   Options,
-  Output,
+  RenderInput,
   Renderer,
+  RoutePresenter,
 } from "../types/index.ts";
+
+type ExecutionResult = {
+  ok: boolean;
+  exitCode: number;
+  result: unknown;
+  presenters?: ReadonlyMap<string, RoutePresenter<unknown>>;
+  ctx?: Context;
+};
 
 export function createCli<TGlobalOptions extends Options = EmptyObject>(
   options: CliOptions<TGlobalOptions> = {},
@@ -92,29 +101,33 @@ export function createCli<TGlobalOptions extends Options = EmptyObject>(
     const ctx = createContext(argv, parsed.options, parsed.positionals, services);
     await runPipeline([...middleware, defaultRouter.middleware(() => globalOptions)], ctx, async () => undefined);
     const handled = ctx.state.get("handled") === true;
-    const outputs = handled
-      ? ctx.output.list()
-      : [{ kind: "text" as const, text: `Unknown command: ${argv.join(" ")}` }];
-    return renderResult({ ok: handled, exitCode: handled ? 0 : 1, outputs, ctx }, runOptions);
+    const routeResult = ctx.state.get(routeResultStateKey) as RouteResultState | undefined;
+    const message = `Unknown command: ${argv.join(" ")}`;
+    return renderResult(
+      handled && routeResult
+        ? { ok: true, exitCode: 0, result: routeResult.result, presenters: routeResult.presenters, ctx }
+        : {
+            ok: false,
+            exitCode: 1,
+            result: { message },
+            presenters: errorPresenters(message),
+            ctx,
+          },
+      runOptions,
+    );
   }
 
-  async function renderResult(
-    result: {
-      ok: boolean;
-      exitCode: number;
-      outputs: readonly Output[];
-      ctx?: Context;
-    },
-    runOptions: CliRunOptions,
-  ): Promise<CliRunResult> {
-    const shouldRender = runOptions.render ?? true;
-    if (!shouldRender) return { ok: result.ok, exitCode: result.exitCode, outputs: result.outputs };
-    const ctx = result.ctx ?? createEmptyContext(argvFromOutputs(result.outputs));
+  async function renderResult(result: ExecutionResult, runOptions: CliRunOptions): Promise<CliRunResult> {
+    const ctx = result.ctx ?? createEmptyContext([]);
     const rendererId = runOptions.renderer ?? selectRenderer(ctx) ?? defaultRenderer;
+    const value = await present(rendererId, result.result, result.presenters, ctx);
+    const events = ctx.events();
+    const shouldRender = runOptions.render ?? true;
+    if (!shouldRender) return { ok: result.ok, exitCode: result.exitCode, result: result.result, value, events };
     const renderer = renderers.get(rendererId);
-    if (!renderer) return { ok: result.ok, exitCode: result.exitCode, outputs: result.outputs };
-    const rendered = await renderer.render(result.outputs, ctx);
-    return { ok: result.ok, exitCode: rendered.exitCode, outputs: result.outputs, rendered };
+    if (!renderer) return { ok: result.ok, exitCode: result.exitCode, result: result.result, value, events };
+    const rendered = await renderer.render(renderInput(rendererId, result.result, value, events), ctx);
+    return { ok: result.ok, exitCode: rendered.exitCode, result: result.result, value, events, rendered };
   }
 
   function helpResult(argv: readonly string[]) {
@@ -123,7 +136,7 @@ export function createCli<TGlobalOptions extends Options = EmptyObject>(
     return {
       ok: true,
       exitCode: 0,
-      outputs: [{ kind: "text" as const, text: usageText(options.name ?? "cli") }],
+      result: usageText(options.name ?? "cli"),
       ctx,
     };
   }
@@ -144,13 +157,30 @@ export function createCli<TGlobalOptions extends Options = EmptyObject>(
   }
 }
 
-function argvFromOutputs(_outputs: readonly unknown[]): readonly string[] {
-  return [];
-}
-
 function commandLines(usage: string): string[] {
   const lines = usage.split("\n");
   const commandsIndex = lines.findIndex((line) => line.trim() === "Commands:");
   const linesAfterHeader = commandsIndex === -1 ? lines : lines.slice(commandsIndex + 1);
   return linesAfterHeader.filter((line) => line.trim().length > 0);
+}
+
+async function present(
+  format: string,
+  result: unknown,
+  presenters: ReadonlyMap<string, RoutePresenter<unknown>> | undefined,
+  ctx: Context,
+): Promise<unknown> {
+  const presenter = presenters?.get(format);
+  return presenter ? presenter(result, ctx) : result;
+}
+
+function renderInput(format: string, result: unknown, value: unknown, events: readonly unknown[]): RenderInput {
+  return { result, value, events, format };
+}
+
+function errorPresenters(message: string): ReadonlyMap<string, RoutePresenter<unknown>> {
+  const presenters = new Map<string, RoutePresenter<unknown>>();
+  presenters.set("text", () => message);
+  presenters.set("json", () => ({ error: { message } }));
+  return presenters;
 }

@@ -12,15 +12,11 @@ export type RenderedOutput = {
   exitCode: number;
 };
 
-export type OutputWriter = {
-  emit(output: Output): void;
-  text(text: string): void;
-  data(value: unknown): void;
-  table(rows: readonly Record<string, unknown>[]): void;
-  log(text: string, stream?: "stdout" | "stderr"): void;
-  task(title: string, status: "running" | "done" | "failed", message?: string): void;
-  view(value: unknown): void;
-  list(): readonly Output[];
+export type RenderInput = {
+  result: unknown;
+  value: unknown;
+  events: readonly unknown[];
+  format: string;
 };
 
 export type ActionResult = unknown;

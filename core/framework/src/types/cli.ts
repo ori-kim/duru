@@ -1,7 +1,7 @@
 import type { EmptyObject } from "./common.ts";
 import type { Middleware } from "./middleware.ts";
 import type { MergeOptions, OptionSpecOptions, Options } from "./options.ts";
-import type { Output, RenderedOutput } from "./output.ts";
+import type { RenderedOutput } from "./output.ts";
 import type { CliPlugin } from "./plugin.ts";
 import type { Renderer } from "./renderer.ts";
 import type { CommandBuilder } from "./router.ts";
@@ -30,7 +30,9 @@ export type Cli<TGlobalOptions extends Options = EmptyObject> = {
 export type CliRunResult = {
   ok: boolean;
   exitCode: number;
-  outputs: readonly Output[];
+  result: unknown;
+  value: unknown;
+  events: readonly unknown[];
   rendered?: RenderedOutput;
 };
 

@@ -1,6 +1,6 @@
 import type { Awaitable } from "./common.ts";
 import type { Options } from "./options.ts";
-import type { Output, RenderedOutput } from "./output.ts";
+import type { RenderInput, RenderedOutput } from "./output.ts";
 import type { Params } from "./pattern.ts";
 import type { Request } from "./request.ts";
 
@@ -12,5 +12,5 @@ export type RendererContext<TOptions extends Options = Options, TParams extends 
 
 export type Renderer = {
   id: string;
-  render(outputs: readonly Output[], ctx: RendererContext): Awaitable<RenderedOutput>;
+  render(input: RenderInput, ctx: RendererContext): Awaitable<RenderedOutput>;
 };
