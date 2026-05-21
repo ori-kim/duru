@@ -1,15 +1,24 @@
 import { parseOptionSpec } from "../options/index.ts";
-import type { CliPlugin, CliPluginApi, EmptyObject, OptionSpecOptions, Options, Renderer } from "../types/index.ts";
+import type {
+  CliPlugin,
+  CliPluginApi,
+  EmptyObject,
+  Middleware,
+  OptionSpecOptions,
+  Options,
+  Params,
+  Renderer,
+} from "../types/index.ts";
 
 const pluginTag = Symbol("clip.plugin");
 
-export function createPlugin<TOptions extends Options = EmptyObject>(
+export function createPlugin<TOptions extends Options = EmptyObject, TValues extends object = EmptyObject>(
   install: (api: CliPluginApi) => void,
-): CliPlugin<TOptions> {
-  return { [pluginTag]: true, install } as unknown as CliPlugin<TOptions>;
+): CliPlugin<TOptions, TValues> {
+  return { [pluginTag]: true, install } as unknown as CliPlugin<TOptions, TValues>;
 }
 
-export function isCliPlugin(value: unknown): value is CliPlugin<Options> {
+export function isCliPlugin(value: unknown): value is CliPlugin<Options, object> {
   return typeof value === "object" && value !== null && pluginTag in value;
 }
 
@@ -32,5 +41,13 @@ export function renderer(...renderers: Renderer[]): CliPlugin<{ json?: boolean; 
       api.option(parseOptionSpec("--events", "Include emitted events in structured JSON output"));
       api.selectRenderer((ctx) => (ctx.options.json ? "json" : undefined));
     }
+  });
+}
+
+export function context<TValues extends object>(
+  middleware?: Middleware<Options, Params, TValues>,
+): CliPlugin<EmptyObject, TValues> {
+  return createPlugin<EmptyObject, TValues>((api) => {
+    if (middleware) api.middleware(middleware as Middleware);
   });
 }

@@ -1,15 +1,19 @@
 import type { EmptyObject } from "./common.ts";
 import type { Context } from "./context.ts";
+import type { CliEventHandler } from "./event.ts";
+import type { HelpRoute } from "./help.ts";
 import type { Middleware } from "./middleware.ts";
 import type { OptionDefinition, Options } from "./options.ts";
 import type { Renderer } from "./renderer.ts";
 
 declare const pluginTag: unique symbol;
 declare const pluginOptionsTag: unique symbol;
+declare const pluginContextTag: unique symbol;
 
-export type CliPlugin<TOptions extends Options = EmptyObject> = {
+export type CliPlugin<TOptions extends Options = EmptyObject, TValues extends object = EmptyObject> = {
   readonly [pluginTag]: true;
   readonly [pluginOptionsTag]?: (options: TOptions) => TOptions;
+  readonly [pluginContextTag]?: (values: TValues) => TValues;
   install(api: CliPluginApi): void;
 };
 
@@ -20,5 +24,7 @@ export type CliPluginApi = {
   renderer(renderer: Renderer): void;
   defaultRenderer(id: string): void;
   selectRenderer(selector: (ctx: Context) => string | undefined): void;
+  on(name: string, handler: CliEventHandler): void;
+  helpRoutes(provider: () => readonly HelpRoute[]): void;
   usage(provider: (name: string) => string): void;
 };

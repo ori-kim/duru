@@ -1,3 +1,5 @@
+import type { CliEventRecord } from "./event.ts";
+
 export type Output =
   | { kind: "text"; text: string }
   | { kind: "data"; value: unknown }
@@ -15,7 +17,7 @@ export type RenderedOutput = {
 export type RenderInput = {
   result: unknown;
   value: unknown;
-  events: readonly unknown[];
+  events: readonly CliEventRecord[];
   format: string;
 };
 

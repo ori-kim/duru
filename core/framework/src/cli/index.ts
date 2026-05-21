@@ -1,49 +1,60 @@
 import { createContext, createEmptyContext } from "../context/index.ts";
+import { formatHelp } from "../help/index.ts";
 import { runPipeline } from "../middleware/pipeline.ts";
 import { parseOptions } from "../options/index.ts";
 import { isCliPlugin, option as optionPlugin } from "../plugin/index.ts";
 import { type RouteResultState, createRouter, routeResultStateKey } from "../router/index.ts";
 import type {
   Cli,
+  CliEventHandler,
+  CliEventName,
+  CliEventRecord,
   CliOptions,
   CliPlugin,
   CliRunOptions,
   CliRunResult,
   Context,
   EmptyObject,
+  HelpDocument,
+  HelpRoute,
   Middleware,
   OptionDefinition,
   Options,
-  RenderInput,
+  Params,
   Renderer,
-  RoutePresenter,
 } from "../types/index.ts";
+import { createEventContext } from "./events.ts";
+import { helpPath, isHelpRequest, usageHelpRoutes } from "./help.ts";
+import {
+  type ExecutionResult,
+  defaultErrorResult,
+  defaultNotFoundResult,
+  eventResult,
+  helpPresenters,
+  normalizeExecutionResult,
+  present,
+  renderInput,
+} from "./result.ts";
 
-type ExecutionResult = {
-  ok: boolean;
-  exitCode: number;
-  result: unknown;
-  presenters?: ReadonlyMap<string, RoutePresenter<unknown>>;
-  ctx?: Context;
-};
-
-export function createCli<TGlobalOptions extends Options = EmptyObject>(
+export function createCli<TGlobalOptions extends Options = EmptyObject, TValues extends object = EmptyObject>(
   options: CliOptions<TGlobalOptions> = {},
-): Cli<TGlobalOptions> {
+): Cli<TGlobalOptions, TValues> {
   const globalOptions: OptionDefinition[] = [];
   const middleware: Middleware[] = [];
   const renderers = new Map<string, Renderer>();
   const rendererSelectors: Array<(ctx: Context) => string | undefined> = [];
+  const eventHandlers = new Map<string, CliEventHandler[]>();
+  const helpProviders: Array<() => readonly HelpRoute[]> = [];
   const usageProviders: Array<(name: string) => string> = [];
   const services = new Map<string, unknown>();
-  const defaultRouter = createRouter<TGlobalOptions>();
+  const defaultRouter = createRouter<TGlobalOptions, TValues>();
   let defaultRenderer = "text";
 
-  const cli: Cli<TGlobalOptions> = {
+  const cli: Cli<TGlobalOptions, TValues> = {
     option(spec, description) {
       return cli.use(optionPlugin(spec, description)) as never;
     },
-    use(item: CliPlugin<Options> | Middleware<TGlobalOptions>) {
+    use(item: CliPlugin<Options, object> | Middleware<TGlobalOptions, Params, TValues>) {
       if (isCliPlugin(item)) {
         item.install(pluginApi());
         return cli as never;
@@ -55,6 +66,20 @@ export function createCli<TGlobalOptions extends Options = EmptyObject>(
       pluginApi().renderer(renderer);
       pluginApi().defaultRenderer(renderer.id);
       return cli;
+    },
+    on(name, handler) {
+      addEventHandler(name, handler as CliEventHandler);
+      return cli;
+    },
+    onError(handler) {
+      return cli.on("error", handler);
+    },
+    notFound(handler) {
+      return cli.on("notFound", handler);
+    },
+    async emit(name, payload) {
+      const ctx = createEmptyContext([], services, eventSink);
+      await ctx.emit(name, payload);
     },
     command<TPattern extends string>(pattern: TPattern, description?: string) {
       return defaultRouter.command(pattern, description);
@@ -86,6 +111,12 @@ export function createCli<TGlobalOptions extends Options = EmptyObject>(
       selectRenderer(selector: (ctx: Context) => string | undefined) {
         rendererSelectors.push(selector);
       },
+      on(name: string, handler: CliEventHandler) {
+        addEventHandler(name, handler);
+      },
+      helpRoutes(provider: () => readonly HelpRoute[]) {
+        helpProviders.push(provider);
+      },
       usage(provider: (name: string) => string) {
         usageProviders.push(provider);
       },
@@ -93,52 +124,88 @@ export function createCli<TGlobalOptions extends Options = EmptyObject>(
   }
 
   async function runCli(argv: readonly string[], runOptions: CliRunOptions): Promise<CliRunResult> {
-    if (argv.length === 0 || argv.includes("--help") || argv.includes("-h")) {
-      return renderResult(helpResult(argv), runOptions);
+    if (argv.length === 0 || isHelpRequest(argv)) {
+      return renderResult(await helpResult(argv), runOptions);
     }
 
     const parsed = parseOptions(argv, globalOptions);
-    const ctx = createContext(argv, parsed.options, parsed.positionals, services);
-    await runPipeline([...middleware, defaultRouter.middleware(() => globalOptions)], ctx, async () => undefined);
+    const ctx = createContext(argv, parsed.options, parsed.positionals, services, eventSink);
+
+    try {
+      await runPipeline([...middleware, defaultRouter.middleware(() => globalOptions)], ctx, async () => undefined);
+    } catch (error) {
+      const fallback = defaultErrorResult(error, ctx);
+      return renderResult(eventResult(await ctx.emit("error", { error }), fallback, ctx), runOptions);
+    }
+
     const handled = ctx.state.get("handled") === true;
     const routeResult = ctx.state.get(routeResultStateKey) as RouteResultState | undefined;
-    const message = `Unknown command: ${argv.join(" ")}`;
-    return renderResult(
-      handled && routeResult
-        ? { ok: true, exitCode: 0, result: routeResult.result, presenters: routeResult.presenters, ctx }
-        : {
-            ok: false,
-            exitCode: 1,
-            result: { message },
-            presenters: errorPresenters(message),
-            ctx,
-          },
-      runOptions,
-    );
+    if (handled && routeResult) {
+      return renderResult(
+        { ok: true, exitCode: 0, result: routeResult.result, presenters: routeResult.presenters, ctx },
+        runOptions,
+      );
+    }
+
+    const fallback = defaultNotFoundResult(argv, ctx);
+    return renderResult(eventResult(await ctx.emit("notFound", { argv }), fallback, ctx), runOptions);
   }
 
   async function renderResult(result: ExecutionResult, runOptions: CliRunOptions): Promise<CliRunResult> {
-    const ctx = result.ctx ?? createEmptyContext([]);
+    const execution = normalizeExecutionResult(result);
+    const ctx = execution.ctx ?? createEmptyContext([], services, eventSink);
     const rendererId = runOptions.renderer ?? selectRenderer(ctx) ?? defaultRenderer;
-    const value = await present(rendererId, result.result, result.presenters, ctx);
+    const value = await present(rendererId, execution.result, execution.presenters, ctx);
     const events = ctx.events();
-    const shouldRender = runOptions.render ?? true;
-    if (!shouldRender) return { ok: result.ok, exitCode: result.exitCode, result: result.result, value, events };
+    const base = { ok: execution.ok, exitCode: execution.exitCode, result: execution.result, value, events };
+    if (runOptions.render === false) return base;
+
     const renderer = renderers.get(rendererId);
-    if (!renderer) return { ok: result.ok, exitCode: result.exitCode, result: result.result, value, events };
-    const rendered = await renderer.render(renderInput(rendererId, result.result, value, events), ctx);
-    return { ok: result.ok, exitCode: rendered.exitCode, result: result.result, value, events, rendered };
+    if (!renderer) return base;
+
+    const rendered = await renderer.render(renderInput(rendererId, execution.result, value, events), ctx);
+    return { ...base, rendered: { ...rendered, exitCode: execution.exitCode } };
   }
 
-  function helpResult(argv: readonly string[]) {
+  async function helpResult(argv: readonly string[]): Promise<ExecutionResult> {
     const parsed = parseOptions(argv, globalOptions);
-    const ctx = createContext(argv, parsed.options, parsed.positionals, services);
-    return {
+    const routes = allHelpRoutes();
+    const path = helpPath(argv, routes);
+    const ctx = createContext(argv, parsed.options, path, services, eventSink);
+    const document: HelpDocument = {
+      name: options.name ?? "cli",
+      path,
+      globalOptions,
+      routes,
+    };
+    const text = formatHelp(document);
+    const fallback = {
       ok: true,
       exitCode: 0,
-      result: usageText(options.name ?? "cli"),
+      result: text,
+      presenters: helpPresenters(document, text),
       ctx,
     };
+    return eventResult(await ctx.emit("help", { document }), fallback, ctx);
+  }
+
+  function eventSink(ctx: Context, event: CliEventRecord) {
+    return dispatchEvent(ctx, event);
+  }
+
+  async function dispatchEvent(ctx: Context, event: CliEventRecord): Promise<unknown> {
+    const handlers = eventHandlers.get(String(event.name)) ?? [];
+    let result: unknown;
+    for (const handler of handlers) {
+      const value = await handler(createEventContext(ctx, event) as never);
+      if (value !== undefined && result === undefined) result = value;
+    }
+    return result;
+  }
+
+  function addEventHandler<TName extends CliEventName>(name: TName, handler: CliEventHandler<TName>) {
+    const key = String(name);
+    eventHandlers.set(key, [...(eventHandlers.get(key) ?? []), handler as CliEventHandler]);
   }
 
   function selectRenderer(ctx: Context) {
@@ -149,38 +216,10 @@ export function createCli<TGlobalOptions extends Options = EmptyObject>(
     return undefined;
   }
 
-  function usageText(name: string) {
-    const sections = [defaultRouter.usage(name), ...usageProviders.map((provider) => provider(name))];
-    const commands = sections.flatMap(commandLines);
-    const text = [`Usage: ${name} <command>`, "", "Commands:", ...commands].join("\n").trimEnd();
-    return `${text}\n`;
+  function allHelpRoutes(): readonly HelpRoute[] {
+    const routes = [...defaultRouter.helpRoutes(), ...helpProviders.flatMap((provider) => [...provider()])];
+    return routes.length > 0
+      ? routes
+      : usageProviders.flatMap((provider) => usageHelpRoutes(provider(options.name ?? "cli")));
   }
-}
-
-function commandLines(usage: string): string[] {
-  const lines = usage.split("\n");
-  const commandsIndex = lines.findIndex((line) => line.trim() === "Commands:");
-  const linesAfterHeader = commandsIndex === -1 ? lines : lines.slice(commandsIndex + 1);
-  return linesAfterHeader.filter((line) => line.trim().length > 0);
-}
-
-async function present(
-  format: string,
-  result: unknown,
-  presenters: ReadonlyMap<string, RoutePresenter<unknown>> | undefined,
-  ctx: Context,
-): Promise<unknown> {
-  const presenter = presenters?.get(format);
-  return presenter ? presenter(result, ctx) : result;
-}
-
-function renderInput(format: string, result: unknown, value: unknown, events: readonly unknown[]): RenderInput {
-  return { result, value, events, format };
-}
-
-function errorPresenters(message: string): ReadonlyMap<string, RoutePresenter<unknown>> {
-  const presenters = new Map<string, RoutePresenter<unknown>>();
-  presenters.set("text", () => message);
-  presenters.set("json", () => ({ error: { message } }));
-  return presenters;
 }
