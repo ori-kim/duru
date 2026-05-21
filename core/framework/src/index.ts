@@ -1,33 +1,38 @@
-export { createCli } from "./cli.ts";
-export type { Cli, CliOptions } from "./cli.ts";
-export { createOutputWriter, normalizeActionResult } from "./output.ts";
-export { parseOptionSpec, parseOptions } from "./options.ts";
-export type { OptionDefinition, ParsedOptions } from "./options.ts";
-export { compilePattern } from "./pattern.ts";
-export type { CompiledPattern } from "./pattern.ts";
-export { createPlugin, isCliPlugin, option, renderer } from "./plugin.ts";
-export type { CliPlugin, CliPluginApi } from "./plugin.ts";
-export { createRouter } from "./router.ts";
-export type { CommandBuilder, Router } from "./router.ts";
+export { createCli } from "./cli/index.ts";
+export { createOutputWriter, normalizeActionResult } from "./output/index.ts";
+export { parseOptionSpec, parseOptions } from "./options/index.ts";
+export { compilePattern } from "./pattern/index.ts";
+export { createPlugin, isCliPlugin, option, renderer } from "./plugin/index.ts";
+export { createRouter } from "./router/index.ts";
 export type {
   ActionResult,
   Awaitable,
+  Cli,
+  CliOptions,
+  CliPlugin,
+  CliPluginApi,
   CliRunOptions,
   CliRunResult,
+  CommandBuilder,
+  CompiledPattern,
   Context,
   EmptyObject,
   Middleware,
   MergeOptions,
+  OptionDefinition,
   OptionValue,
   OptionSpecOptions,
   Options,
   Output,
   OutputWriter,
   Params,
+  ParsedOptions,
   PatternActionArgs,
   PatternParams,
   RenderedOutput,
   Renderer,
   RendererContext,
   Request,
-} from "./types.ts";
+  Router,
+  RouteRender,
+} from "./types/index.ts";

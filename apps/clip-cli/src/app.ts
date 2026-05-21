@@ -10,20 +10,18 @@ export function createAppCli() {
   cli
     .command("hello <name>", "Run a framework demo command")
     .option("-u, --uppercase", "Uppercase the greeting")
-    .action((name, options, ctx) => {
+    .action((name, options) => {
       const value = String(name);
-      const greeting = `hello ${options.uppercase ? value.toUpperCase() : value}`;
-      ctx.output.text(greeting);
-      return undefined;
-    });
+      return { greeting: `hello ${options.uppercase ? value.toUpperCase() : value}` };
+    })
+    .render((result) => result.greeting);
 
-  cli.command("inspect", "Show framework composition").action((_options, ctx) => {
-    ctx.output.data({
+  cli.command("inspect", "Show framework composition").action(() => {
+    return {
       app: "clip-cli",
       core: "@clip/core",
       renderers: ["text", "json"],
-    });
-    return undefined;
+    };
   });
 
   return cli;
