@@ -137,10 +137,20 @@ export function createCli<TGlobalOptions extends Options = EmptyObject>(
   }
 
   function usageText(name: string) {
-    return [defaultRouter.usage(name), ...usageProviders.map((provider) => provider(name))].join("\n");
+    const sections = [defaultRouter.usage(name), ...usageProviders.map((provider) => provider(name))];
+    const commands = sections.flatMap(commandLines);
+    const text = [`Usage: ${name} <command>`, "", "Commands:", ...commands].join("\n").trimEnd();
+    return `${text}\n`;
   }
 }
 
 function argvFromOutputs(_outputs: readonly unknown[]): readonly string[] {
   return [];
+}
+
+function commandLines(usage: string): string[] {
+  const lines = usage.split("\n");
+  const commandsIndex = lines.findIndex((line) => line.trim() === "Commands:");
+  const linesAfterHeader = commandsIndex === -1 ? lines : lines.slice(commandsIndex + 1);
+  return linesAfterHeader.filter((line) => line.trim().length > 0);
 }

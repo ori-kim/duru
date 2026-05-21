@@ -16,4 +16,11 @@ describe("clip-cli demo app", () => {
     expect(result.rendered?.stdout).toContain('"kind": "data"');
     expect(result.rendered?.stdout).toContain('"app": "clip-cli"');
   });
+
+  test("runs nested router commands", async () => {
+    const result = await createAppCli().run(["ext", "registry", "add", "example"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.outputs).toEqual([{ kind: "data", value: { registry: "example", status: "added" } }]);
+  });
 });

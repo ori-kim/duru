@@ -34,6 +34,9 @@ export type Router<TRouterOptions extends Options = EmptyObject> = CliPlugin<TRo
     spec: TSpec,
     description?: string,
   ): Router<MergeOptions<TRouterOptions, OptionSpecOptions<TSpec>>>;
+  use<TChildOptions extends Options>(
+    router: Router<TChildOptions>,
+  ): Router<MergeOptions<TRouterOptions, TChildOptions>>;
   use(middleware: Middleware<TRouterOptions>): Router<TRouterOptions>;
   command<TPattern extends string>(
     pattern: TPattern,
@@ -41,4 +44,9 @@ export type Router<TRouterOptions extends Options = EmptyObject> = CliPlugin<TRo
   ): CommandBuilder<TPattern, TRouterOptions, EmptyObject>;
   middleware(getGlobalOptions: () => readonly OptionDefinition[]): Middleware;
   usage(name: string): string;
+};
+
+export type RouterOptions = {
+  name?: string;
+  description?: string;
 };
