@@ -34,5 +34,6 @@ export type {
   RendererContext,
   Request,
   Router,
+  RouterOptions,
   RouteRender,
 } from "./types/index.ts";

@@ -50,6 +50,18 @@ describe("createCli", () => {
     expect(result.rendered?.stdout).toContain("hello <name>");
   });
 
+  test("combines usage output from mounted routers", async () => {
+    const registry = createRouter({ name: "registry" });
+    registry.command("add <name>", "Add registry").action(() => undefined);
+    const ext = createRouter({ name: "ext" }).use(registry);
+    const cli = createCli({ name: "clip" }).use(renderer(testRenderer())).use(ext);
+
+    const result = await cli.run(["--help"]);
+
+    expect(result.rendered?.stdout.match(/Usage: clip <command>/g)).toHaveLength(1);
+    expect(result.rendered?.stdout).toContain("ext registry add <name>");
+  });
+
   test("installs standalone routers through use", async () => {
     const router = createRouter().option("--json");
     router.command("inspect", "Inspect app").action((options, ctx) => {
@@ -62,6 +74,66 @@ describe("createCli", () => {
 
     expect(result.ok).toBe(true);
     expect(result.outputs).toEqual([{ kind: "data", value: { json: true } }]);
+  });
+
+  test("mounts named routers as command namespaces", async () => {
+    const ext = createRouter({ name: "ext", description: "Manage extensions" });
+    ext.command("add <name>", "Add extension").action((name) => ({ added: name }));
+    const cli = createCli({ name: "clip" }).use(renderer(testRenderer())).use(ext);
+
+    const result = await cli.run(["ext", "add", "example"]);
+
+    expect(result.ok).toBe(true);
+    expect(result.outputs).toEqual([{ kind: "data", value: { added: "example" } }]);
+  });
+
+  test("mounts routers inside routers", async () => {
+    const registry = createRouter({ name: "registry" }).option("--url <url>");
+    registry.command("add <name>", "Add registry").action((name, options, ctx) => {
+      return { name, pattern: ctx.request.pattern, url: options.url };
+    });
+    const ext = createRouter({ name: "ext" }).use(registry);
+    const cli = createCli({ name: "clip" }).use(renderer(testRenderer())).use(ext);
+
+    const result = await cli.run(["ext", "registry", "add", "example", "--url", "https://api.example.com"]);
+
+    expect(result.ok).toBe(true);
+    expect(result.outputs).toEqual([
+      {
+        kind: "data",
+        value: {
+          name: "example",
+          pattern: "ext registry add <name>",
+          url: "https://api.example.com",
+        },
+      },
+    ]);
+  });
+
+  test("runs parent and child router middleware for nested routes", async () => {
+    const calls: string[] = [];
+    const child = createRouter({ name: "child" });
+    child.use(async (_ctx, next) => {
+      calls.push("child:before");
+      await next();
+      calls.push("child:after");
+    });
+    child.command("run").action(() => {
+      calls.push("action");
+      return undefined;
+    });
+    const parent = createRouter({ name: "parent" });
+    parent.use(async (_ctx, next) => {
+      calls.push("parent:before");
+      await next();
+      calls.push("parent:after");
+    });
+    parent.use(child);
+    const cli = createCli({ name: "clip" }).use(parent);
+
+    await cli.run(["parent", "child", "run"], { render: false });
+
+    expect(calls).toEqual(["parent:before", "child:before", "action", "child:after", "parent:after"]);
   });
 
   test("renders action return values through command render handlers", async () => {

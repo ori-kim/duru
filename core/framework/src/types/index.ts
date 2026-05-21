@@ -16,4 +16,4 @@ export type { CliPlugin, CliPluginApi } from "./plugin.ts";
 export type { Renderer, RendererContext } from "./renderer.ts";
 export type { Request } from "./request.ts";
 export type { PatternActionArgs, RouteRender } from "./route.ts";
-export type { CommandBuilder, Router } from "./router.ts";
+export type { CommandBuilder, Router, RouterOptions } from "./router.ts";

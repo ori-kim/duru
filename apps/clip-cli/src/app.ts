@@ -1,4 +1,4 @@
-import { createCli, renderer } from "@clip/core";
+import { createCli, createRouter, renderer } from "@clip/core";
 import { jsonRenderer } from "@clip/renderer-json";
 import { textRenderer } from "@clip/renderer-text";
 
@@ -23,6 +23,26 @@ export function createAppCli() {
       renderers: ["text", "json"],
     };
   });
+
+  const registry = createRouter({
+    name: "registry",
+    description: "Manage registries",
+  });
+
+  registry.command("add <name>", "Add registry").action((name) => {
+    return { registry: name, status: "added" };
+  });
+
+  const ext = createRouter({
+    name: "ext",
+    description: "Manage extensions",
+  }).use(registry);
+
+  ext.command("add <name>", "Add extension").action((name) => {
+    return { extension: name, status: "added" };
+  });
+
+  cli.use(ext);
 
   return cli;
 }

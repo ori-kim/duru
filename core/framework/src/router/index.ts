@@ -14,10 +14,12 @@ import type {
   OptionDefinition,
   Options,
   Router,
+  RouterOptions,
 } from "../types/index.ts";
 
 type Action = (...args: unknown[]) => Awaitable<ActionResult>;
 type RouteRenderer = (value: ActionResult, ctx: Context) => Awaitable<ActionResult>;
+const routerTag = Symbol("clip.router");
 
 type Route = {
   pattern: CompiledPattern;
@@ -28,36 +30,71 @@ type Route = {
   render?: RouteRenderer;
 };
 
-export function createRouter<TRouterOptions extends Options = EmptyObject>(): Router<TRouterOptions> {
-  const routes: Route[] = [];
-  const options: OptionDefinition[] = [];
-  const middleware: Middleware[] = [];
+type RouterState = {
+  name?: string;
+  description?: string;
+  routes: Route[];
+  options: OptionDefinition[];
+  middleware: Middleware[];
+  children: RouterState[];
+};
+
+type RouteEntry = {
+  route: Route;
+  pattern: CompiledPattern;
+  options: readonly OptionDefinition[];
+  middleware: readonly Middleware[];
+};
+
+type RouteScope = {
+  path: readonly string[];
+  options: readonly OptionDefinition[];
+  middleware: readonly Middleware[];
+};
+
+type RouterRuntime = Router<Options> & { readonly [routerTag]: RouterState };
+
+export function createRouter<TRouterOptions extends Options = EmptyObject>(
+  config: RouterOptions = {},
+): Router<TRouterOptions> {
+  const state: RouterState = {
+    ...cleanRouterConfig(config),
+    routes: [],
+    options: [],
+    middleware: [],
+    children: [],
+  };
 
   const router = {
     option<TSpec extends string>(spec: TSpec, description?: string) {
-      options.push(parseOptionSpec(spec, description));
+      state.options.push(parseOptionSpec(spec, description));
       return router as never;
     },
-    use(fn: Middleware) {
-      middleware.push(fn);
+    use(item: Middleware | Router<Options>) {
+      if (isRouter(item)) {
+        state.children.push(item[routerTag]);
+        return router as never;
+      }
+      state.middleware.push(item as Middleware);
       return router as never;
     },
     command<TPattern extends string>(pattern: TPattern, description?: string) {
       const route: Route = { pattern: compilePattern(pattern), description, options: [], middleware: [] };
-      routes.push(route);
+      state.routes.push(route);
       return createCommandBuilder<TPattern>(route);
     },
     middleware(getGlobalOptions: () => readonly OptionDefinition[]) {
-      return createRouterMiddleware(routes, middleware, options, getGlobalOptions);
+      return createRouterMiddleware(state, getGlobalOptions);
     },
     usage(name: string) {
-      return usageText(name, routes);
+      return usageText(name, state);
     },
     ...createPlugin<TRouterOptions>((api) => {
-      for (const item of options) api.option(item);
-      api.middleware(createRouterMiddleware(routes, middleware, options, api.options));
-      api.usage((name) => usageText(name, routes));
+      for (const item of collectOptionDefinitions(state)) api.option(item);
+      api.middleware(createRouterMiddleware(state, api.options));
+      api.usage((name) => usageText(name, state));
     }),
+    [routerTag]: state,
   };
 
   return router as unknown as Router<TRouterOptions>;
@@ -87,24 +124,19 @@ export function createRouter<TRouterOptions extends Options = EmptyObject>(): Ro
   }
 }
 
-function createRouterMiddleware(
-  routes: readonly Route[],
-  routerMiddleware: readonly Middleware[],
-  routerOptions: readonly OptionDefinition[],
-  getGlobalOptions: () => readonly OptionDefinition[],
-): Middleware {
+function createRouterMiddleware(state: RouterState, getGlobalOptions: () => readonly OptionDefinition[]): Middleware {
   return async (ctx, next) => {
-    for (const route of routes) {
-      const parsed = parseOptions(ctx.request.argv, [...getGlobalOptions(), ...routerOptions, ...route.options]);
-      const match = route.pattern.match(parsed.positionals);
+    for (const entry of collectRouteEntries(state)) {
+      const parsed = parseOptions(ctx.request.argv, [...getGlobalOptions(), ...entry.options]);
+      const match = entry.pattern.match(parsed.positionals);
       if (!match) continue;
-      ctx.request = { ...ctx.request, pattern: route.pattern.pattern, params: match.params, options: parsed.options };
+      ctx.request = { ...ctx.request, pattern: entry.pattern.pattern, params: match.params, options: parsed.options };
       ctx.params = match.params;
       ctx.options = parsed.options;
       ctx.state.set("handled", true);
-      return runPipeline([...routerMiddleware, ...route.middleware], ctx, async () => {
-        const result = await runAction(route, ctx);
-        const rendered = route.render ? await route.render(result, ctx) : result;
+      return runPipeline(entry.middleware, ctx, async () => {
+        const result = await runAction(entry.route, ctx);
+        const rendered = entry.route.render ? await entry.route.render(result, ctx) : result;
         for (const output of normalizeActionResult(rendered)) ctx.output.emit(output);
       });
     }
@@ -117,10 +149,61 @@ async function runAction(route: Route, ctx: Context): Promise<ActionResult> {
   return route.action?.(...args, ctx.options, ctx);
 }
 
-function usageText(name: string, routes: readonly Route[]): string {
+function collectRouteEntries(state: RouterState, scope: RouteScope = emptyScope()): RouteEntry[] {
+  const path = [...scope.path, ...pathSegments(state.name)];
+  const options = [...scope.options, ...state.options];
+  const middleware = [...scope.middleware, ...state.middleware];
+  const ownEntries = state.routes.map((route) => ({
+    route,
+    pattern: compilePattern(joinPattern([...path, route.pattern.pattern])),
+    options: [...options, ...route.options],
+    middleware: [...middleware, ...route.middleware],
+  }));
+  const childEntries = state.children.flatMap((child) => collectRouteEntries(child, { path, options, middleware }));
+  return [...ownEntries, ...childEntries];
+}
+
+function collectOptionDefinitions(state: RouterState): OptionDefinition[] {
+  return [...state.options, ...state.children.flatMap(collectOptionDefinitions)];
+}
+
+function usageText(name: string, state: RouterState): string {
+  const entries = collectRouteEntries(state);
   const lines = [`Usage: ${name} <command>`, "", "Commands:"];
-  for (const route of routes) {
-    lines.push(`  ${route.pattern.pattern}${route.description ? `  ${route.description}` : ""}`);
+  for (const entry of entries) {
+    lines.push(`  ${entry.pattern.pattern}${entry.route.description ? `  ${entry.route.description}` : ""}`);
   }
   return `${lines.join("\n")}\n`;
+}
+
+function emptyScope(): RouteScope {
+  return { path: [], options: [], middleware: [] };
+}
+
+function cleanRouterConfig(config: RouterOptions): Pick<RouterState, "name" | "description"> {
+  return {
+    ...(cleanSegment(config.name) ? { name: cleanSegment(config.name) } : {}),
+    ...(config.description ? { description: config.description } : {}),
+  };
+}
+
+function isRouter(value: unknown): value is RouterRuntime {
+  return typeof value === "object" && value !== null && routerTag in value;
+}
+
+function pathSegments(value: string | undefined): string[] {
+  const segment = cleanSegment(value);
+  return segment ? [segment] : [];
+}
+
+function cleanSegment(value: string | undefined): string | undefined {
+  const segment = value?.trim();
+  return segment ? segment : undefined;
+}
+
+function joinPattern(parts: readonly string[]): string {
+  return parts
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" ");
 }

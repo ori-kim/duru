@@ -54,6 +54,26 @@ describe("public type inference", () => {
     createCli().use(router);
   });
 
+  test("carries child router option types through router.use(router)", () => {
+    const registry = createRouter({ name: "registry" }).option("--url <url>");
+    const ext = createRouter({ name: "ext" }).use(registry);
+
+    registry.command("add <name>").action((name, options, ctx) => {
+      const typedName: string = name;
+      const typedUrl: string | undefined = options.url;
+      const typedCtxUrl: string | undefined = ctx.options.url;
+      return { typedName, typedUrl, typedCtxUrl };
+    });
+
+    createCli()
+      .use(ext)
+      .command("inspect")
+      .action((options) => {
+        const typedUrl: string | undefined = options.url;
+        return { typedUrl };
+      });
+  });
+
   test("infers action return values in command render handlers", () => {
     createCli()
       .command("build <entry>")
