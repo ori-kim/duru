@@ -1,5 +1,5 @@
 {
-  "name": "@clip/input-zod",
+  "name": "@clip/input-validation",
   "version": "0.0.0",
   "type": "module",
   "private": true,
@@ -7,7 +7,9 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@clip/core": "workspace:*",
+    "@clip/core": "workspace:*"
+  },
+  "devDependencies": {
     "zod": "^4.0.0"
   }
 }

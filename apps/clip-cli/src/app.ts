@@ -1,7 +1,8 @@
 import { adaptResult, context, createCli, formatHelp, help, isHelpDocument, isValidationError, meta } from "@clip/core";
-import { z } from "@clip/input-zod";
+import { input } from "@clip/input-validation";
 import { jsonRendererPlugin } from "@clip/renderer-json";
 import { textRendererPlugin } from "@clip/renderer-text";
+import { z } from "zod";
 
 export function createAppCli() {
   const cli = createCli({
@@ -46,7 +47,7 @@ export function createAppCli() {
   cli
     .command(
       "call",
-      z({
+      input({
         params: z.object({
           operation: z.coerce.number().min(1),
         }),

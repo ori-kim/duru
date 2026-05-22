@@ -17,20 +17,23 @@
       },
       "dependencies": {
         "@clip/core": "workspace:*",
-        "@clip/input-zod": "workspace:*",
+        "@clip/input-validation": "workspace:*",
         "@clip/renderer-json": "workspace:*",
         "@clip/renderer-text": "workspace:*",
+        "zod": "^4.0.0",
       },
     },
     "core/framework": {
       "name": "@clip/core",
       "version": "0.0.0",
     },
-    "packages/input-zod": {
-      "name": "@clip/input-zod",
+    "packages/input-validation": {
+      "name": "@clip/input-validation",
       "version": "0.0.0",
       "dependencies": {
         "@clip/core": "workspace:*",
+      },
+      "devDependencies": {
         "zod": "^4.0.0",
       },
     },
@@ -70,7 +73,7 @@
 
     "@clip/core": ["@clip/core@workspace:core/framework"],
 
-    "@clip/input-zod": ["@clip/input-zod@workspace:packages/input-zod"],
+    "@clip/input-validation": ["@clip/input-validation@workspace:packages/input-validation"],
 
     "@clip/renderer-json": ["@clip/renderer-json@workspace:packages/renderer-json"],
 
