@@ -1,9 +1,10 @@
+import { commandAliasesComposer } from "../compose/index.ts";
 import { createContext, createEmptyContext } from "../context/index.ts";
-import { formatHelp } from "../help/index.ts";
+import { helpPath, usageHelpRoutes } from "../help/index.ts";
 import { runPipeline } from "../middleware/pipeline.ts";
 import { parseOptions } from "../options/index.ts";
 import { isCliPlugin, option as optionPlugin } from "../plugin/index.ts";
-import { type RouteResultState, createRouter, routeResultStateKey } from "../router/index.ts";
+import { createRouter, getRouteResult, getRouterOptionDefinitions, isRouteHandled } from "../router/index.ts";
 import type {
   Cli,
   CliEventHandler,
@@ -11,8 +12,13 @@ import type {
   CliEventRecord,
   CliOptions,
   CliPlugin,
+  CliPluginApi,
   CliRunOptions,
   CliRunResult,
+  CommandComposer,
+  CommandConfig,
+  CommandFeature,
+  CommandPattern,
   Context,
   EmptyObject,
   HelpDocument,
@@ -22,19 +28,26 @@ import type {
   Options,
   Params,
   Renderer,
+  RouteErrorHandler,
+  Router,
 } from "../types/index.ts";
 import { createEventContext } from "./events.ts";
-import { helpPath, isHelpRequest, usageHelpRoutes } from "./help.ts";
 import {
   type ExecutionResult,
   defaultErrorResult,
   defaultNotFoundResult,
   eventResult,
-  helpPresenters,
   normalizeExecutionResult,
   present,
   renderInput,
 } from "./result.ts";
+
+type CliRouteRuntime = {
+  middleware: Middleware[];
+  errorHandlers: RouteErrorHandler[];
+};
+
+const routeRuntimeByCli = new WeakMap<object, CliRouteRuntime>();
 
 export function createCli<TGlobalOptions extends Options = EmptyObject, TValues extends object = EmptyObject>(
   options: CliOptions<TGlobalOptions> = {},
@@ -44,23 +57,47 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
   const renderers = new Map<string, Renderer>();
   const rendererSelectors: Array<(ctx: Context) => string | undefined> = [];
   const eventHandlers = new Map<string, CliEventHandler[]>();
+  const appErrorHandlers: RouteErrorHandler[] = [];
+  const coreCommandComposerCount = 1;
+  const commandComposers: CommandComposer[] = [commandAliasesComposer];
   const helpProviders: Array<() => readonly HelpRoute[]> = [];
   const usageProviders: Array<(name: string) => string> = [];
   const services = new Map<string, unknown>();
   const defaultRouter = createRouter<TGlobalOptions, TValues>();
-  let defaultRenderer = "text";
+  const routeMiddleware: Middleware[] = [];
+  let defaultRenderer: string | undefined;
 
-  const cli: Cli<TGlobalOptions, TValues> = {
+  const cli = {
+    ...defaultRouter,
     option(spec, description) {
+      defaultRouter.option(spec, description);
       return cli.use(optionPlugin(spec, description)) as never;
     },
-    use(item: CliPlugin<Options, object> | Middleware<TGlobalOptions, Params, TValues>) {
+    use(
+      item: CliPlugin<Options, object> | Middleware<TGlobalOptions, Params, TValues> | string,
+      scopedMiddleware?: Middleware<TGlobalOptions, Params, TValues>,
+    ) {
+      if (typeof item === "string") {
+        if (scopedMiddleware) defaultRouter.use(item, scopedMiddleware as Middleware);
+        return cli as never;
+      }
       if (isCliPlugin(item)) {
         item.install(pluginApi());
         return cli as never;
       }
       middleware.push(item as Middleware);
+      routeMiddleware.push(item as Middleware);
       return cli;
+    },
+    route<TAddedOptions extends Options, TAddedValues extends object>(
+      path: string,
+      app: Cli<TAddedOptions, TAddedValues>,
+    ) {
+      const router = app as unknown as Router<Options, object>;
+      const runtime = routeRuntimeByCli.get(app as object);
+      defaultRouter.route(path, router, runtime?.middleware, runtime?.errorHandlers);
+      globalOptions.push(...getRouterOptionDefinitions(router));
+      return cli as never;
     },
     renderer(renderer) {
       pluginApi().renderer(renderer);
@@ -71,8 +108,9 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
       addEventHandler(name, handler as CliEventHandler);
       return cli;
     },
-    onError(handler) {
-      return cli.on("error", handler);
+    catch(handler) {
+      appErrorHandlers.push(handler as RouteErrorHandler);
+      return cli;
     },
     notFound(handler) {
       return cli.on("notFound", handler);
@@ -81,17 +119,23 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
       const ctx = createEmptyContext([], services, eventSink);
       await ctx.emit(name, payload);
     },
-    command<TPattern extends string>(pattern: TPattern, description?: string) {
-      return defaultRouter.command(pattern, description);
+    command<TPattern extends string>(
+      pattern: CommandPattern<TPattern>,
+      descriptionOrFeature?: string | CommandFeature<object, object> | CommandConfig<object, object>,
+      maybeDescription?: string | CommandConfig,
+    ) {
+      return defaultRouter.command(pattern, descriptionOrFeature as never, maybeDescription);
     },
     run(argv = [], runOptions = {}) {
       return runCli(argv, runOptions);
     },
-  };
+  } as Cli<TGlobalOptions, TValues>;
+
+  routeRuntimeByCli.set(cli as object, { middleware: routeMiddleware, errorHandlers: appErrorHandlers });
 
   return cli;
 
-  function pluginApi() {
+  function pluginApi(): CliPluginApi {
     return {
       option(definition: OptionDefinition) {
         globalOptions.push(definition);
@@ -114,6 +158,15 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
       on(name: string, handler: CliEventHandler) {
         addEventHandler(name, handler);
       },
+      compose(composer: CommandComposer) {
+        addCommandComposer(composer);
+      },
+      composers() {
+        return commandComposerDefinitions();
+      },
+      helpDocument(argv: readonly string[]) {
+        return helpDocument(argv);
+      },
       helpRoutes(provider: () => readonly HelpRoute[]) {
         helpProviders.push(provider);
       },
@@ -123,26 +176,44 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
     };
   }
 
-  async function runCli(argv: readonly string[], runOptions: CliRunOptions): Promise<CliRunResult> {
-    if (argv.length === 0 || isHelpRequest(argv)) {
-      return renderResult(await helpResult(argv), runOptions);
-    }
+  function addCommandComposer(composer: CommandComposer): void {
+    if (composer === commandAliasesComposer) return;
+    commandComposers.splice(commandComposers.length - coreCommandComposerCount, 0, composer);
+  }
 
+  async function runCli(argv: readonly string[], runOptions: CliRunOptions): Promise<CliRunResult> {
     const parsed = parseOptions(argv, globalOptions);
     const ctx = createContext(argv, parsed.options, parsed.positionals, services, eventSink);
+    let pipelineResult: unknown;
 
     try {
-      await runPipeline([...middleware, defaultRouter.middleware(() => globalOptions)], ctx, async () => undefined);
+      pipelineResult = await runPipeline(
+        [...middleware, defaultRouter.middleware(() => globalOptions, commandComposerDefinitions)],
+        ctx,
+        async () => undefined,
+      );
     } catch (error) {
       const fallback = defaultErrorResult(error, ctx);
+      const appCatchResult = await handleAppError(error, ctx, fallback);
+      if (appCatchResult) return renderResult(appCatchResult, runOptions);
       return renderResult(eventResult(await ctx.emit("error", { error }), fallback, ctx), runOptions);
     }
 
-    const handled = ctx.state.get("handled") === true;
-    const routeResult = ctx.state.get(routeResultStateKey) as RouteResultState | undefined;
+    if (pipelineResult !== undefined) {
+      return renderResult({ ok: true, exitCode: 0, result: pipelineResult, ctx }, runOptions);
+    }
+
+    const handled = isRouteHandled(ctx);
+    const routeResult = getRouteResult(ctx);
     if (handled && routeResult) {
       return renderResult(
-        { ok: true, exitCode: 0, result: routeResult.result, presenters: routeResult.presenters, ctx },
+        {
+          ok: routeResult.ok ?? true,
+          exitCode: routeResult.exitCode ?? 0,
+          result: routeResult.result,
+          presenters: routeResult.presenters,
+          ctx,
+        },
         runOptions,
       );
     }
@@ -160,6 +231,8 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
     const base = { ok: execution.ok, exitCode: execution.exitCode, result: execution.result, value, events };
     if (runOptions.render === false) return base;
 
+    if (!rendererId) return base;
+
     const renderer = renderers.get(rendererId);
     if (!renderer) return base;
 
@@ -167,26 +240,15 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
     return { ...base, rendered: { ...rendered, exitCode: execution.exitCode } };
   }
 
-  async function helpResult(argv: readonly string[]): Promise<ExecutionResult> {
-    const parsed = parseOptions(argv, globalOptions);
+  function helpDocument(argv: readonly string[]): HelpDocument {
     const routes = allHelpRoutes();
     const path = helpPath(argv, routes);
-    const ctx = createContext(argv, parsed.options, path, services, eventSink);
-    const document: HelpDocument = {
+    return {
       name: options.name ?? "cli",
       path,
       globalOptions,
       routes,
     };
-    const text = formatHelp(document);
-    const fallback = {
-      ok: true,
-      exitCode: 0,
-      result: text,
-      presenters: helpPresenters(document, text),
-      ctx,
-    };
-    return eventResult(await ctx.emit("help", { document }), fallback, ctx);
   }
 
   function eventSink(ctx: Context, event: CliEventRecord) {
@@ -208,6 +270,18 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
     eventHandlers.set(key, [...(eventHandlers.get(key) ?? []), handler as CliEventHandler]);
   }
 
+  async function handleAppError(
+    error: unknown,
+    ctx: Context,
+    fallback: ExecutionResult,
+  ): Promise<ExecutionResult | undefined> {
+    for (const handler of appErrorHandlers) {
+      const result = await handler({ ...ctx, error });
+      if (result !== undefined) return eventResult(result, fallback, ctx);
+    }
+    return undefined;
+  }
+
   function selectRenderer(ctx: Context) {
     for (const selector of rendererSelectors) {
       const id = selector(ctx);
@@ -217,9 +291,16 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
   }
 
   function allHelpRoutes(): readonly HelpRoute[] {
-    const routes = [...defaultRouter.helpRoutes(), ...helpProviders.flatMap((provider) => [...provider()])];
+    const routes = [
+      ...defaultRouter.helpRoutes(commandComposerDefinitions),
+      ...helpProviders.flatMap((provider) => [...provider()]),
+    ];
     return routes.length > 0
       ? routes
       : usageProviders.flatMap((provider) => usageHelpRoutes(provider(options.name ?? "cli")));
+  }
+
+  function commandComposerDefinitions(): readonly CommandComposer[] {
+    return [...commandComposers];
   }
 }

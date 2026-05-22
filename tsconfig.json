@@ -16,6 +16,7 @@
     "noImplicitOverride": true,
     "paths": {
       "@clip/core": ["./core/framework/src/index.ts"],
+      "@clip/input-zod": ["./packages/input-zod/src/index.ts"],
       "@clip/renderer-json": ["./packages/renderer-json/src/index.ts"],
       "@clip/renderer-text": ["./packages/renderer-text/src/index.ts"]
     }

@@ -1,7 +1,7 @@
 import type { EmptyObject } from "./common.ts";
 import type { Context } from "./context.ts";
 import type { CliEventHandler } from "./event.ts";
-import type { HelpRoute } from "./help.ts";
+import type { CommandMeta, HelpDocument, HelpRoute } from "./help.ts";
 import type { Middleware } from "./middleware.ts";
 import type { OptionDefinition, Options } from "./options.ts";
 import type { Renderer } from "./renderer.ts";
@@ -25,6 +25,20 @@ export type CliPluginApi = {
   defaultRenderer(id: string): void;
   selectRenderer(selector: (ctx: Context) => string | undefined): void;
   on(name: string, handler: CliEventHandler): void;
+  compose(composer: CommandComposer): void;
+  composers(): readonly CommandComposer[];
+  helpDocument(argv: readonly string[]): HelpDocument;
   helpRoutes(provider: () => readonly HelpRoute[]): void;
   usage(provider: (name: string) => string): void;
 };
+
+export type CommandDraft = {
+  readonly pattern: string;
+  readonly meta: Readonly<CommandMeta>;
+  readonly options: readonly OptionDefinition[];
+  alias(pattern: string): void;
+  use(middleware: Middleware): void;
+  mergeMeta(metadata: CommandMeta): void;
+};
+
+export type CommandComposer = (command: CommandDraft, next: () => void) => void;

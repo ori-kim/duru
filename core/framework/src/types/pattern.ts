@@ -1,11 +1,14 @@
 import type { EmptyObject, Simplify } from "./common.ts";
 
-export type Params = Record<string, string | string[] | undefined>;
+export type ParamValue = string | string[] | undefined;
+export type RawParamValue = string | readonly string[] | undefined;
+export type RawParams = Readonly<Record<string, RawParamValue>>;
+export type Params = Record<string, ParamValue>;
 
 export type CompiledPattern = {
   pattern: string;
   paramNames: readonly string[];
-  match(argv: readonly string[]): { params: Params; positionals: readonly string[] } | undefined;
+  match(argv: readonly string[]): { params: RawParams; positionals: readonly string[] } | undefined;
 };
 
 export type PatternParams<TPattern extends string> = Simplify<PatternParamObject<Trim<TPattern>>>;

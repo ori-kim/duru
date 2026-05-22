@@ -1,4 +1,5 @@
-import type { Renderer } from "@clip/core";
+import { createPlugin, parseOptionSpec } from "@clip/core";
+import type { CliPlugin, Renderer } from "@clip/core";
 
 export function jsonRenderer(): Renderer {
   return {
@@ -12,4 +13,13 @@ export function jsonRenderer(): Renderer {
       };
     },
   };
+}
+
+export function jsonRendererPlugin(): CliPlugin<{ json?: boolean; events?: boolean }> {
+  return createPlugin((api) => {
+    api.renderer(jsonRenderer());
+    api.option(parseOptionSpec("--json", "Render structured JSON output"));
+    api.option(parseOptionSpec("--events", "Include emitted events in structured JSON output"));
+    api.selectRenderer((ctx) => (ctx.options.json ? "json" : undefined));
+  });
 }

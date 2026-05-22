@@ -24,7 +24,7 @@ export type CliEventRecord<TName extends CliEventName = CliEventName> = {
 
 export type CliEventContext<
   TName extends CliEventName = CliEventName,
-  TOptions extends Options = Options,
+  TOptions extends object = Options,
   TParams extends object = Params,
   TValues extends object = EmptyObject,
 > = Context<TOptions, TParams, TValues> & {
@@ -35,6 +35,6 @@ export type CliEventContext<
 
 export type CliEventHandler<
   TName extends CliEventName = CliEventName,
-  TOptions extends Options = Options,
+  TOptions extends object = Options,
   TValues extends object = EmptyObject,
 > = (ctx: CliEventContext<TName, TOptions, Params, TValues>) => Awaitable<ActionResult>;

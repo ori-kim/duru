@@ -1,4 +1,4 @@
-import type { CompiledPattern, Params } from "../types/index.ts";
+import type { CompiledPattern, ParamValue } from "../types/index.ts";
 
 type PatternToken =
   | { kind: "literal"; value: string }
@@ -13,7 +13,7 @@ export function compilePattern(pattern: string): CompiledPattern {
     pattern,
     paramNames,
     match(argv) {
-      const params: Params = {};
+      const params: Record<string, ParamValue> = {};
       let index = 0;
 
       for (const token of tokens) {

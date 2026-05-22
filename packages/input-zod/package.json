@@ -1,0 +1,13 @@
+{
+  "name": "@clip/input-zod",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@clip/core": "workspace:*",
+    "zod": "^4.0.0"
+  }
+}
