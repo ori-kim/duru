@@ -16,22 +16,22 @@
         "clip": "./src/main.ts",
       },
       "dependencies": {
-        "@clip/core": "workspace:*",
+        "@clip/kit": "workspace:*",
         "@clip/input-validation": "workspace:*",
         "@clip/renderer-json": "workspace:*",
         "@clip/renderer-text": "workspace:*",
         "zod": "^4.0.0",
       },
     },
-    "core/framework": {
-      "name": "@clip/core",
+    "core/clip-kit": {
+      "name": "@clip/kit",
       "version": "0.0.0",
     },
     "packages/env": {
       "name": "@clip/env",
       "version": "0.0.0",
       "dependencies": {
-        "@clip/core": "workspace:*",
+        "@clip/kit": "workspace:*",
       },
       "devDependencies": {
         "@clip/input-validation": "workspace:*",
@@ -42,7 +42,7 @@
       "name": "@clip/input-validation",
       "version": "0.0.0",
       "dependencies": {
-        "@clip/core": "workspace:*",
+        "@clip/kit": "workspace:*",
       },
       "devDependencies": {
         "zod": "^4.0.0",
@@ -52,14 +52,14 @@
       "name": "@clip/renderer-json",
       "version": "0.0.0",
       "dependencies": {
-        "@clip/core": "workspace:*",
+        "@clip/kit": "workspace:*",
       },
     },
     "packages/renderer-text": {
       "name": "@clip/renderer-text",
       "version": "0.0.0",
       "dependencies": {
-        "@clip/core": "workspace:*",
+        "@clip/kit": "workspace:*",
       },
     },
   },
@@ -82,7 +82,7 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@1.9.4", "", { "os": "win32", "cpu": "x64" }, "sha512-8Y5wMhVIPaWe6jw2H+KlEm4wP/f7EW3810ZLmDlrEEy5KvBsb9ECEfu/kMWD484ijfQ8+nIi0giMgu9g1UAuuA=="],
 
-    "@clip/core": ["@clip/core@workspace:core/framework"],
+    "@clip/kit": ["@clip/kit@workspace:core/clip-kit"],
 
     "@clip/env": ["@clip/env@workspace:packages/env"],
 

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createCli, formatHelp, help, isHelpDocument, isValidationError, meta, renderer } from "@clip/core";
-import { adaptResult } from "@clip/core";
-import type { Renderer } from "@clip/core";
 import { input } from "@clip/input-validation";
+import { createCli, formatHelp, help, isHelpDocument, isValidationError, meta, renderer } from "@clip/kit";
+import { adaptResult } from "@clip/kit";
+import type { Renderer } from "@clip/kit";
 import { z } from "zod";
 
 describe("@clip/input-validation", () => {

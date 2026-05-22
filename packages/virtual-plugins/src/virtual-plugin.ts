@@ -1,4 +1,4 @@
-import type { Awaitable, Cli } from "@clip/core";
+import type { Awaitable, Cli } from "@clip/kit";
 
 const virtualPluginTag = Symbol.for("clip.virtual_plugin");
 

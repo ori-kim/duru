@@ -1,5 +1,5 @@
-import { createPlugin } from "@clip/core";
-import type { CliPlugin, Renderer } from "@clip/core";
+import { createPlugin } from "@clip/kit";
+import type { CliPlugin, Renderer } from "@clip/kit";
 
 export function textRenderer(): Renderer {
   return {

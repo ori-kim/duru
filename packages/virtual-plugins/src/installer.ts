@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import type { Cli } from "@clip/core";
+import type { Cli } from "@clip/kit";
 import { type InstallVirtualPluginsOptions, discoverVirtualPluginManifests } from "./manifest.ts";
 import { isVirtualPlugin } from "./virtual-plugin.ts";
 
