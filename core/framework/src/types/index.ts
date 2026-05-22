@@ -21,6 +21,8 @@ export type { Middleware } from "./middleware.ts";
 export type {
   MergeOptions,
   OptionDefinition,
+  OptionFallbackInput,
+  OptionFallbackProvider,
   OptionSpec,
   OptionSpecOptions,
   OptionValue,

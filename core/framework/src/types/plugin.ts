@@ -3,7 +3,7 @@ import type { Context } from "./context.ts";
 import type { CliEventHandler } from "./event.ts";
 import type { CommandMeta, HelpDocument, HelpRoute } from "./help.ts";
 import type { Middleware } from "./middleware.ts";
-import type { OptionDefinition, Options } from "./options.ts";
+import type { OptionDefinition, OptionFallbackProvider, Options } from "./options.ts";
 import type { Renderer } from "./renderer.ts";
 
 declare const pluginTag: unique symbol;
@@ -20,6 +20,8 @@ export type CliPlugin<TOptions extends Options = EmptyObject, TValues extends ob
 export type CliPluginApi = {
   option(definition: OptionDefinition): void;
   options(): readonly OptionDefinition[];
+  optionFallback(provider: OptionFallbackProvider): void;
+  optionFallbacks(): readonly OptionFallbackProvider[];
   middleware(middleware: Middleware): void;
   renderer(renderer: Renderer): void;
   defaultRenderer(id: string): void;

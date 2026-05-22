@@ -48,6 +48,8 @@ export type {
   MiddlewarePath,
   MergeOptions,
   OptionDefinition,
+  OptionFallbackInput,
+  OptionFallbackProvider,
   OptionSpec,
   OptionValue,
   OptionSpecOptions,

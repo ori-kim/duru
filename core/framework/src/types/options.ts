@@ -1,7 +1,8 @@
-import type { Simplify } from "./common.ts";
+import type { Awaitable, Simplify } from "./common.ts";
+import type { RawParams } from "./pattern.ts";
 
 export type ParsedOptionValue = boolean | string | string[];
-export type RawOptionValue = boolean | string | readonly string[];
+export type RawOptionValue = unknown;
 export type OptionValue = ParsedOptionValue;
 export type RawOptions = Readonly<Record<string, RawOptionValue | undefined>>;
 export type Options = Record<string, OptionValue | undefined>;
@@ -19,6 +20,17 @@ export type ParsedOptions = {
   options: RawOptions;
   positionals: string[];
 };
+
+export type OptionFallbackInput = {
+  option: OptionDefinition;
+  argv: readonly string[];
+  pattern: string;
+  params: RawParams;
+  options: RawOptions;
+  positionals: readonly string[];
+};
+
+export type OptionFallbackProvider = (input: OptionFallbackInput) => Awaitable<unknown | undefined>;
 
 export type OptionSpec<TSpec extends string> = string extends TSpec
   ? TSpec

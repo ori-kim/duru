@@ -25,6 +25,7 @@ import type {
   HelpRoute,
   Middleware,
   OptionDefinition,
+  OptionFallbackProvider,
   OptionSpec,
   Options,
   Params,
@@ -46,6 +47,7 @@ import {
 type CliRouteRuntime = {
   middleware: Middleware[];
   errorHandlers: RouteErrorHandler[];
+  optionFallbacks: OptionFallbackProvider[];
 };
 
 const routeRuntimeByCli = new WeakMap<object, CliRouteRuntime>();
@@ -61,6 +63,7 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
   const appErrorHandlers: RouteErrorHandler[] = [];
   const coreCommandComposerCount = 1;
   const commandComposers: CommandComposer[] = [commandAliasesComposer];
+  const optionFallbackProviders: OptionFallbackProvider[] = [];
   const helpProviders: Array<() => readonly HelpRoute[]> = [];
   const usageProviders: Array<(name: string) => string> = [];
   const services = new Map<string, unknown>();
@@ -96,7 +99,7 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
     ) {
       const router = app as unknown as Router<Options, object>;
       const runtime = routeRuntimeByCli.get(app as object);
-      defaultRouter.route(path, router, runtime?.middleware, runtime?.errorHandlers);
+      defaultRouter.route(path, router, runtime?.middleware, runtime?.errorHandlers, runtime?.optionFallbacks);
       globalOptions.push(...getRouterOptionDefinitions(router));
       return cli as never;
     },
@@ -132,7 +135,11 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
     },
   } as Cli<TGlobalOptions, TValues>;
 
-  routeRuntimeByCli.set(cli as object, { middleware: routeMiddleware, errorHandlers: appErrorHandlers });
+  routeRuntimeByCli.set(cli as object, {
+    middleware: routeMiddleware,
+    errorHandlers: appErrorHandlers,
+    optionFallbacks: optionFallbackProviders,
+  });
 
   return cli;
 
@@ -144,6 +151,12 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
       },
       options() {
         return [...globalOptions];
+      },
+      optionFallback(provider: OptionFallbackProvider) {
+        optionFallbackProviders.push(provider);
+      },
+      optionFallbacks() {
+        return optionFallbackDefinitions();
       },
       middleware(fn: Middleware) {
         middleware.push(fn);
@@ -190,7 +203,10 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
 
     try {
       pipelineResult = await runPipeline(
-        [...middleware, defaultRouter.middleware(() => globalOptions, commandComposerDefinitions)],
+        [
+          ...middleware,
+          defaultRouter.middleware(() => globalOptions, commandComposerDefinitions, optionFallbackDefinitions),
+        ],
         ctx,
         async () => undefined,
       );
@@ -304,5 +320,9 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
 
   function commandComposerDefinitions(): readonly CommandComposer[] {
     return [...commandComposers];
+  }
+
+  function optionFallbackDefinitions(): readonly OptionFallbackProvider[] {
+    return [...optionFallbackProviders];
   }
 }

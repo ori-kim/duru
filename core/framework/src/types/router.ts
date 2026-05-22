@@ -2,7 +2,14 @@ import type { EmptyObject, MergeContext } from "./common.ts";
 import type { CommandExample, CommandMetadata, HelpRoute } from "./help.ts";
 import type { CommandFeature } from "./input.ts";
 import type { Middleware } from "./middleware.ts";
-import type { MergeOptions, OptionDefinition, OptionSpec, OptionSpecOptions, Options } from "./options.ts";
+import type {
+  MergeOptions,
+  OptionDefinition,
+  OptionFallbackProvider,
+  OptionSpec,
+  OptionSpecOptions,
+  Options,
+} from "./options.ts";
 import type { ActionResult } from "./output.ts";
 import type { Params, PatternParams } from "./pattern.ts";
 import type { CliPlugin, CommandComposer } from "./plugin.ts";
@@ -104,6 +111,7 @@ export type Router<TRouterOptions extends Options = EmptyObject, TValues extends
     router: Router<TChildOptions, TChildValues>,
     middleware?: readonly Middleware[],
     errorHandlers?: readonly RouteErrorHandler[],
+    optionFallbacks?: readonly OptionFallbackProvider[],
   ): Router<MergeOptions<TRouterOptions, TChildOptions>, MergeContext<TValues, TChildValues>>;
   use<TPath extends string>(
     path: MiddlewarePath<TPath>,
@@ -147,6 +155,7 @@ export type Router<TRouterOptions extends Options = EmptyObject, TValues extends
   middleware(
     getGlobalOptions: () => readonly OptionDefinition[],
     getCommandComposers?: () => readonly CommandComposer[],
+    getOptionFallbacks?: () => readonly OptionFallbackProvider[],
   ): Middleware;
   usage(name: string, getCommandComposers?: () => readonly CommandComposer[]): string;
   helpRoutes(getCommandComposers?: () => readonly CommandComposer[]): readonly HelpRoute[];
