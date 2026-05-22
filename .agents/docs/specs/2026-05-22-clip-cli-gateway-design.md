@@ -167,7 +167,7 @@ Target subcommand는 runtime이 routing한다.
 - `clip ext ...`
 - `clip skills ...`
 
-`completion`은 나눌 수 있다. app은 top-level command를 소유하고, `@clip/cli-gateway`는 target과 adapter completion contributor를 제공한다.
+`completion`은 별도 shell-specific plugin이 소유한다. `@clip/cli-gateway`는 target, profile, alias, adapter operation을 위한 shell-neutral completion contributor만 제공한다.
 
 ## 공개 API
 
@@ -296,7 +296,5 @@ Integration test:
 7. OpenAPI, GraphQL, gRPC, script adapter를 port한다.
 8. auth와 adapter refresh contract가 안정되면 login/logout과 refresh를 추가한다.
 9. `clip` app을 `@clip/core`, renderer, `@clip/config`, `@clip/cli-gateway` 조합으로 다시 연결한다.
-
 ## 검토 메모
-
 이 패키지는 runtime, adapter, target command를 의도적으로 함께 묶는다. 세 영역이 모두 하나의 제품 기능인 CLI gateway target system을 제공하기 때문이다. 대신 내부 folder boundary를 강하게 유지해서 과도한 package fragmentation 없이 코드 이해 가능성을 확보한다.
