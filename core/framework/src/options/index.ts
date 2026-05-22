@@ -1,4 +1,4 @@
-import type { OptionDefinition, OptionValue, Options, ParsedOptions } from "../types/index.ts";
+import type { OptionDefinition, ParsedOptionValue, ParsedOptions } from "../types/index.ts";
 
 export function parseOptionSpec(spec: string, description?: string): OptionDefinition {
   const aliases = spec
@@ -13,7 +13,7 @@ export function parseOptionSpec(spec: string, description?: string): OptionDefin
 }
 
 export function parseOptions(argv: readonly string[], definitions: readonly OptionDefinition[]): ParsedOptions {
-  const options: Options = {};
+  const options: Record<string, ParsedOptionValue | undefined> = {};
   const positionals: string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -44,7 +44,7 @@ function parseOptionToken(
   token: string,
   nextToken: string | undefined,
   definitions: readonly OptionDefinition[],
-): { name: string; value: OptionValue; consumedNext: boolean } | undefined {
+): { name: string; value: ParsedOptionValue; consumedNext: boolean } | undefined {
   const [rawName, inlineValue] = token.split("=", 2) as [string, string | undefined];
   const noName = rawName.startsWith("--no-") ? `--${rawName.slice(5)}` : rawName;
   const definition = definitions.find((item) => item.aliases.includes(noName));
@@ -55,7 +55,7 @@ function parseOptionToken(
   return { name: definition.name, value: nextToken ?? "", consumedNext: nextToken !== undefined };
 }
 
-function mergeOptionValue(current: OptionValue | undefined, next: OptionValue): OptionValue {
+function mergeOptionValue(current: ParsedOptionValue | undefined, next: ParsedOptionValue): ParsedOptionValue {
   if (current === undefined) return next;
   if (Array.isArray(current)) return [...current, String(next)];
   return [String(current), String(next)];

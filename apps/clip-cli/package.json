@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@clip/core": "workspace:*",
+    "@clip/input-zod": "workspace:*",
     "@clip/renderer-json": "workspace:*",
     "@clip/renderer-text": "workspace:*"
   }

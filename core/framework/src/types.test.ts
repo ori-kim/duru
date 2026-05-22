@@ -1,6 +1,32 @@
 import { describe, test } from "bun:test";
-import { context, createCli, createRouter, renderer } from "./index.ts";
-import type { OptionSpecOptions, PatternParams, Renderer } from "./index.ts";
+import { createCli as createPublicCli, createPlugin as createPublicPlugin } from "@clip/core";
+import type { CommandMeta as PublicCommandMeta } from "@clip/core";
+import { context, createCli, createPlugin, help, input, meta, parseOptionSpec } from "./index.ts";
+import type {
+  CommandConfig,
+  CommandMeta,
+  CommandPattern,
+  Middleware,
+  MiddlewarePath,
+  OptionSpecOptions,
+  OptionValue,
+  Params,
+  PatternParams,
+  RouteErrorHandler,
+} from "./index.ts";
+
+declare module "./types/help.ts" {
+  interface CommandMetaFields {
+    auth: { scope: string };
+    shortcut: string;
+  }
+}
+
+declare module "@clip/core" {
+  interface CommandMetaFields {
+    publicAuth: { scope: string };
+  }
+}
 
 type Equal<TLeft, TRight> = (<T>() => T extends TLeft ? 1 : 2) extends <T>() => T extends TRight ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
@@ -8,15 +34,81 @@ type Expect<T extends true> = T;
 type _PatternParams = Expect<
   Equal<PatternParams<"build <entry> [mode] [...args]">, { entry: string; mode?: string; args: string[] }>
 >;
+type _InvalidSpacedCommandPattern = Expect<
+  Equal<
+    CommandPattern<" inspect">,
+    'Invalid command pattern " inspect": remove leading, trailing, or repeated spaces. Example: "run <name> [...args]".'
+  >
+>;
+type _InvalidSubcommandPattern = Expect<
+  Equal<
+    CommandPattern<"metadata publish <name>">,
+    'Invalid command pattern "metadata publish <name>": after the command name, only params like <name>, [name], <...args>, or [...args] are allowed. Extra literal subcommands are not allowed.'
+  >
+>;
+type _InvalidMiddlewarePath = Expect<
+  Equal<
+    MiddlewarePath<"run <name>">,
+    'Invalid middleware path "run <name>": only literal command path tokens are allowed; params like <name> or [name] are not allowed.'
+  >
+>;
 type _BooleanOption = Expect<Equal<OptionSpecOptions<"-w, --watch">, { watch?: boolean }>>;
 type _ValueOption = Expect<Equal<OptionSpecOptions<"--timeout-ms <ms>">, { timeoutMs?: string }>>;
 type _NegatedOption = Expect<Equal<OptionSpecOptions<"--no-color">, { color?: boolean }>>;
+type _PublicOptionValue = Expect<Equal<OptionValue, boolean | string | string[]>>;
+type _PublicParams = Expect<Equal<Params, Record<string, string | string[] | undefined>>>;
+
+function assertPublicPathGrammarTypes() {
+  const cli = createCli();
+  const middleware = (_ctx: never, next: () => unknown) => next();
+  const widenedPattern: string = " run";
+  const widenedPath: string = " run";
+
+  cli.command("run");
+  cli.command("run <name>");
+  cli.command("run <name> [...args]");
+  cli.command("run <name>").alias("execute");
+  cli.command("run <name>").alias("execute <name>");
+  cli.command("run <name>").aliases("execute", "execute <name>");
+  cli.command(widenedPattern);
+  cli.use("run", middleware as never);
+  cli.use("run child", middleware as never);
+  cli.use(widenedPath, middleware as never);
+
+  // @ts-expect-error Command patterns cannot have whitespace padding.
+  cli.command(" run <name>");
+  // @ts-expect-error Command patterns must start with a literal subcommand.
+  cli.command("<run>");
+  // @ts-expect-error Command patterns cannot include literal tokens after the subcommand.
+  cli.command("run name <name>");
+  // @ts-expect-error Command aliases must start with a literal subcommand.
+  cli.command("run <name>").alias("<name>");
+  // @ts-expect-error Command aliases cannot include literal tokens after the subcommand.
+  cli.command("run <name>").alias("admin run");
+  // @ts-expect-error Command aliases with explicit params must match the command params.
+  cli.command("run <name>").alias("execute [name]");
+  // @ts-expect-error Middleware paths cannot be empty.
+  cli.use("", middleware as never);
+  // @ts-expect-error Middleware paths cannot have whitespace padding.
+  cli.use(" run", middleware as never);
+  // @ts-expect-error Middleware paths cannot include params.
+  cli.use("<run>", middleware as never);
+  // @ts-expect-error Middleware paths cannot include params.
+  cli.use("run <name>", middleware as never);
+}
+
+void assertPublicPathGrammarTypes;
 
 describe("public type inference", () => {
   test("infers action params, options, and context from fluent declarations", () => {
     createCli()
       .option("--json")
       .command("build <entry> [...args]")
+      .alias("bundle")
+      .usage("build <entry> [...args] [--watch]")
+      .example("cli build src/index.ts")
+      .deprecated("Use compile instead")
+      .group("Build")
       .option("-w, --watch")
       .option("--timeout-ms <ms>")
       .action((ctx) => {
@@ -33,7 +125,7 @@ describe("public type inference", () => {
 
   test("carries option types installed by use plugins into commands", () => {
     createCli()
-      .use(renderer(typeRenderer()))
+      .use(rendererOptionsPlugin())
       .command("inspect")
       .action((ctx) => {
         const typedJson: boolean | undefined = ctx.options.json;
@@ -44,35 +136,335 @@ describe("public type inference", () => {
       });
   });
 
-  test("carries router option types through cli.use(router)", () => {
-    const router = createRouter().option("--json");
-
-    router.command("inspect").action((ctx) => {
-      const typedJson: boolean | undefined = ctx.options.json;
-      const typedCtxJson: boolean | undefined = ctx.options.json;
-      return { typedJson, typedCtxJson };
-    });
-
-    createCli().use(router);
+  test("carries help option types installed by help plugin", () => {
+    createCli()
+      .use(help())
+      .command("inspect")
+      .action((ctx) => {
+        const typedHelp: boolean | undefined = ctx.options.help;
+        return { typedHelp };
+      });
   });
 
-  test("carries child router option types through router.use(router)", () => {
-    const registry = createRouter({ name: "registry" }).option("--url <url>");
-    const ext = createRouter({ name: "ext" }).use(registry);
+  test("carries app option types through explicit routes", () => {
+    const registry = createCli().option("--url <url>");
+    const ext = createCli().route("registry", registry);
 
     registry.command("add <name>").action((ctx) => {
       const typedName: string = ctx.params.name;
       const typedUrl: string | undefined = ctx.options.url;
-      const typedCtxUrl: string | undefined = ctx.options.url;
-      return { typedName, typedUrl, typedCtxUrl };
+      return { typedName, typedUrl };
     });
 
     createCli()
-      .use(ext)
+      .route("ext", ext)
       .command("inspect")
       .action((ctx) => {
         const typedUrl: string | undefined = ctx.options.url;
         return { typedUrl };
+      });
+  });
+
+  test("carries child cli option types through route", () => {
+    const registry = createCli().option("--url <url>");
+    const ext = createCli().route("registry", registry);
+
+    registry.command("add <name>").action((ctx) => {
+      const typedName: string = ctx.params.name;
+      const typedUrl: string | undefined = ctx.options.url;
+      return { typedName, typedUrl };
+    });
+
+    createCli()
+      .route("ext", ext)
+      .command("inspect")
+      .action((ctx) => {
+        const typedUrl: string | undefined = ctx.options.url;
+        return { typedUrl };
+      });
+  });
+
+  test("rejects implicit child cli routing and removed mount api", () => {
+    const child = createCli();
+
+    void (() => {
+      // @ts-expect-error route requires an explicit literal path.
+      createCli().route(child);
+      // @ts-expect-error mount was replaced by route(path, app).
+      createCli().mount("child", child);
+    });
+  });
+
+  test("carries option types through path scoped middleware", () => {
+    createCli()
+      .option("--json")
+      .use("target", (ctx, next) => {
+        const typedJson: boolean | undefined = ctx.options.json;
+        return next() ?? typedJson;
+      });
+
+    createCli()
+      .option("--url <url>")
+      .use("registry", (ctx, next) => {
+        const typedUrl: string | undefined = ctx.options.url;
+        return next() ?? typedUrl;
+      });
+  });
+
+  test("types command error boundaries with route contexts", () => {
+    const handler: RouteErrorHandler = (ctx) => ctx.exit(1, { error: ctx.error });
+
+    createCli().command("reusable").catch(handler);
+    createCli().catch(handler);
+
+    void (() => {
+      // @ts-expect-error root error boundaries use catch(handler).
+      createCli().onError(handler);
+    });
+
+    createCli()
+      .option("--count <count>")
+      .command("run <name>")
+      .option("--token <token>")
+      .catch((ctx) => {
+        const typedName: unknown = ctx.params.name;
+        const typedCount: unknown = ctx.options.count;
+        const typedToken: unknown = ctx.options.token;
+        const rawName: string | readonly string[] | undefined = ctx.raw.params.name;
+        const rawCount: boolean | string | readonly string[] | undefined = ctx.raw.options.count;
+        const typedError: unknown = ctx.error;
+        return ctx.exit(1, { typedName, typedCount, typedToken, rawName, rawCount, typedError });
+      });
+
+    createCli()
+      .option("--url <url>")
+      .command("sync")
+      .catch((ctx) => {
+        const typedUrl: unknown = ctx.options.url;
+        const typedError: unknown = ctx.error;
+        return ctx.exit(1, { typedUrl, typedError });
+      });
+  });
+
+  test("keeps default middleware params and options source-compatible", () => {
+    const middleware: Middleware = (ctx, next) => {
+      const typedParam: string | string[] | undefined = ctx.params.anything;
+      const typedOption: boolean | string | string[] | undefined = ctx.options.anything;
+      return next() ?? { typedParam, typedOption };
+    };
+
+    createCli().use(middleware);
+  });
+
+  test("infers action params and options from command input features", () => {
+    const callInput = input({
+      params: [{ name: "operation", required: true }],
+      options: [parseOptionSpec("--timeout-ms <ms>")],
+      parse(raw) {
+        // @ts-expect-error raw command params are immutable parser input
+        raw.params.operation = "mutated";
+        // @ts-expect-error raw command options are immutable parser input
+        raw.options.timeoutMs = "9999";
+        return {
+          params: { operation: String(raw.params.operation) },
+          options: { timeoutMs: Number(raw.options.timeoutMs ?? 30000) },
+        };
+      },
+    });
+    const callConfig: CommandConfig<{ operation: string }, { timeoutMs: number }> = {
+      input: callInput,
+      description: "Call operation",
+      aliases: ["invoke"],
+    };
+    const runConfig: CommandConfig = {
+      description: "Run command",
+      aliases: ["execute"],
+    };
+
+    createCli()
+      .command("run", runConfig)
+      .action((ctx) => {
+        const typedParams: Record<never, never> = ctx.params;
+        return { typedParams };
+      });
+
+    createCli()
+      .command(
+        "publish <name>",
+        meta({
+          description: "Publish item",
+          aliases: ["pub"],
+          examples: ["cli publish notes"],
+          usage: "publish <name> [--dry-run]",
+          group: "Examples",
+        }),
+      )
+      .action((ctx) => {
+        const typedName: string = ctx.params.name;
+        return { typedName };
+      });
+
+    createCli()
+      .command("call", callInput)
+      .action((ctx) => {
+        const typedOperation: string = ctx.params.operation;
+        const typedTimeout: number = ctx.options.timeoutMs;
+        const rawOperation: string | readonly string[] | undefined = ctx.raw.params.operation;
+        return { typedOperation, typedTimeout, rawOperation };
+      });
+
+    createCli()
+      .command(
+        "call",
+        callInput,
+        meta({
+          description: "Call operation",
+          aliases: ["invoke"],
+          examples: ["cli call search"],
+        }),
+      )
+      .action((ctx) => {
+        const typedOperation: string = ctx.params.operation;
+        const typedTimeout: number = ctx.options.timeoutMs;
+        return { typedOperation, typedTimeout };
+      });
+
+    createCli()
+      .command("call", callConfig)
+      .action((ctx) => {
+        const typedOperation: string = ctx.params.operation;
+        const typedTimeout: number = ctx.options.timeoutMs;
+        return { typedOperation, typedTimeout };
+      });
+
+    createCli()
+      .command("call", {
+        input: callInput,
+        description: "Call operation",
+        aliases: ["invoke"],
+        examples: ["cli call search"],
+        usage: "call <operation> [--timeout-ms <ms>]",
+        group: "Operations",
+      })
+      .action((ctx) => {
+        const typedOperation: string = ctx.params.operation;
+        const typedTimeout: number = ctx.options.timeoutMs;
+        return { typedOperation, typedTimeout };
+      });
+
+    createCli()
+      .command("call")
+      .input(callInput)
+      .action((ctx) => {
+        const typedOperation: string = ctx.params.operation;
+        const typedTimeout: number = ctx.options.timeoutMs;
+        return { typedOperation, typedTimeout };
+      });
+
+    createCli()
+      .command("call")
+      .input(
+        input({
+          params: [{ name: "operation", required: true }],
+          parse(raw) {
+            return { params: { operation: String(raw.params.operation) } };
+          },
+        }),
+      )
+      .input(
+        input({
+          options: [parseOptionSpec("--timeout-ms <ms>")],
+          parse(raw) {
+            return { options: { timeoutMs: Number(raw.options.timeoutMs ?? 30000) } };
+          },
+        }),
+      )
+      .action((ctx) => {
+        const typedOperation: string = ctx.params.operation;
+        const typedTimeout: number = ctx.options.timeoutMs;
+        return { typedOperation, typedTimeout };
+      });
+
+    createCli()
+      .command("call")
+      .input(
+        input({
+          params: [{ name: "operation", required: true }],
+          metadata: {
+            description: "Call operation",
+            aliases: ["invoke"],
+          },
+          parse(raw) {
+            return { params: { operation: String(raw.params.operation) } };
+          },
+        }),
+      )
+      .action((ctx) => {
+        const typedOperation: string = ctx.params.operation;
+        return { typedOperation };
+      });
+  });
+
+  test("keeps command metadata grouping on group only", () => {
+    createCli().command("build").group("Build");
+
+    const config: CommandConfig = {
+      // @ts-expect-error Command metadata uses group instead of category.
+      category: "Build",
+    };
+
+    void config;
+  });
+
+  test("allows plugins to extend command meta fields and compose command drafts", () => {
+    const metadata: CommandMeta = {
+      auth: { scope: "deploy:write" },
+      shortcut: "dep",
+    };
+    const publicMetadata: PublicCommandMeta = {
+      publicAuth: { scope: "deploy:write" },
+    };
+
+    createPlugin((api) => {
+      api.compose((command, next) => {
+        const typedScope: string | undefined = command.meta.auth?.scope;
+        const typedRouteScope: string | undefined = command.meta.auth?.scope;
+        if (command.meta.shortcut) command.alias(command.meta.shortcut);
+        command.mergeMeta({ auth: { scope: typedScope ?? "deploy:read" } });
+        command.use((ctx, next) => {
+          const typedCtxScope: string | undefined = ctx.meta.auth?.scope;
+          return next() ?? { typedScope, typedRouteScope, typedCtxScope };
+        });
+        next();
+      });
+
+      // @ts-expect-error commandMeta was replaced by compose.
+      api.commandMeta("auth", () => undefined);
+    });
+
+    createCli()
+      .command("deploy")
+      .meta(metadata)
+      .action((ctx) => {
+        const typedScope: string | undefined = ctx.meta.auth?.scope;
+        return { typedScope };
+      });
+
+    createPublicPlugin((api) => {
+      api.compose((command, next) => {
+        const typedScope: string | undefined = command.meta.publicAuth?.scope;
+        const typedRouteScope: string | undefined = command.meta.publicAuth?.scope;
+        command.use((ctx, next) => next() ?? { typedScope, typedRouteScope });
+        next();
+      });
+    });
+
+    createPublicCli()
+      .command("deploy")
+      .meta(publicMetadata)
+      .action((ctx) => {
+        const typedScope: string | undefined = ctx.meta.publicAuth?.scope;
+        return { typedScope };
       });
   });
 
@@ -115,6 +507,7 @@ describe("public type inference", () => {
   test("carries context value types installed by plugins", () => {
     const auth = context<{ user: { id: string } }>((ctx, next) => {
       ctx.set("user", { id: "test-user" });
+      ctx.var.user = { id: "test-user" };
       return next();
     });
 
@@ -122,12 +515,14 @@ describe("public type inference", () => {
       .use(auth)
       .on("custom", (ctx) => {
         const typedId: string | undefined = ctx.get("user")?.id;
-        return typedId;
+        const typedVarId: string | undefined = ctx.var.user?.id;
+        return { typedId, typedVarId };
       })
       .command("me")
       .action((ctx) => {
         const typedId: string | undefined = ctx.get("user")?.id;
-        return { typedId };
+        const typedVarId: string | undefined = ctx.var.user?.id;
+        return { typedId, typedVarId };
       });
   });
 
@@ -146,11 +541,9 @@ describe("public type inference", () => {
   });
 });
 
-function typeRenderer(): Renderer {
-  return {
-    id: "json",
-    render() {
-      return { stdout: "", stderr: "", exitCode: 0 };
-    },
-  };
+function rendererOptionsPlugin() {
+  return createPlugin<{ json?: boolean; events?: boolean }>((api) => {
+    api.option(parseOptionSpec("--json"));
+    api.option(parseOptionSpec("--events"));
+  });
 }

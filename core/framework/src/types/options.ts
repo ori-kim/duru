@@ -1,9 +1,12 @@
 import type { Simplify } from "./common.ts";
 
-export type OptionValue = boolean | string | string[];
+export type ParsedOptionValue = boolean | string | string[];
+export type RawOptionValue = boolean | string | readonly string[];
+export type OptionValue = ParsedOptionValue;
+export type RawOptions = Readonly<Record<string, RawOptionValue | undefined>>;
 export type Options = Record<string, OptionValue | undefined>;
 
-export type MergeOptions<TLeft extends Options, TRight extends Options> = Simplify<Omit<TLeft, keyof TRight> & TRight>;
+export type MergeOptions<TLeft extends object, TRight extends object> = Simplify<Omit<TLeft, keyof TRight> & TRight>;
 
 export type OptionDefinition = {
   name: string;
@@ -13,7 +16,7 @@ export type OptionDefinition = {
 };
 
 export type ParsedOptions = {
-  options: Options;
+  options: RawOptions;
   positionals: string[];
 };
 

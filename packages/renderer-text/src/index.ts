@@ -1,4 +1,5 @@
-import type { Renderer } from "@clip/core";
+import { createPlugin } from "@clip/core";
+import type { CliPlugin, Renderer } from "@clip/core";
 
 export function textRenderer(): Renderer {
   return {
@@ -11,6 +12,13 @@ export function textRenderer(): Renderer {
       };
     },
   };
+}
+
+export function textRendererPlugin(): CliPlugin {
+  return createPlugin((api) => {
+    api.renderer(textRenderer());
+    api.defaultRenderer("text");
+  });
 }
 
 function formatText(value: unknown): string {
