@@ -21,6 +21,7 @@ import type {
   HelpRoute,
   Middleware,
   OptionDefinition,
+  OptionFallbackProvider,
   OptionSpec,
   Options,
   ParamDefinition,
@@ -87,6 +88,7 @@ type RouterChild = {
   path?: readonly string[];
   middleware?: readonly Middleware[];
   errorHandlers?: readonly ErrorBoundary[];
+  optionFallbacks?: readonly OptionFallbackProvider[];
 };
 
 type RouteEntry = {
@@ -95,6 +97,7 @@ type RouteEntry = {
   canonicalPattern: CompiledPattern;
   aliases: readonly CompiledPattern[];
   options: readonly OptionDefinition[];
+  optionFallbacks: readonly OptionFallbackProvider[];
   middleware: readonly MiddlewareStep[];
   errorHandlers: readonly ErrorBoundary[];
 };
@@ -102,6 +105,7 @@ type RouteEntry = {
 type RouteScope = {
   path: readonly string[];
   options: readonly OptionDefinition[];
+  optionFallbacks: readonly OptionFallbackProvider[];
   middleware: readonly MiddlewareStep[];
   errorHandlers: readonly ErrorBoundary[];
 };
@@ -163,6 +167,7 @@ export function createRouter<TRouterOptions extends Options = EmptyObject, TValu
       child: Router<Options, object>,
       middleware?: readonly Middleware[],
       errorHandlers?: readonly ErrorBoundary[],
+      optionFallbacks?: readonly OptionFallbackProvider[],
     ) {
       if (!isRouter(child)) throw new Error("Expected router");
       state.children.push({
@@ -170,6 +175,7 @@ export function createRouter<TRouterOptions extends Options = EmptyObject, TValu
         path: mountPathTokens(path),
         ...(middleware ? { middleware } : {}),
         ...(errorHandlers ? { errorHandlers } : {}),
+        ...(optionFallbacks ? { optionFallbacks } : {}),
       });
       return router as never;
     },
@@ -205,8 +211,9 @@ export function createRouter<TRouterOptions extends Options = EmptyObject, TValu
     middleware(
       getGlobalOptions: () => readonly OptionDefinition[],
       getCommandComposers?: () => readonly CommandComposer[],
+      getOptionFallbacks?: () => readonly OptionFallbackProvider[],
     ) {
-      return createRouterMiddleware(state, getGlobalOptions, getCommandComposers);
+      return createRouterMiddleware(state, getGlobalOptions, getCommandComposers, getOptionFallbacks);
     },
     usage(name: string, getCommandComposers?: () => readonly CommandComposer[]) {
       return usageText(name, state, getCommandComposers);
@@ -216,7 +223,7 @@ export function createRouter<TRouterOptions extends Options = EmptyObject, TValu
     },
     ...createPlugin<TRouterOptions, TValues>((api) => {
       for (const item of collectOptionDefinitions(state)) api.option(item);
-      api.middleware(createRouterMiddleware(state, api.options, api.composers));
+      api.middleware(createRouterMiddleware(state, api.options, api.composers, api.optionFallbacks));
       api.helpRoutes(() => helpRoutes(state, api.composers));
       api.usage((name) => usageText(name, state, api.composers));
     }),
@@ -315,13 +322,15 @@ function createRouterMiddleware(
   state: RouterState,
   getGlobalOptions: () => readonly OptionDefinition[],
   getCommandComposers?: () => readonly CommandComposer[],
+  getOptionFallbacks?: () => readonly OptionFallbackProvider[],
 ): Middleware {
   return async (ctx, next) => {
     for (const entry of collectRouteEntries(state, emptyScope(), true, getCommandComposers)) {
-      const parsed = parseOptions(ctx.request.argv, [...getGlobalOptions(), ...entry.options]);
+      const optionDefinitions = [...getGlobalOptions(), ...entry.options];
+      const parsed = parseOptions(ctx.request.argv, optionDefinitions);
       const match = entry.pattern.match(parsed.positionals);
       if (!match) continue;
-      const raw = {
+      let raw = {
         argv: ctx.request.argv,
         pattern: entry.pattern.pattern,
         params: cloneRawRecord(match.params),
@@ -329,12 +338,23 @@ function createRouterMiddleware(
         positionals: parsed.positionals,
       } satisfies CommandInputRaw;
       scopedRoutePatterns.set(ctx, [entry.canonicalPattern.pattern, ...entry.aliases.map((alias) => alias.pattern)]);
+      ctx.meta = cloneCommandMeta(entry.route.metadata);
       ctx.raw = raw;
       ctx.request = requestFromRaw(raw);
       ctx.params = { ...raw.params } as Params;
       ctx.options = { ...raw.options } as Options;
-      ctx.meta = cloneCommandMeta(entry.route.metadata);
       try {
+        raw = {
+          ...raw,
+          options: await applyOptionFallbacks(optionDefinitions, raw, [
+            ...entry.optionFallbacks,
+            ...(getOptionFallbacks?.() ?? []),
+          ]),
+        };
+        ctx.raw = raw;
+        ctx.request = requestFromRaw(raw);
+        ctx.params = { ...raw.params } as Params;
+        ctx.options = { ...raw.options } as Options;
         const transformed = await parseCommandInputs(entry.route, raw);
         ctx.request = { ...raw, params: transformed.params, options: transformed.options } as Context["request"];
         ctx.params = transformed.params as Params;
@@ -457,6 +477,39 @@ async function parseCommandInputs(
   return { params, options };
 }
 
+async function applyOptionFallbacks(
+  definitions: readonly OptionDefinition[],
+  raw: CommandInputRaw,
+  providers: readonly OptionFallbackProvider[],
+): Promise<CommandInputRaw["options"]> {
+  if (providers.length === 0) return raw.options;
+
+  const options = cloneRawRecord(raw.options);
+  const seen = new Set<string>();
+
+  for (const option of definitions) {
+    if (seen.has(option.name)) continue;
+    seen.add(option.name);
+    if (options[option.name] !== undefined) continue;
+
+    for (const provider of providers) {
+      const value = await provider({
+        option,
+        argv: raw.argv,
+        pattern: raw.pattern,
+        params: raw.params,
+        options: options as CommandInputRaw["options"],
+        positionals: raw.positionals,
+      });
+      if (value === undefined) continue;
+      options[option.name] = value;
+      break;
+    }
+  }
+
+  return options as CommandInputRaw["options"];
+}
+
 function requestFromRaw(raw: CommandInputRaw): Context["request"] {
   return { ...raw, params: { ...raw.params }, options: { ...raw.options } } as Context["request"];
 }
@@ -471,10 +524,10 @@ function cloneCommandInputRaw(raw: CommandInputRaw): CommandInputRaw {
   };
 }
 
-function cloneRawRecord<TValue>(record: Readonly<Record<string, TValue | readonly string[] | undefined>>) {
-  const next: Record<string, TValue | readonly string[] | undefined> = {};
+function cloneRawRecord<TValue>(record: Readonly<Record<string, TValue>>): Record<string, TValue> {
+  const next: Record<string, TValue> = {};
   for (const [key, value] of Object.entries(record)) {
-    next[key] = Array.isArray(value) ? [...value] : value;
+    next[key] = (Array.isArray(value) ? [...value] : value) as TValue;
   }
   return next;
 }
@@ -687,6 +740,7 @@ function collectRouteEntries(
 ): RouteEntry[] {
   const path = [...scope.path, ...(mountPath ?? pathSegments(state.name))];
   const options = [...scope.options, ...state.options];
+  const optionFallbacks = scope.optionFallbacks;
   const errorHandlers = [...scope.errorHandlers, ...state.errorHandlers];
   const middleware = [...scope.middleware, ...resolveMiddleware(state.middleware, path, errorHandlers)];
   const ownEntries = state.routes.flatMap((route) => {
@@ -699,6 +753,7 @@ function collectRouteEntries(
       canonicalPattern: pattern,
       aliases,
       options: [...options, ...route.options],
+      optionFallbacks,
       middleware: [
         ...middleware,
         ...route.middleware.map((item) => ({
@@ -725,6 +780,7 @@ function collectRouteEntries(
       {
         path,
         options,
+        optionFallbacks: [...optionFallbacks, ...(child.optionFallbacks ?? [])],
         middleware: [
           ...middleware,
           ...(child.middleware ?? []).map((item) => ({
@@ -888,7 +944,7 @@ function mountPrefix(fullPattern: string, localPattern: string): string[] {
 }
 
 function emptyScope(): RouteScope {
-  return { path: [], options: [], middleware: [], errorHandlers: [] };
+  return { path: [], options: [], optionFallbacks: [], middleware: [], errorHandlers: [] };
 }
 
 function cleanRouterConfig(config: RouterOptions): Pick<RouterState, "name"> {

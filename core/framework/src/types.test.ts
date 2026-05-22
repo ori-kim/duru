@@ -256,7 +256,7 @@ describe("public type inference", () => {
         const typedCount: unknown = ctx.options.count;
         const typedToken: unknown = ctx.options.token;
         const rawName: string | readonly string[] | undefined = ctx.raw.params.name;
-        const rawCount: boolean | string | readonly string[] | undefined = ctx.raw.options.count;
+        const rawCount: unknown = ctx.raw.options.count;
         const typedError: unknown = ctx.error;
         return ctx.exit(1, { typedName, typedCount, typedToken, rawName, rawCount, typedError });
       });
