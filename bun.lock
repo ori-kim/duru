@@ -27,6 +27,17 @@
       "name": "@clip/core",
       "version": "0.0.0",
     },
+    "packages/env": {
+      "name": "@clip/env",
+      "version": "0.0.0",
+      "dependencies": {
+        "@clip/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@clip/input-validation": "workspace:*",
+        "zod": "^4.0.0",
+      },
+    },
     "packages/input-validation": {
       "name": "@clip/input-validation",
       "version": "0.0.0",
@@ -72,6 +83,8 @@
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@1.9.4", "", { "os": "win32", "cpu": "x64" }, "sha512-8Y5wMhVIPaWe6jw2H+KlEm4wP/f7EW3810ZLmDlrEEy5KvBsb9ECEfu/kMWD484ijfQ8+nIi0giMgu9g1UAuuA=="],
 
     "@clip/core": ["@clip/core@workspace:core/framework"],
+
+    "@clip/env": ["@clip/env@workspace:packages/env"],
 
     "@clip/input-validation": ["@clip/input-validation@workspace:packages/input-validation"],
 
