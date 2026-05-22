@@ -1,5 +1,5 @@
-import { input as coreInput, parseOptionSpec, validationError } from "@clip/core";
-import type { CommandFeature, EmptyObject, OptionDefinition, ParamDefinition, ValidationIssue } from "@clip/core";
+import { input as coreInput, parseOptionSpec, validationError } from "@clip/kit";
+import type { CommandFeature, EmptyObject, OptionDefinition, ParamDefinition, ValidationIssue } from "@clip/kit";
 
 type StandardSchema<TInput = unknown, TOutput = TInput> = {
   readonly "~standard": {

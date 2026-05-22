@@ -7,7 +7,7 @@
     "clip": "./src/main.ts"
   },
   "dependencies": {
-    "@clip/core": "workspace:*",
+    "@clip/kit": "workspace:*",
     "@clip/input-validation": "workspace:*",
     "@clip/renderer-json": "workspace:*",
     "@clip/renderer-text": "workspace:*",

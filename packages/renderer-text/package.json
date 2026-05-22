@@ -7,6 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@clip/core": "workspace:*"
+    "@clip/kit": "workspace:*"
   }
 }

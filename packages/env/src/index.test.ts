@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { createCli } from "@clip/core";
 import { env } from "@clip/env";
 import { input } from "@clip/input-validation";
+import { createCli } from "@clip/kit";
 import * as z from "zod";
 
 describe("@clip/env", () => {

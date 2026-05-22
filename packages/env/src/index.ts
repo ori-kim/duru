@@ -1,5 +1,5 @@
-import { createPlugin, validationError } from "@clip/core";
-import type { CliPlugin, OptionDefinition, ValidationIssue } from "@clip/core";
+import { createPlugin, validationError } from "@clip/kit";
+import type { CliPlugin, OptionDefinition, ValidationIssue } from "@clip/kit";
 
 export type EnvSource = Readonly<Record<string, string | undefined>>;
 

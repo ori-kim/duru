@@ -15,7 +15,7 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "paths": {
-      "@clip/core": ["./core/framework/src/index.ts"],
+      "@clip/kit": ["./core/clip-kit/src/index.ts"],
       "@clip/env": ["./packages/env/src/index.ts"],
       "@clip/input-validation": ["./packages/input-validation/src/index.ts"],
       "@clip/renderer-json": ["./packages/renderer-json/src/index.ts"],

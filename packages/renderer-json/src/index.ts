@@ -1,5 +1,5 @@
-import { createPlugin, parseOptionSpec } from "@clip/core";
-import type { CliPlugin, Renderer } from "@clip/core";
+import { createPlugin, parseOptionSpec } from "@clip/kit";
+import type { CliPlugin, Renderer } from "@clip/kit";
 
 export function jsonRenderer(): Renderer {
   return {

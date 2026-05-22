@@ -1,4 +1,4 @@
-import { adaptResult, context, createCli, formatHelp, help, isHelpDocument, isValidationError, meta } from "@clip/core";
+import { adaptResult, context, createCli, formatHelp, help, isHelpDocument, isValidationError, meta } from "@clip/kit";
 import { input } from "@clip/input-validation";
 import { jsonRendererPlugin } from "@clip/renderer-json";
 import { textRendererPlugin } from "@clip/renderer-text";
@@ -75,7 +75,7 @@ export function createAppCli() {
   cli.command("inspect", "Show framework composition").action(() => {
     return {
       app: "clip-cli",
-      core: "@clip/core",
+      core: "@clip/kit",
       renderers: ["text", "json"],
     };
   });

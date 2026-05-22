@@ -1,6 +1,6 @@
 import { describe, test } from "bun:test";
-import { createCli as createPublicCli, createPlugin as createPublicPlugin } from "@clip/core";
-import type { CommandMeta as PublicCommandMeta } from "@clip/core";
+import { createCli as createPublicCli, createPlugin as createPublicPlugin } from "@clip/kit";
+import type { CommandMeta as PublicCommandMeta } from "@clip/kit";
 import { context, createCli, createPlugin, help, input, meta, parseOptionSpec } from "./index.ts";
 import type {
   CommandConfig,
@@ -23,7 +23,7 @@ declare module "./types/help.ts" {
   }
 }
 
-declare module "@clip/core" {
+declare module "@clip/kit" {
   interface CommandMetaFields {
     publicAuth: { scope: string };
   }

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createCli } from "@clip/core";
+import { createCli } from "@clip/kit";
 import {
   discoverVirtualPluginManifests,
   installVirtualPlugins,
@@ -229,7 +229,7 @@ async function writePluginManifest(
 }
 
 function coreModuleUrl(): string {
-  return pathToFileURL(join(process.cwd(), "core/framework/src/index.ts")).href;
+  return pathToFileURL(join(process.cwd(), "core/clip-kit/src/index.ts")).href;
 }
 
 function virtualPluginsModuleUrl(): string {

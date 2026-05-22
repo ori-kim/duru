@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@clip/core": "workspace:*"
+    "@clip/kit": "workspace:*"
   },
   "devDependencies": {
     "zod": "^4.0.0"
