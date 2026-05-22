@@ -48,6 +48,7 @@ export type {
   MiddlewarePath,
   MergeOptions,
   OptionDefinition,
+  OptionSpec,
   OptionValue,
   OptionSpecOptions,
   Options,

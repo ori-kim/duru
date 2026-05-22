@@ -57,9 +57,7 @@ function commandHelp(name: string, route: HelpRoute, globalOptions: readonly Opt
   const deprecated = deprecatedText(route.deprecated);
   if (deprecated) lines.push("", deprecated);
   appendAliases(lines, route.aliases ?? []);
-  if (options.length > 0) {
-    appendOptions(lines, options);
-  }
+  appendOptions(lines, options);
   appendExamples(lines, route.examples ?? []);
   return `${lines.join("\n").trimEnd()}\n`;
 }
@@ -73,7 +71,7 @@ function commandUsage(name: string, route: HelpRoute): string {
 
 function appendRoutes(lines: string[], routes: readonly HelpRoute[]): void {
   const visibleRoutes = routes.filter((route) => !route.hidden);
-  if (!visibleRoutes.some(routeGroup)) {
+  if (!visibleRoutes.some((route) => route.group)) {
     for (const route of visibleRoutes) lines.push(`  ${route.pattern}${routeDetails(route)}`);
     return;
   }
@@ -87,7 +85,7 @@ function appendRoutes(lines: string[], routes: readonly HelpRoute[]): void {
 function groupedRoutes(routes: readonly HelpRoute[]): Array<[string, HelpRoute[]]> {
   const groups: Array<[string, HelpRoute[]]> = [];
   for (const route of routes) {
-    const group = routeGroup(route) ?? "Other";
+    const group = route.group ?? "Other";
     const existing = groups.find(([name]) => name === group);
     if (existing) {
       existing[1].push(route);
@@ -96,10 +94,6 @@ function groupedRoutes(routes: readonly HelpRoute[]): Array<[string, HelpRoute[]
     }
   }
   return groups;
-}
-
-function routeGroup(route: HelpRoute): string | undefined {
-  return route.group;
 }
 
 function routeDetails(route: HelpRoute): string {

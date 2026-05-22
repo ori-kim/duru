@@ -2,7 +2,7 @@ import type { EmptyObject, MergeContext } from "./common.ts";
 import type { CommandExample, CommandMetadata, HelpRoute } from "./help.ts";
 import type { CommandFeature } from "./input.ts";
 import type { Middleware } from "./middleware.ts";
-import type { MergeOptions, OptionDefinition, OptionSpecOptions, Options } from "./options.ts";
+import type { MergeOptions, OptionDefinition, OptionSpec, OptionSpecOptions, Options } from "./options.ts";
 import type { ActionResult } from "./output.ts";
 import type { Params, PatternParams } from "./pattern.ts";
 import type { CliPlugin, CommandComposer } from "./plugin.ts";
@@ -34,7 +34,7 @@ export type CommandBuilder<
   ): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, TResult, TValues, TParams>;
   group(group: string): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, TResult, TValues, TParams>;
   option<TSpec extends string>(
-    spec: TSpec,
+    spec: OptionSpec<TSpec>,
     description?: string,
   ): CommandBuilder<
     TPattern,
@@ -93,7 +93,7 @@ export type Router<TRouterOptions extends Options = EmptyObject, TValues extends
   TValues
 > & {
   option<TSpec extends string>(
-    spec: TSpec,
+    spec: OptionSpec<TSpec>,
     description?: string,
   ): Router<MergeOptions<TRouterOptions, OptionSpecOptions<TSpec>>, TValues>;
   use<TChildOptions extends Options, TChildValues extends object>(
@@ -154,7 +154,6 @@ export type Router<TRouterOptions extends Options = EmptyObject, TValues extends
 
 export type RouterOptions = {
   name?: string;
-  description?: string;
 };
 
 export type CommandPattern<TPattern extends string> = string extends TPattern

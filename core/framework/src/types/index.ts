@@ -21,6 +21,7 @@ export type { Middleware } from "./middleware.ts";
 export type {
   MergeOptions,
   OptionDefinition,
+  OptionSpec,
   OptionSpecOptions,
   OptionValue,
   Options,

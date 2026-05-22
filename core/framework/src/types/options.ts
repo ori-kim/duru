@@ -20,9 +20,62 @@ export type ParsedOptions = {
   positionals: string[];
 };
 
+export type OptionSpec<TSpec extends string> = string extends TSpec
+  ? TSpec
+  : TSpec extends ValidOptionSpec<TSpec>
+    ? TSpec
+    : InvalidOptionSpec<TSpec>;
+
 export type OptionSpecOptions<TSpec extends string> = OptionName<TSpec> extends infer TName extends string
   ? Simplify<{ [K in TName]?: OptionSpecValue<TSpec> }>
   : Options;
+
+type InvalidOptionSpec<TSpec extends string> = HasLongOption<TSpec> extends true
+  ? `Invalid option spec "${TSpec}": option aliases must start with "-" and cannot be empty. Example: "--json" or "-j, --json".`
+  : `Invalid option spec "${TSpec}": option specs must include a long option starting with "--". Example: "--json" or "-j, --json".`;
+
+type ValidOptionSpec<TSpec extends string> = TSpec extends Trim<TSpec>
+  ? HasLongOption<TSpec> extends true
+    ? ValidOptionAliases<TSpec> extends true
+      ? TSpec
+      : never
+    : never
+  : never;
+
+type ValidOptionAliases<TSpec extends string> = TSpec extends `${infer Head},${infer Tail}`
+  ? IsOptionAlias<OptionAliasToken<Head>> extends true
+    ? ValidOptionAliases<Tail>
+    : false
+  : IsOptionAlias<OptionAliasToken<TSpec>>;
+
+type HasLongOption<TSpec extends string> = TSpec extends `${infer Head},${infer Tail}`
+  ? IsLongOptionAlias<OptionAliasToken<Head>> extends true
+    ? true
+    : HasLongOption<Tail>
+  : IsLongOptionAlias<OptionAliasToken<TSpec>>;
+
+type IsOptionAlias<TAlias extends string> = IsLongOptionAlias<TAlias> extends true ? true : IsShortOptionAlias<TAlias>;
+
+type IsLongOptionAlias<TAlias extends string> = TAlias extends `--${infer Name}` ? IsOptionAliasName<Name> : false;
+
+type IsShortOptionAlias<TAlias extends string> = TAlias extends `-${infer Name}`
+  ? TAlias extends `--${string}`
+    ? false
+    : IsOptionAliasName<Name>
+  : false;
+
+type IsOptionAliasName<TName extends string> = TName extends ""
+  ? false
+  : TName extends
+        | `-${string}`
+        | `${string} ${string}`
+        | `${string},${string}`
+        | `${string}<${string}`
+        | `${string}>${string}`
+        | `${string}[${string}`
+        | `${string}]${string}`
+    ? false
+    : true;
 
 type OptionSpecValue<TSpec extends string> = TSpec extends
   | `${string}<${string}>${string}`
@@ -31,6 +84,8 @@ type OptionSpecValue<TSpec extends string> = TSpec extends
   : boolean;
 
 type OptionName<TSpec extends string> = CamelCase<StripNo<OptionSegment<TSpec>>>;
+
+type OptionAliasToken<TValue extends string> = Trim<TValue> extends `${infer Head} ${string}` ? Head : Trim<TValue>;
 
 type OptionSegment<TSpec extends string> = TSpec extends `${string}--${infer Rest}`
   ? TakeOptionToken<Rest>
