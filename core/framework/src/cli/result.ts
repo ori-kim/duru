@@ -61,17 +61,17 @@ export function renderInput(
 }
 
 function errorPresenters(message: string): ReadonlyMap<string, RoutePresenter<unknown>> {
-  const presenters = new Map<string, RoutePresenter<unknown>>();
-  presenters.set("text", () => message);
-  presenters.set("json", () => ({ error: { message } }));
-  return presenters;
+  return new Map<string, RoutePresenter<unknown>>([
+    ["text", () => message],
+    ["json", () => ({ error: { message } })],
+  ]);
 }
 
 function validationPresenters(error: unknown): ReadonlyMap<string, RoutePresenter<unknown>> {
-  const presenters = new Map<string, RoutePresenter<unknown>>();
-  presenters.set("text", () => "Validation failed");
-  presenters.set("json", () => ({ error }));
-  return presenters;
+  return new Map<string, RoutePresenter<unknown>>([
+    ["text", () => "Validation failed"],
+    ["json", () => ({ error })],
+  ]);
 }
 
 function errorMessage(error: unknown): string {

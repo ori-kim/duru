@@ -4,6 +4,7 @@ import type {
   CliPluginApi,
   EmptyObject,
   Middleware,
+  OptionSpec,
   OptionSpecOptions,
   Options,
   Params,
@@ -22,7 +23,10 @@ export function isCliPlugin(value: unknown): value is CliPlugin<Options, object>
   return typeof value === "object" && value !== null && pluginTag in value;
 }
 
-export function option<TSpec extends string>(spec: TSpec, description?: string): CliPlugin<OptionSpecOptions<TSpec>> {
+export function option<TSpec extends string>(
+  spec: OptionSpec<TSpec>,
+  description?: string,
+): CliPlugin<OptionSpecOptions<TSpec>> {
   return createPlugin((api) => {
     api.option(parseOptionSpec(spec, description));
   });

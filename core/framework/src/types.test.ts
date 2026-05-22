@@ -8,6 +8,7 @@ import type {
   CommandPattern,
   Middleware,
   MiddlewarePath,
+  OptionSpec,
   OptionSpecOptions,
   OptionValue,
   Params,
@@ -55,6 +56,18 @@ type _InvalidMiddlewarePath = Expect<
 type _BooleanOption = Expect<Equal<OptionSpecOptions<"-w, --watch">, { watch?: boolean }>>;
 type _ValueOption = Expect<Equal<OptionSpecOptions<"--timeout-ms <ms>">, { timeoutMs?: string }>>;
 type _NegatedOption = Expect<Equal<OptionSpecOptions<"--no-color">, { color?: boolean }>>;
+type _InvalidBareOption = Expect<
+  Equal<
+    OptionSpec<"json">,
+    'Invalid option spec "json": option specs must include a long option starting with "--". Example: "--json" or "-j, --json".'
+  >
+>;
+type _InvalidShortOnlyOption = Expect<
+  Equal<
+    OptionSpec<"-j">,
+    'Invalid option spec "-j": option specs must include a long option starting with "--". Example: "--json" or "-j, --json".'
+  >
+>;
 type _PublicOptionValue = Expect<Equal<OptionValue, boolean | string | string[]>>;
 type _PublicParams = Expect<Equal<Params, Record<string, string | string[] | undefined>>>;
 
@@ -71,6 +84,10 @@ function assertPublicPathGrammarTypes() {
   cli.command("run <name>").alias("execute <name>");
   cli.command("run <name>").aliases("execute", "execute <name>");
   cli.command(widenedPattern);
+  cli.option("--json");
+  cli.option("-j, --json");
+  cli.command("run").option("--dry-run");
+  cli.command("run").option("-d, --dry-run");
   cli.use("run", middleware as never);
   cli.use("run child", middleware as never);
   cli.use(widenedPath, middleware as never);
@@ -87,6 +104,14 @@ function assertPublicPathGrammarTypes() {
   cli.command("run <name>").alias("admin run");
   // @ts-expect-error Command aliases with explicit params must match the command params.
   cli.command("run <name>").alias("execute [name]");
+  // @ts-expect-error Options must include a long --name alias.
+  cli.option("json");
+  // @ts-expect-error Short options are only aliases and cannot be the only option name.
+  cli.option("-j");
+  // @ts-expect-error Command options must include a long --name alias.
+  cli.command("run").option("dry-run");
+  // @ts-expect-error Command short options need a long --name alias.
+  cli.command("run").option("-d");
   // @ts-expect-error Middleware paths cannot be empty.
   cli.use("", middleware as never);
   // @ts-expect-error Middleware paths cannot have whitespace padding.

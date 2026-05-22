@@ -3,7 +3,7 @@ import type { CliEventHandler, CliEventName, CliEventPayload, CliEventRecord } f
 import type { CommandMetadata } from "./help.ts";
 import type { CommandFeature } from "./input.ts";
 import type { Middleware } from "./middleware.ts";
-import type { MergeOptions, OptionSpecOptions, Options } from "./options.ts";
+import type { MergeOptions, OptionSpec, OptionSpecOptions, Options } from "./options.ts";
 import type { RenderedOutput } from "./output.ts";
 import type { Params, PatternParams } from "./pattern.ts";
 import type { CliPlugin } from "./plugin.ts";
@@ -11,13 +11,13 @@ import type { Renderer } from "./renderer.ts";
 import type { RouteErrorHandler } from "./route.ts";
 import type { CommandBuilder, CommandConfig, CommandPattern, MiddlewarePath } from "./router.ts";
 
-export type CliOptions<TGlobalOptions extends Options = Options> = {
+export type CliOptions = {
   name?: string;
 };
 
 export type Cli<TGlobalOptions extends Options = EmptyObject, TValues extends object = EmptyObject> = {
   option<TSpec extends string>(
-    spec: TSpec,
+    spec: OptionSpec<TSpec>,
     description?: string,
   ): Cli<MergeOptions<TGlobalOptions, OptionSpecOptions<TSpec>>, TValues>;
   use<TAddedOptions extends Options, TAddedValues extends object>(

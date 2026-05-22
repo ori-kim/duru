@@ -2,7 +2,7 @@ import { commandAliasesComposer } from "../compose/index.ts";
 import { createContext, createEmptyContext } from "../context/index.ts";
 import { helpPath, usageHelpRoutes } from "../help/index.ts";
 import { runPipeline } from "../middleware/pipeline.ts";
-import { parseOptions } from "../options/index.ts";
+import { parseOptions, validateOptionDefinition } from "../options/index.ts";
 import { isCliPlugin, option as optionPlugin } from "../plugin/index.ts";
 import { createRouter, getRouteResult, getRouterOptionDefinitions, isRouteHandled } from "../router/index.ts";
 import type {
@@ -25,6 +25,7 @@ import type {
   HelpRoute,
   Middleware,
   OptionDefinition,
+  OptionSpec,
   Options,
   Params,
   Renderer,
@@ -50,7 +51,7 @@ type CliRouteRuntime = {
 const routeRuntimeByCli = new WeakMap<object, CliRouteRuntime>();
 
 export function createCli<TGlobalOptions extends Options = EmptyObject, TValues extends object = EmptyObject>(
-  options: CliOptions<TGlobalOptions> = {},
+  options: CliOptions = {},
 ): Cli<TGlobalOptions, TValues> {
   const globalOptions: OptionDefinition[] = [];
   const middleware: Middleware[] = [];
@@ -69,7 +70,7 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
 
   const cli = {
     ...defaultRouter,
-    option(spec, description) {
+    option<TSpec extends string>(spec: OptionSpec<TSpec>, description?: string) {
       defaultRouter.option(spec, description);
       return cli.use(optionPlugin(spec, description)) as never;
     },
@@ -138,6 +139,7 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
   function pluginApi(): CliPluginApi {
     return {
       option(definition: OptionDefinition) {
+        validateOptionDefinition(definition);
         globalOptions.push(definition);
       },
       options() {

@@ -38,6 +38,41 @@ describe("createCli", () => {
     expect(result.rendered?.stdout).toContain("src/index.ts");
   });
 
+  test("rejects option specs without long option names", () => {
+    expect(() => parseOptionSpec("json" as string)).toThrow(
+      'Invalid option spec "json": option specs must include a long option starting with "--". Example: "--json" or "-j, --json".',
+    );
+    expect(() => parseOptionSpec("-j" as string)).toThrow(
+      'Invalid option spec "-j": option specs must include a long option starting with "--". Example: "--json" or "-j, --json".',
+    );
+    expect(() => createCli().option("json" as string)).toThrow(
+      'Invalid option spec "json": option specs must include a long option starting with "--". Example: "--json" or "-j, --json".',
+    );
+    expect(() =>
+      createCli()
+        .command("run")
+        .option("-d" as string),
+    ).toThrow(
+      'Invalid option spec "-d": option specs must include a long option starting with "--". Example: "--json" or "-j, --json".',
+    );
+  });
+
+  test("rejects input feature option definitions without long option aliases", () => {
+    expect(() => {
+      createCli().command(
+        "run",
+        input({
+          options: [{ name: "dryRun", aliases: ["dry-run"], type: "boolean" }],
+          parse() {
+            return { options: {} };
+          },
+        }),
+      );
+    }).toThrow(
+      'Invalid option definition "dryRun": option definitions must include a long alias starting with "--". Example: "--dry-run" or "-d, --dry-run".',
+    );
+  });
+
   test("runs middleware before command actions", async () => {
     const calls: string[] = [];
     const cli = createCli().use(renderer(testRenderer()));

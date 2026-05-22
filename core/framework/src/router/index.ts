@@ -1,5 +1,5 @@
 import { isCommandFeature } from "../input/index.ts";
-import { parseOptionSpec, parseOptions } from "../options/index.ts";
+import { parseOptionSpec, parseOptions, validateOptionDefinition } from "../options/index.ts";
 import { compilePattern } from "../pattern/index.ts";
 import { createPlugin } from "../plugin/index.ts";
 import { isExitResult, isValidationError } from "../result/index.ts";
@@ -21,6 +21,7 @@ import type {
   HelpRoute,
   Middleware,
   OptionDefinition,
+  OptionSpec,
   Options,
   ParamDefinition,
   Params,
@@ -74,7 +75,6 @@ type MutableCommandMetadata = Omit<CommandMeta, "aliases" | "examples"> & {
 
 type RouterState = {
   name?: string;
-  description?: string;
   routes: Route[];
   options: OptionDefinition[];
   middleware: MiddlewareEntry[];
@@ -139,7 +139,7 @@ export function createRouter<TRouterOptions extends Options = EmptyObject, TValu
   };
 
   const router = {
-    option<TSpec extends string>(spec: TSpec, description?: string) {
+    option<TSpec extends string>(spec: OptionSpec<TSpec>, description?: string) {
       state.options.push(parseOptionSpec(spec, description));
       return router as never;
     },
@@ -267,7 +267,7 @@ export function createRouter<TRouterOptions extends Options = EmptyObject, TValu
         if (value) route.metadata.group = value;
         return builder as never;
       },
-      option(spec: string, description?: string) {
+      option<TSpec extends string>(spec: OptionSpec<TSpec>, description?: string) {
         addRouteOption(route, parseOptionSpec(spec, description));
         return builder as never;
       },
@@ -324,8 +324,8 @@ function createRouterMiddleware(
       const raw = {
         argv: ctx.request.argv,
         pattern: entry.pattern.pattern,
-        params: cloneRawParams(match.params),
-        options: cloneRawOptions(parsed.options),
+        params: cloneRawRecord(match.params),
+        options: cloneRawRecord(parsed.options),
         positionals: parsed.positionals,
       } satisfies CommandInputRaw;
       scopedRoutePatterns.set(ctx, [entry.canonicalPattern.pattern, ...entry.aliases.map((alias) => alias.pattern)]);
@@ -389,7 +389,7 @@ async function runRoutePipeline(entry: RouteEntry, ctx: Context): Promise<unknow
 
 async function runRouteAction(entry: RouteEntry, ctx: Context): Promise<unknown> {
   try {
-    const result = await runAction(entry.route, ctx);
+    const result = await entry.route.action?.(ctx);
     setActionRouteResult(ctx, entry.route, result);
   } catch (error) {
     const handled = await handleRouteError(ctx, entry, error, entry.route.errorHandlers);
@@ -419,7 +419,7 @@ async function handleRouteError(
   handlers: readonly ErrorBoundary[],
 ): Promise<boolean> {
   for (const handler of handlers) {
-    const result = await handler(createErrorContext(ctx, error));
+    const result = await handler({ ...ctx, error });
     if (result === undefined) continue;
     handledContexts.add(ctx);
     setErrorRouteResult(ctx, result, error);
@@ -439,14 +439,6 @@ function appErrorHandlers(entry: Pick<RouteEntry, "errorHandlers">): readonly Er
 function fallbackErrorState(error: unknown): { ok: boolean; exitCode: number } {
   if (isExitResult(error)) return { ok: error.ok, exitCode: error.exitCode };
   return { ok: false, exitCode: isValidationError(error) ? 2 : 1 };
-}
-
-function createErrorContext(ctx: Context, error: unknown): Context & { error: unknown } {
-  return { ...ctx, error };
-}
-
-async function runAction(route: Route, ctx: Context): Promise<ActionResult> {
-  return route.action?.(ctx);
 }
 
 async function parseCommandInputs(
@@ -473,18 +465,10 @@ function cloneCommandInputRaw(raw: CommandInputRaw): CommandInputRaw {
   return {
     argv: [...raw.argv],
     pattern: raw.pattern,
-    params: cloneRawParams(raw.params),
-    options: cloneRawOptions(raw.options),
+    params: cloneRawRecord(raw.params),
+    options: cloneRawRecord(raw.options),
     positionals: [...raw.positionals],
   };
-}
-
-function cloneRawParams(params: CommandInputRaw["params"]): CommandInputRaw["params"] {
-  return cloneRawRecord(params);
-}
-
-function cloneRawOptions(options: CommandInputRaw["options"]): CommandInputRaw["options"] {
-  return cloneRawRecord(options);
 }
 
 function cloneRawRecord<TValue>(record: Readonly<Record<string, TValue | readonly string[] | undefined>>) {
@@ -582,14 +566,18 @@ function isCommandConfig(value: unknown): value is CommandConfig<object, object>
 }
 
 function applyCommandFeature(state: RouterState, route: Route, feature: CommandInputFeature): void {
+  const inputOptions = feature.definition.options ?? [];
   const pattern = appendInputParams(route.pattern, feature.definition.params ?? []);
-  for (const option of feature.definition.options ?? []) assertUniqueRouteOption(route.options, option);
+  for (const option of inputOptions) {
+    validateOptionDefinition(option);
+    assertUniqueRouteOption(route.options, option);
+  }
   const metadata = feature.metadata ?? feature.definition.metadata;
   const aliases = [...route.metadata.aliases, ...metadataAliases(metadata)];
   assertValidAliasList(pattern.pattern, aliases);
   assertCommandPatternsAvailable(state, route, pattern.pattern, aliases);
   route.inputs.push(feature);
-  route.options.push(...(feature.definition.options ?? []));
+  route.options.push(...inputOptions);
   route.pattern = pattern;
   if (metadata) mergeCommandMetadata(state, route, metadata);
 }
@@ -677,6 +665,7 @@ function paramToken(param: ParamDefinition): string {
 }
 
 function addRouteOption(route: Route, definition: OptionDefinition): void {
+  validateOptionDefinition(definition);
   assertUniqueRouteOption(route.options, definition);
   route.options.push(definition);
 }
@@ -902,11 +891,9 @@ function emptyScope(): RouteScope {
   return { path: [], options: [], middleware: [], errorHandlers: [] };
 }
 
-function cleanRouterConfig(config: RouterOptions): Pick<RouterState, "name" | "description"> {
-  return {
-    ...(cleanSegment(config.name) ? { name: cleanSegment(config.name) } : {}),
-    ...(config.description ? { description: config.description } : {}),
-  };
+function cleanRouterConfig(config: RouterOptions): Pick<RouterState, "name"> {
+  const name = cleanSegment(config.name);
+  return name ? { name } : {};
 }
 
 function isRouter(value: unknown): value is RouterRuntime {
@@ -964,26 +951,22 @@ function scopedMiddleware(path: readonly string[], middleware: Middleware): Midd
 }
 
 export function validateCommandPattern(pattern: string): void {
-  const tokens = pattern.split(" ");
-  if (tokens.length === 0 || tokens.join(" ") !== pattern || tokens.some((token) => token === "")) {
-    throw new Error(`Invalid command pattern: ${pattern}`);
-  }
-
-  const [command, ...params] = tokens;
-  if (!command || !isLiteralToken(command) || params.some((token) => !isParamToken(token))) {
-    throw new Error(`Invalid command pattern: ${pattern}`);
-  }
+  validateCommandLikePattern(pattern, "command pattern");
 }
 
 function validateCommandAliasPattern(pattern: string): void {
+  validateCommandLikePattern(pattern, "command alias");
+}
+
+function validateCommandLikePattern(pattern: string, label: "command pattern" | "command alias"): void {
   const tokens = pattern.split(" ");
   if (tokens.length === 0 || tokens.join(" ") !== pattern || tokens.some((token) => token === "")) {
-    throw new Error(`Invalid command alias: ${pattern}`);
+    throw new Error(`Invalid ${label}: ${pattern}`);
   }
 
   const [command, ...params] = tokens;
   if (!command || !isLiteralToken(command) || params.some((token) => !isParamToken(token))) {
-    throw new Error(`Invalid command alias: ${pattern}`);
+    throw new Error(`Invalid ${label}: ${pattern}`);
   }
 }
 

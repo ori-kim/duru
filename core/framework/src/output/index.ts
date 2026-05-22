@@ -5,7 +5,6 @@ export function normalizeActionResult(value: ActionResult): Output[] {
   if (Array.isArray(value)) return value.flatMap((item) => normalizeActionResult(item));
   if (isOutput(value)) return [value];
   if (typeof value === "string") return [{ kind: "text", text: value }];
-  if (typeof value === "number" || typeof value === "boolean") return [{ kind: "data", value }];
   return [{ kind: "data", value }];
 }
 
