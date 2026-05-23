@@ -18,6 +18,10 @@ export function graphqlAdapter(): GatewayAdapter<GraphqlAdapterConfig> {
   return {
     type: "graphql",
     schema: { parse: parseGraphqlConfig },
+    detect(input) {
+      const value = input.argv[0];
+      return Boolean(value && isAbsoluteHttpUrl(value) && /graphql/i.test(new URL(value).pathname));
+    },
     async add(input) {
       return graphqlConfigFromAddInput(input);
     },

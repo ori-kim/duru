@@ -474,6 +474,55 @@ describe("@clip/cli-gateway commands", () => {
     });
   });
 
+  test("auto-detects gateway target type during add", async () => {
+    const store = createMemoryGatewayStore();
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: defaultGatewayAdapters() }));
+
+    await cli.run(["add", "say", "echo"], { render: false });
+    await cli.run(["add", "notes-api", "https://api.example.com"], { render: false });
+    await cli.run(["add", "search-api", "https://api.example.com/graphql"], { render: false });
+    await cli.run(["add", "catservice", "https://catservice.example.com/mcp"], { render: false });
+    await cli.run(["add", "grpc-api", "localhost:50051"], { render: false });
+
+    expect(await store.listTargets()).toEqual([
+      { name: "catservice", type: "mcp", config: { url: "https://catservice.example.com/mcp" } },
+      { name: "grpc-api", type: "grpc", config: { address: "localhost:50051" } },
+      { name: "notes-api", type: "api", config: { baseUrl: "https://api.example.com" } },
+      { name: "say", type: "cli", config: { command: "echo", args: [] } },
+      { name: "search-api", type: "graphql", config: { endpoint: "https://api.example.com/graphql" } },
+    ]);
+  });
+
+  test("reports ambiguous add detection when multiple adapters match", async () => {
+    const store = createMemoryGatewayStore();
+    const adapter = (type: string) =>
+      ({
+        type,
+        schema: { parse: (value: unknown) => value },
+        detect: () => true,
+        async add() {
+          return {};
+        },
+        createTarget({ manifest, config }) {
+          return {
+            name: manifest.name,
+            type: manifest.type,
+            config,
+            async invoke() {
+              return { ok: true };
+            },
+          };
+        },
+      }) satisfies GatewayAdapter;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter("api"), adapter("mcp")] }));
+
+    const result = await cli.run(["add", "test-service", "https://api.example.com"], { render: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(2);
+    expect(result.result).toEqual({ message: "Gateway target type is ambiguous: api, mcp" });
+  });
+
   test("registers list and remove commands backed by the injected store", async () => {
     const store = createMemoryGatewayStore({
       targets: [

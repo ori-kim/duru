@@ -21,6 +21,10 @@ export function apiAdapter(): GatewayAdapter<ApiAdapterConfig> {
   return {
     type: "api",
     schema: { parse: parseApiConfig },
+    detect(input) {
+      const value = input.argv[0];
+      return Boolean(value && isAbsoluteHttpUrl(value) && !looksLikeGraphqlUrl(value) && !looksLikeMcpUrl(value));
+    },
     async add(input) {
       return apiConfigFromAddInput(input);
     },
@@ -245,6 +249,14 @@ function isAbsoluteHttpUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function looksLikeGraphqlUrl(value: string): boolean {
+  return /graphql/i.test(new URL(value).pathname);
+}
+
+function looksLikeMcpUrl(value: string): boolean {
+  return /mcp/i.test(new URL(value).pathname);
 }
 
 function errorMessage(error: unknown): string {

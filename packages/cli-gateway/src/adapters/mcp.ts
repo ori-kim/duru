@@ -19,6 +19,10 @@ export function mcpAdapter(): GatewayAdapter<McpAdapterConfig> {
   return {
     type: "mcp",
     schema: { parse: parseMcpConfig },
+    detect(input) {
+      const value = input.argv[0];
+      return Boolean(value && isAbsoluteHttpUrl(value) && /mcp/i.test(new URL(value).pathname));
+    },
     async add(input) {
       return mcpConfigFromAddInput(input);
     },
