@@ -1,4 +1,12 @@
 export type { Awaitable, EmptyObject, MergeContext, Simplify } from "./common.ts";
+export type {
+  CompletionContext,
+  CompletionContributor,
+  CompletionContributorError,
+  CompletionItem,
+  CompletionOptions,
+  CompletionResult,
+} from "../completion/index.ts";
 export type { Cli, CliOptions, CliRunOptions, CliRunResult } from "./cli.ts";
 export type { Context } from "./context.ts";
 export type {

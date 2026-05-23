@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createCli } from "@clip/kit";
+import { createGatewayCli } from "../../commands";
 import { createMemoryGatewayStore } from "../../memory-store";
 import { cliGateway, defaultGatewayAdapters } from "../../plugin";
 import { apiAdapter } from "./index";
@@ -89,24 +90,25 @@ describe("@clip/cli-gateway api adapter", () => {
         },
       ],
     });
-    const cli = createCli({ name: "clip" }).use(
-      cliGateway({
-        store,
-        adapters: defaultGatewayAdapters(),
-        services: {
-          async fetch(input: string | URL | Request, init?: RequestInit) {
-            calls.push({ input: String(input), init });
-            return new Response(JSON.stringify(spec), {
-              status: 200,
-              statusText: "OK",
-              headers: { "content-type": "application/json" },
-            });
-          },
+    const gatewayOptions = {
+      store,
+      adapters: defaultGatewayAdapters(),
+      services: {
+        async fetch(input: string | URL | Request, init?: RequestInit) {
+          calls.push({ input: String(input), init });
+          return new Response(JSON.stringify(spec), {
+            status: 200,
+            statusText: "OK",
+            headers: { "content-type": "application/json" },
+          });
         },
-      }),
-    );
+      },
+    };
+    const cli = createCli({ name: "clip" })
+      .use(cliGateway(gatewayOptions))
+      .route("gateway", createGatewayCli(gatewayOptions, { group: "Gateway" }));
 
-    const result = await cli.run(["refresh", "notes-api"], { render: false });
+    const result = await cli.run(["gateway", "refresh", "notes-api"], { render: false });
 
     expect(result.result).toEqual({ target: "notes-api", type: "api", refreshed: true, updated: true });
     expect(calls).toEqual([

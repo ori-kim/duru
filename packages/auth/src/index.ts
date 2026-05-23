@@ -4,10 +4,16 @@ export type OAuthProviderConfig = {
   id: string;
   authorizationEndpoint: string;
   tokenEndpoint: string;
-  clientId: string;
+  clientId?: string;
+  registrationEndpoint?: string;
+  clientName?: string;
   scopes?: readonly string[];
   redirectUri?: string;
   extraParams?: Record<string, string>;
+};
+
+type OAuthClientProviderConfig = OAuthProviderConfig & {
+  clientId: string;
 };
 
 export type OAuthSubject = {
@@ -22,6 +28,7 @@ export type OAuthToken = {
   refreshToken?: string;
   expiresAt?: number;
   scope?: string;
+  clientId?: string;
 };
 
 export type OAuthTokenStore = {
@@ -120,7 +127,7 @@ export async function pkceChallenge(verifier: string): Promise<string> {
 }
 
 export function createOAuthAuthorizationUrl(
-  provider: OAuthProviderConfig,
+  provider: OAuthClientProviderConfig,
   input: { state: string; codeChallenge: string; redirectUri?: string },
 ): URL {
   const redirectUri = input.redirectUri ?? provider.redirectUri;
@@ -161,9 +168,14 @@ export function createOAuthRuntime(options: OAuthRuntimeOptions): OAuthRuntime {
     },
     async login(input) {
       const redirectUri = redirectUriFor(input.provider, options);
+      const provider = await resolveLoginProvider(input.provider, {
+        redirectUri,
+        fetcher,
+        signal: input.signal,
+      });
       const pkce = await (options.generatePkce ?? generatePkcePair)();
       const state = (options.randomState ?? randomState)();
-      const authUrl = createOAuthAuthorizationUrl(input.provider, {
+      const authUrl = createOAuthAuthorizationUrl(provider, {
         state,
         codeChallenge: pkce.challenge,
         redirectUri,
@@ -177,7 +189,7 @@ export function createOAuthRuntime(options: OAuthRuntimeOptions): OAuthRuntime {
       if (callback.state !== state) throw new Error("OAuth callback state mismatch");
 
       const token = await exchangeAuthorizationCode({
-        provider: input.provider,
+        provider,
         code: callback.code,
         codeVerifier: pkce.verifier,
         redirectUri,
@@ -185,7 +197,7 @@ export function createOAuthRuntime(options: OAuthRuntimeOptions): OAuthRuntime {
         now: now(),
         signal: input.signal,
       });
-      await options.tokens.set(input.subject, token);
+      await options.tokens.set(input.subject, tokenWithClientId(token, input.provider, provider));
       return stateFromToken(input.subject.provider, token, now());
     },
     async logout(input) {
@@ -197,22 +209,76 @@ export function createOAuthRuntime(options: OAuthRuntimeOptions): OAuthRuntime {
       if (!token) return undefined;
       if (isTokenUsable(token, now())) return token.accessToken;
       if (!token.refreshToken) return undefined;
+      const clientId = token.clientId ?? input.provider.clientId;
+      if (!clientId) return undefined;
 
       const refreshed = await refreshAccessToken({
-        provider: input.provider,
+        provider: { ...input.provider, clientId },
         refreshToken: token.refreshToken,
         fetcher,
         now: now(),
         signal: input.signal,
       });
-      await options.tokens.set(input.subject, refreshed);
+      await options.tokens.set(input.subject, token.clientId ? { ...refreshed, clientId: token.clientId } : refreshed);
       return refreshed.accessToken;
     },
   };
 }
 
-async function exchangeAuthorizationCode(input: {
+async function resolveLoginProvider(
+  provider: OAuthProviderConfig,
+  input: { redirectUri: string; fetcher: FetchLike; signal?: AbortSignal },
+): Promise<OAuthClientProviderConfig> {
+  if (provider.clientId) return { ...provider, clientId: provider.clientId };
+  if (!provider.registrationEndpoint) throw new Error("OAuth provider requires clientId or registrationEndpoint");
+
+  const registered = await registerOAuthClient({
+    provider,
+    redirectUri: input.redirectUri,
+    fetcher: input.fetcher,
+    signal: input.signal,
+  });
+  return { ...provider, clientId: registered.clientId };
+}
+
+async function registerOAuthClient(input: {
   provider: OAuthProviderConfig;
+  redirectUri: string;
+  fetcher: FetchLike;
+  signal?: AbortSignal;
+}): Promise<{ clientId: string }> {
+  if (!input.provider.registrationEndpoint) throw new Error("OAuth provider requires registrationEndpoint");
+
+  const body = {
+    client_name: input.provider.clientName ?? "clip",
+    redirect_uris: [input.redirectUri],
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    token_endpoint_auth_method: "none",
+    ...(input.provider.scopes && input.provider.scopes.length > 0 ? { scope: input.provider.scopes.join(" ") } : {}),
+  };
+  const response = await input.fetcher(input.provider.registrationEndpoint, {
+    method: "POST",
+    signal: input.signal,
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const value = (await response.json()) as unknown;
+  if (response.status < 200 || response.status >= 400) {
+    throw new Error(`OAuth client registration failed with status ${response.status}`);
+  }
+  if (!isRecord(value) || typeof value.client_id !== "string" || value.client_id.length === 0) {
+    throw new Error("OAuth client registration response requires client_id");
+  }
+
+  return { clientId: value.client_id };
+}
+
+async function exchangeAuthorizationCode(input: {
+  provider: OAuthClientProviderConfig;
   code: string;
   codeVerifier: string;
   redirectUri: string;
@@ -230,7 +296,7 @@ async function exchangeAuthorizationCode(input: {
 }
 
 async function refreshAccessToken(input: {
-  provider: OAuthProviderConfig;
+  provider: OAuthClientProviderConfig;
   refreshToken: string;
   fetcher: FetchLike;
   now: number;
@@ -283,6 +349,14 @@ function stateFromToken(provider: string, token: OAuthToken, now: number): OAuth
     label: provider,
     ...(token.expiresAt ? { expiresAt: token.expiresAt } : {}),
   };
+}
+
+function tokenWithClientId(
+  token: OAuthToken,
+  configuredProvider: OAuthProviderConfig,
+  resolvedProvider: OAuthClientProviderConfig,
+): OAuthToken {
+  return configuredProvider.registrationEndpoint ? { ...token, clientId: resolvedProvider.clientId } : token;
 }
 
 function redirectUriFor(provider: OAuthProviderConfig, options: OAuthRuntimeOptions): string {

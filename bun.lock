@@ -18,6 +18,7 @@
       "dependencies": {
         "@clip/auth": "workspace:*",
         "@clip/cli-gateway": "workspace:*",
+        "@clip/completion-zsh": "workspace:*",
         "@clip/env": "workspace:*",
         "@clip/file-store": "workspace:*",
         "@clip/input-validation": "workspace:*",
@@ -37,6 +38,13 @@
     },
     "packages/cli-gateway": {
       "name": "@clip/cli-gateway",
+      "version": "0.0.0",
+      "dependencies": {
+        "@clip/kit": "workspace:*",
+      },
+    },
+    "packages/completion-zsh": {
+      "name": "@clip/completion-zsh",
       "version": "0.0.0",
       "dependencies": {
         "@clip/kit": "workspace:*",
@@ -111,6 +119,8 @@
     "@clip/auth": ["@clip/auth@workspace:packages/auth"],
 
     "@clip/cli-gateway": ["@clip/cli-gateway@workspace:packages/cli-gateway"],
+
+    "@clip/completion-zsh": ["@clip/completion-zsh@workspace:packages/completion-zsh"],
 
     "@clip/env": ["@clip/env@workspace:packages/env"],
 

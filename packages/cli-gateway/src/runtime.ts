@@ -1,4 +1,5 @@
-import type { CliEventContext } from "@clip/kit";
+import type { Context } from "@clip/kit";
+import { formatGatewayTargetHelp, isGatewayTargetHelpDocument } from "./help";
 import type {
   CliGatewayOptions,
   GatewayAdapter,
@@ -8,8 +9,12 @@ import type {
   GatewayTargetRecord,
 } from "./types";
 
+type GatewayRuntimeContext = Pick<Context, "options" | "exit"> & {
+  argv: readonly string[];
+};
+
 export async function runGatewayTargetInvocation(
-  ctx: CliEventContext<"notFound">,
+  ctx: GatewayRuntimeContext,
   options: CliGatewayOptions,
 ): Promise<unknown> {
   const targetRef = targetReference(ctx.argv[0]);
@@ -30,7 +35,11 @@ export async function runGatewayTargetInvocation(
   const manifest = mergeTargetProfile(target, profile);
   const config = parseTargetConfig(adapter, manifest);
   const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
-  const argv = await targetArgv(bindingArgv(binding, stripGatewayOptions(ctx.argv.slice(1))), target.name, options);
+  const argv = await targetArgv(
+    stripEmptyInvocationOptions(bindingArgv(binding, stripGatewayOptions(ctx.argv.slice(1)))),
+    target.name,
+    options,
+  );
   const aclError = targetAclError(manifest, argv);
   if (aclError) return ctx.exit(2, { message: aclError });
 
@@ -85,6 +94,12 @@ function stripGatewayOptions(argv: readonly string[]): readonly string[] {
   return argv.filter((item) => item !== "--dry-run");
 }
 
+function stripEmptyInvocationOptions(argv: readonly string[]): readonly string[] {
+  return argv.length > 0 && argv.every((item) => emptyInvocationOptions.has(item)) ? [] : argv;
+}
+
+const emptyInvocationOptions = new Set(["--json", "--events"]);
+
 function parseTargetConfig<TConfig>(adapter: GatewayAdapter<TConfig>, target: GatewayTargetRecord): TConfig {
   return adapter.schema.parse(target.config);
 }
@@ -109,6 +124,7 @@ function mergeConfig(targetConfig: unknown, profileConfig: unknown): unknown {
 function targetAclError(target: GatewayTargetRecord, argv: readonly string[]): string | undefined {
   const operation = argv[0];
   if (!operation) return undefined;
+  if (isGatewayIntrospectionOperation(operation)) return undefined;
 
   if (target.deny?.includes(operation)) {
     return `Gateway target "${target.name}" denied operation: "${operation}"`;
@@ -120,6 +136,12 @@ function targetAclError(target: GatewayTargetRecord, argv: readonly string[]): s
 
   return undefined;
 }
+
+function isGatewayIntrospectionOperation(operation: string): boolean {
+  return gatewayIntrospectionOperations.has(operation);
+}
+
+const gatewayIntrospectionOperations = new Set(["tools", "describe", "types", "--help", "-h"]);
 
 function targetTimeout(
   target: GatewayTargetRecord,
@@ -152,9 +174,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function gatewayExecutionResult(ctx: CliEventContext<"notFound">, result: GatewayResult): unknown {
-  if (result.ok) return ctx.exit(result.exitCode ?? 0, result.value, true);
+function gatewayExecutionResult(ctx: GatewayRuntimeContext, result: GatewayResult): unknown {
+  if (result.ok) return ctx.exit(result.exitCode ?? 0, outputValue(ctx, result.value), true);
   return ctx.exit(result.exitCode ?? 1, errorValue(result.error), false);
+}
+
+function outputValue(ctx: GatewayRuntimeContext, value: unknown): unknown {
+  if (ctx.options.json === true) return value;
+  if (isGatewayTargetHelpDocument(value)) return formatGatewayTargetHelp(value);
+  return value;
 }
 
 function errorValue(error: unknown): unknown {

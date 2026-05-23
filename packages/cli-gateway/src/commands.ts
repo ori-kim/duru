@@ -1,5 +1,5 @@
 import { createCli } from "@clip/kit";
-import type { CliPluginApi } from "@clip/kit";
+import type { CliPluginApi, CommandPattern } from "@clip/kit";
 import { unknownAdapterMessage, unknownProfileMessage, unknownTargetMessage } from "./runtime";
 import type {
   AuthContext,
@@ -17,11 +17,33 @@ import type {
   GatewayTool,
 } from "./types";
 
-export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOptions): void {
-  const adapters = options.adapters ?? [];
+type GatewayCommandHost = Pick<CliPluginApi, "command" | "route">;
 
-  api
-    .command("add <name> [...args]", "Add a gateway target")
+export type GatewayCommandInstallOptions = {
+  hidden?: boolean;
+  group?: string;
+};
+
+export function createGatewayCli(
+  options: CliGatewayOptions,
+  installOptions: GatewayCommandInstallOptions = {},
+): ReturnType<typeof createCli> {
+  const cli = createCli();
+  installGatewayCommands(cli, options, installOptions);
+  return cli;
+}
+
+export function installGatewayCommands(
+  api: GatewayCommandHost,
+  options: CliGatewayOptions,
+  installOptions: GatewayCommandInstallOptions = {},
+): void {
+  const adapters = options.adapters ?? [];
+  const command = <TPattern extends string>(pattern: CommandPattern<TPattern>, description: string) => {
+    return styleCommand(api.command(pattern, description), installOptions);
+  };
+
+  command("add <name> [...args]", "Add a gateway target")
     .option("--type <type>", "Gateway adapter type")
     .action(async (ctx) => {
       const name = ctx.params.name;
@@ -39,15 +61,15 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
       return { name, type: adapter.value.type };
     });
 
-  api.command("list", "List gateway targets").action(async () => ({
+  command("list", "List gateway targets").action(async () => ({
     targets: (await options.store.listTargets()).map((target) => ({ name: target.name, type: target.type })),
   }));
 
-  api.command("check", "Check gateway targets").action(async () => {
+  command("check", "Check gateway targets").action(async () => {
     return checkCommand(options, adapters);
   });
 
-  api.command("remove <name>", "Remove a gateway target").action(async (ctx) => {
+  command("remove <name>", "Remove a gateway target").action(async (ctx) => {
     const name = ctx.params.name;
     const target = await options.store.getTarget(name);
     if (!target) return ctx.exit(2, { message: unknownTargetMessage(name) });
@@ -56,15 +78,15 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     return { removed: name };
   });
 
-  api.command("bind <name> <target> [...args]", "Bind a command name to a gateway target").action(async (ctx) => {
+  command("bind <name> <target> [...args]", "Bind a command name to a gateway target").action(async (ctx) => {
     return bindCommand(ctx.params.name, ctx.params.target, stringArrayParam(ctx.params.args), ctx, options);
   });
 
-  api.command("binds", "List gateway target bindings").action(async () => ({
+  command("binds", "List gateway target bindings").action(async () => ({
     bindings: (await options.store.listBindings()).map(bindingRow),
   }));
 
-  api.command("unbind <name>", "Remove a gateway target binding").action(async (ctx) => {
+  command("unbind <name>", "Remove a gateway target binding").action(async (ctx) => {
     const name = ctx.params.name;
     const binding = await options.store.getBinding(name);
     if (!binding) return ctx.exit(2, { message: unknownBindingMessage(name) });
@@ -73,29 +95,32 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     return { removed: name };
   });
 
-  api.command("refresh <target>", "Refresh a gateway target").action(async (ctx) => {
+  command("refresh <target>", "Refresh a gateway target").action(async (ctx) => {
     return refreshCommand(ctx.params.target, options, adapters);
   });
 
-  api.command("inspect <target>", "Inspect a gateway target").action(async (ctx) => {
+  command("inspect <target>", "Inspect a gateway target").action(async (ctx) => {
     return inspectCommand(ctx.params.target, options, adapters);
   });
 
-  api.command("auth <target>", "Show gateway target auth status").action(async (ctx) => {
+  command("auth <target>", "Show gateway target auth status").action(async (ctx) => {
     return authCommand("status", ctx.params.target, options, adapters);
   });
 
-  api.command("login <target>", "Login to a gateway target").action(async (ctx) => {
+  command("login <target>", "Login to a gateway target").action(async (ctx) => {
     return authCommand("login", ctx.params.target, options, adapters);
   });
 
-  api.command("logout <target>", "Logout from a gateway target").action(async (ctx) => {
+  command("logout <target>", "Logout from a gateway target").action(async (ctx) => {
     return authCommand("logout", ctx.params.target, options, adapters);
   });
 
   const aliases = createCli();
+  const aliasCommand = <TPattern extends string>(pattern: CommandPattern<TPattern>, description: string) => {
+    return styleCommand(aliases.command(pattern, description), installOptions);
+  };
 
-  aliases.command("add <target> <name> <operation> [...args]", "Add a gateway target alias").action(async (ctx) => {
+  aliasCommand("add <target> <name> <operation> [...args]", "Add a gateway target alias").action(async (ctx) => {
     const target = ctx.params.target;
     const name = ctx.params.name;
     const operation = ctx.params.operation;
@@ -106,7 +131,7 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     return { target, name, operation };
   });
 
-  aliases.command("list <target>", "List gateway target aliases").action(async (ctx) => ({
+  aliasCommand("list <target>", "List gateway target aliases").action(async (ctx) => ({
     aliases: (await options.store.listAliases(ctx.params.target)).map((alias) => ({
       target: alias.target,
       name: alias.name,
@@ -115,7 +140,7 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     })),
   }));
 
-  aliases.command("remove <target> <name>", "Remove a gateway target alias").action(async (ctx) => {
+  aliasCommand("remove <target> <name>", "Remove a gateway target alias").action(async (ctx) => {
     const target = ctx.params.target;
     const name = ctx.params.name;
     await options.store.removeAlias(target, name);
@@ -125,8 +150,11 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
   api.route("alias", aliases);
 
   const profiles = createCli();
+  const profileCommand = <TPattern extends string>(pattern: CommandPattern<TPattern>, description: string) => {
+    return styleCommand(profiles.command(pattern, description), installOptions);
+  };
 
-  profiles.command("add <target> <name> [...args]", "Add a gateway target profile").action(async (ctx) => {
+  profileCommand("add <target> <name> [...args]", "Add a gateway target profile").action(async (ctx) => {
     const target = ctx.params.target;
     const name = ctx.params.name;
     const args = stringArrayParam(ctx.params.args);
@@ -136,11 +164,11 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     return { target, name };
   });
 
-  profiles.command("list <target>", "List gateway target profiles").action(async (ctx) => ({
+  profileCommand("list <target>", "List gateway target profiles").action(async (ctx) => ({
     profiles: await profileList(options, ctx.params.target),
   }));
 
-  profiles.command("remove <target> <name>", "Remove a gateway target profile").action(async (ctx) => {
+  profileCommand("remove <target> <name>", "Remove a gateway target profile").action(async (ctx) => {
     const target = ctx.params.target;
     const name = ctx.params.name;
     const record = await options.store.getTarget(target);
@@ -151,7 +179,7 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     return { removed: { target, name } };
   });
 
-  profiles.command("use <target> <name>", "Use a gateway target profile by default").action(async (ctx) => {
+  profileCommand("use <target> <name>", "Use a gateway target profile by default").action(async (ctx) => {
     const target = await options.store.getTarget(ctx.params.target);
     if (!target) return ctx.exit(2, { message: unknownTargetMessage(ctx.params.target) });
 
@@ -163,7 +191,7 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     return { target: target.name, name: profile.name };
   });
 
-  profiles.command("unset <target>", "Unset a gateway target default profile").action(async (ctx) => {
+  profileCommand("unset <target>", "Unset a gateway target default profile").action(async (ctx) => {
     const target = await options.store.getTarget(ctx.params.target);
     if (!target) return ctx.exit(2, { message: unknownTargetMessage(ctx.params.target) });
 
@@ -174,6 +202,15 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
   });
 
   api.route("profile", profiles);
+}
+
+function styleCommand<TBuilder extends { hidden(hidden?: boolean): TBuilder; group(group: string): TBuilder }>(
+  builder: TBuilder,
+  options: GatewayCommandInstallOptions,
+): TBuilder {
+  if (options.hidden) builder.hidden();
+  if (options.group) builder.group(options.group);
+  return builder;
 }
 
 async function resolveAddAdapter(

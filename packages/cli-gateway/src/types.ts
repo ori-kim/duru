@@ -1,4 +1,4 @@
-import type { CliPlugin } from "@clip/kit";
+import type { CliPlugin, CompletionItem as CoreCompletionItem } from "@clip/kit";
 
 export type CliGatewayOptions = {
   store: GatewayStore;
@@ -222,10 +222,7 @@ export type GatewayListRow = {
   summary?: string;
 };
 
-export type CompletionItem = {
-  value: string;
-  description?: string;
-};
+export type CompletionItem = CoreCompletionItem;
 
 export type AddInput = {
   name: string;

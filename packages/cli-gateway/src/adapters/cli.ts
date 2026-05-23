@@ -1,4 +1,11 @@
-import type { AddInput, ExecuteContext, GatewayAdapter, GatewayResult } from "../types";
+import type {
+  AddInput,
+  CompletionItem,
+  ExecuteContext,
+  GatewayAdapter,
+  GatewayCompletionContext,
+  GatewayResult,
+} from "../types";
 
 export type CliAdapterConfig = {
   command: string;
@@ -22,6 +29,9 @@ export function cliAdapter(): GatewayAdapter<CliAdapterConfig> {
         },
         listRow() {
           return { name: manifest.name, type: "cli", summary: config.command };
+        },
+        async complete(ctx) {
+          return completeCliTarget(config, ctx);
         },
       };
     },
@@ -88,6 +98,105 @@ async function executeCliTarget(config: CliAdapterConfig, ctx: ExecuteContext): 
       stderr: stripFinalNewline(stderr),
     },
     exitCode,
+  };
+}
+
+async function completeCliTarget(
+  config: CliAdapterConfig,
+  ctx: GatewayCompletionContext,
+): Promise<readonly CompletionItem[]> {
+  if (ctx.argv.length > 1) return [];
+
+  const current = ctx.argv[0] ?? "";
+  const helpText = await cliHelpText(config);
+  return parseCliHelpCommands(helpText).filter((item) => item.value.startsWith(current));
+}
+
+async function cliHelpText(config: CliAdapterConfig): Promise<string> {
+  const timeout = timeoutSignal(1000);
+  let child: Bun.Subprocess<"ignore", "pipe", "pipe">;
+
+  try {
+    child = Bun.spawn([config.command, ...(config.args ?? []), "--help"], {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      signal: timeout.signal,
+    });
+  } catch {
+    timeout.dispose();
+    return "";
+  }
+
+  try {
+    const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    await child.exited.catch(() => undefined);
+    return stdout || stderr;
+  } catch {
+    return "";
+  } finally {
+    timeout.dispose();
+  }
+}
+
+function parseCliHelpCommands(text: string): readonly CompletionItem[] {
+  const items: CompletionItem[] = [];
+  let inCommandSection = false;
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (/commands/i.test(line) && line.toUpperCase() === line) {
+      inCommandSection = true;
+      continue;
+    }
+    if (!inCommandSection) continue;
+
+    const parsed = parseHelpCommandLine(line);
+    if (parsed) items.push(parsed);
+  }
+
+  return dedupeCompletionItems(items);
+}
+
+function parseHelpCommandLine(line: string): CompletionItem | undefined {
+  const colon = /^(?:[A-Za-z0-9._-]+\s+)?([A-Za-z0-9][\w:-]*):\s+(.+)$/.exec(line);
+  if (colon) return operationItem(colon[1] as string, colon[2] as string);
+
+  const spaced = /^([A-Za-z0-9][\w:-]*)\s{2,}(.+)$/.exec(line);
+  if (spaced) return operationItem(spaced[1] as string, spaced[2] as string);
+
+  return undefined;
+}
+
+function operationItem(value: string, description: string): CompletionItem {
+  return {
+    value,
+    description: description.trim(),
+    kind: "operation",
+    group: "gateway operations",
+  };
+}
+
+function dedupeCompletionItems(items: readonly CompletionItem[]): readonly CompletionItem[] {
+  const seen = new Set<string>();
+  const next: CompletionItem[] = [];
+  for (const item of items) {
+    if (seen.has(item.value)) continue;
+    seen.add(item.value);
+    next.push(item);
+  }
+  return next;
+}
+
+function timeoutSignal(ms: number): { signal: AbortSignal; dispose(): void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return {
+    signal: controller.signal,
+    dispose() {
+      clearTimeout(timer);
+    },
   };
 }
 

@@ -1,5 +1,10 @@
 export { createCli } from "./cli/index.ts";
 export { commandAliases } from "./compose/index.ts";
+export {
+  commandGraphCompletionContributor,
+  completeFromContributors,
+  createCompletionRegistry,
+} from "./completion/index.ts";
 export { formatHelp, help, isHelpDocument } from "./help/index.ts";
 export type { HelpPluginOptions } from "./help/index.ts";
 export { input } from "./input/index.ts";
@@ -26,6 +31,12 @@ export type {
   CliPluginApi,
   CliRunOptions,
   CliRunResult,
+  CompletionContext,
+  CompletionContributor,
+  CompletionContributorError,
+  CompletionItem,
+  CompletionOptions,
+  CompletionResult,
   CommandBuilder,
   CommandConfig,
   CommandExample,

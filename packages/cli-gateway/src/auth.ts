@@ -11,7 +11,9 @@ export type GatewayOAuthProviderConfig = {
   provider: string;
   authorizationEndpoint: string;
   tokenEndpoint: string;
-  clientId: string;
+  clientId?: string;
+  registrationEndpoint?: string;
+  clientName?: string;
   store?: "keychain" | "file";
   scopes?: readonly string[];
   redirectUri?: string;
@@ -37,22 +39,33 @@ export type GatewayOAuthServiceInput = {
 
 export function parseOptionalOAuthProviderConfig(value: unknown): GatewayOAuthProviderConfig | undefined {
   if (value === undefined) return undefined;
+  // Legacy gateway configs used `auth: oauth` as a discovery marker without provider endpoints.
+  if (value === "oauth") return undefined;
   if (!isRecord(value)) throw new Error("Invalid auth config: auth must be an object");
 
   const provider = stringValue(value.provider) ?? stringValue(value.id);
   const authorizationEndpoint = stringValue(value.authorizationEndpoint);
   const tokenEndpoint = stringValue(value.tokenEndpoint);
   const clientId = stringValue(value.clientId);
+  const registrationEndpoint = stringValue(value.registrationEndpoint);
 
   if (!provider) throw new Error("Invalid auth config: provider is required");
   if (!authorizationEndpoint) throw new Error("Invalid auth config: authorizationEndpoint is required");
   if (!tokenEndpoint) throw new Error("Invalid auth config: tokenEndpoint is required");
-  if (!clientId) throw new Error("Invalid auth config: clientId is required");
+  if (!clientId && !registrationEndpoint) {
+    throw new Error("Invalid auth config: clientId or registrationEndpoint is required");
+  }
   if (!isAbsoluteHttpUrl(authorizationEndpoint)) {
     throw new Error("Invalid auth config: authorizationEndpoint must be an absolute URL");
   }
   if (!isAbsoluteHttpUrl(tokenEndpoint)) {
     throw new Error("Invalid auth config: tokenEndpoint must be an absolute URL");
+  }
+  if (registrationEndpoint && !isAbsoluteHttpUrl(registrationEndpoint)) {
+    throw new Error("Invalid auth config: registrationEndpoint must be an absolute URL");
+  }
+  if (value.clientName !== undefined && typeof value.clientName !== "string") {
+    throw new Error("Invalid auth config: clientName must be a string");
   }
   if (value.scopes !== undefined && !isStringArray(value.scopes)) {
     throw new Error("Invalid auth config: scopes must be a string array");
@@ -72,7 +85,9 @@ export function parseOptionalOAuthProviderConfig(value: unknown): GatewayOAuthPr
     provider,
     authorizationEndpoint,
     tokenEndpoint,
-    clientId,
+    ...(clientId ? { clientId } : {}),
+    ...(registrationEndpoint ? { registrationEndpoint } : {}),
+    ...(typeof value.clientName === "string" && value.clientName.length > 0 ? { clientName: value.clientName } : {}),
     ...(value.store === "keychain" || value.store === "file" ? { store: value.store } : {}),
     ...(value.scopes ? { scopes: value.scopes } : {}),
     ...(typeof value.redirectUri === "string" && value.redirectUri.length > 0

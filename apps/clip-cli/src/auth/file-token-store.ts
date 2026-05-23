@@ -15,6 +15,7 @@ type StoredOAuthToken = {
   expires_at?: number;
   scope?: string;
   provider?: string;
+  client_id?: string;
 };
 
 export function createTargetFileOAuthTokenStore(options: CreateTargetFileOAuthTokenStoreOptions): OAuthTokenStore {
@@ -72,6 +73,7 @@ function storedFromToken(subject: OAuthSubject, token: OAuthToken): StoredOAuthT
     ...(token.refreshToken ? { refresh_token: token.refreshToken } : {}),
     ...(token.expiresAt !== undefined ? { expires_at: token.expiresAt } : {}),
     ...(token.scope ? { scope: token.scope } : {}),
+    ...(token.clientId ? { client_id: token.clientId } : {}),
     provider: subject.provider,
   };
 }
@@ -89,6 +91,7 @@ function tokenFromStored(stored: StoredOAuthToken): OAuthToken | undefined {
       : {}),
     ...(typeof stored.expires_at === "number" ? { expiresAt: stored.expires_at } : {}),
     ...(typeof stored.scope === "string" && stored.scope.length > 0 ? { scope: stored.scope } : {}),
+    ...(typeof stored.client_id === "string" && stored.client_id.length > 0 ? { clientId: stored.client_id } : {}),
   };
 }
 
