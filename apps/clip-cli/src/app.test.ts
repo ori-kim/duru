@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createAppCli } from "./app.ts";
 
 describe("clip-cli demo app", () => {
@@ -42,7 +45,8 @@ describe("clip-cli demo app", () => {
   });
 
   test("uses notFound observer output", async () => {
-    const result = await createAppCli().run(["missing", "--json"]);
+    const home = await tempDir("missing");
+    const result = await withClipHome(home, () => createAppCli().run(["missing", "--json"]));
 
     expect(result.exitCode).toBe(1);
     expect(result.value).toEqual({
@@ -96,4 +100,43 @@ describe("clip-cli demo app", () => {
     expect(result.exitCode).toBe(3);
     expect(result.result).toEqual({ handledBy: "command", message: "recoverable failure" });
   });
+
+  test("persists cli gateway targets in CLIP_HOME and dispatches them", async () => {
+    const home = await tempDir("gateway");
+
+    await withClipHome(home, async () => {
+      const add = await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+      const list = await createAppCli().run(["list"], { render: false });
+      const run = await createAppCli().run(["say", "hello", "example"], { render: false });
+      const config = await readFile(join(home, "target", "cli", "say", "config.toml"), "utf8");
+
+      expect(add.exitCode).toBe(0);
+      expect(add.result).toEqual({ name: "say", type: "cli" });
+      expect(list.result).toEqual({ targets: [{ name: "say", type: "cli" }] });
+      expect(run.exitCode).toBe(0);
+      expect(run.result).toBe("hello example");
+      expect(config).toContain('name = "say"');
+      expect(config).toContain('type = "cli"');
+      expect(config).toContain("[config]");
+      expect(config).toContain('command = "echo"');
+    });
+  });
 });
+
+async function tempDir(label: string): Promise<string> {
+  return mkdtemp(join(tmpdir(), `clip-cli-${label}-`));
+}
+
+async function withClipHome<T>(home: string, fn: () => Promise<T>): Promise<T> {
+  const previous = process.env.CLIP_HOME;
+  process.env.CLIP_HOME = home;
+  try {
+    return await fn();
+  } finally {
+    if (previous === undefined) {
+      Reflect.deleteProperty(process.env, "CLIP_HOME");
+    } else {
+      process.env.CLIP_HOME = previous;
+    }
+  }
+}

@@ -16,8 +16,11 @@
         "clip": "./src/main.ts",
       },
       "dependencies": {
-        "@clip/kit": "workspace:*",
+        "@clip/cli-gateway": "workspace:*",
+        "@clip/env": "workspace:*",
+        "@clip/file-store": "workspace:*",
         "@clip/input-validation": "workspace:*",
+        "@clip/kit": "workspace:*",
         "@clip/renderer-json": "workspace:*",
         "@clip/renderer-text": "workspace:*",
         "zod": "^4.0.0",
@@ -26,6 +29,13 @@
     "core/clip-kit": {
       "name": "@clip/kit",
       "version": "0.0.0",
+    },
+    "packages/cli-gateway": {
+      "name": "@clip/cli-gateway",
+      "version": "0.0.0",
+      "dependencies": {
+        "@clip/kit": "workspace:*",
+      },
     },
     "packages/env": {
       "name": "@clip/env",
@@ -37,6 +47,10 @@
         "@clip/input-validation": "workspace:*",
         "zod": "^4.0.0",
       },
+    },
+    "packages/file-store": {
+      "name": "@clip/file-store",
+      "version": "0.0.0",
     },
     "packages/input-validation": {
       "name": "@clip/input-validation",
@@ -62,6 +76,13 @@
         "@clip/kit": "workspace:*",
       },
     },
+    "packages/virtual-plugins": {
+      "name": "@clip/virtual-plugins",
+      "version": "0.0.0",
+      "dependencies": {
+        "@clip/kit": "workspace:*",
+      },
+    },
   },
   "packages": {
     "@biomejs/biome": ["@biomejs/biome@1.9.4", "", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "1.9.4", "@biomejs/cli-darwin-x64": "1.9.4", "@biomejs/cli-linux-arm64": "1.9.4", "@biomejs/cli-linux-arm64-musl": "1.9.4", "@biomejs/cli-linux-x64": "1.9.4", "@biomejs/cli-linux-x64-musl": "1.9.4", "@biomejs/cli-win32-arm64": "1.9.4", "@biomejs/cli-win32-x64": "1.9.4" }, "bin": { "biome": "bin/biome" } }, "sha512-1rkd7G70+o9KkTn5KLmDYXihGoTaIGO9PIIN2ZB7UJxFrWw04CZHPYiMRjYsaDvVV7hP1dYNRLxSANLaBFGpog=="],
@@ -82,15 +103,21 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@1.9.4", "", { "os": "win32", "cpu": "x64" }, "sha512-8Y5wMhVIPaWe6jw2H+KlEm4wP/f7EW3810ZLmDlrEEy5KvBsb9ECEfu/kMWD484ijfQ8+nIi0giMgu9g1UAuuA=="],
 
-    "@clip/kit": ["@clip/kit@workspace:core/clip-kit"],
+    "@clip/cli-gateway": ["@clip/cli-gateway@workspace:packages/cli-gateway"],
 
     "@clip/env": ["@clip/env@workspace:packages/env"],
 
+    "@clip/file-store": ["@clip/file-store@workspace:packages/file-store"],
+
     "@clip/input-validation": ["@clip/input-validation@workspace:packages/input-validation"],
+
+    "@clip/kit": ["@clip/kit@workspace:core/clip-kit"],
 
     "@clip/renderer-json": ["@clip/renderer-json@workspace:packages/renderer-json"],
 
     "@clip/renderer-text": ["@clip/renderer-text@workspace:packages/renderer-text"],
+
+    "@clip/virtual-plugins": ["@clip/virtual-plugins@workspace:packages/virtual-plugins"],
 
     "@types/bun": ["@types/bun@1.3.12", "", { "dependencies": { "bun-types": "1.3.12" } }, "sha512-DBv81elK+/VSwXHDlnH3Qduw+KxkTIWi7TXkAeh24zpi5l0B2kUg9Ga3tb4nJaPcOFswflgi/yAvMVBPrxMB+A=="],
 

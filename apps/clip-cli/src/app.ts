@@ -1,10 +1,16 @@
+import { cliGateway, defaultGatewayAdapters } from "@clip/cli-gateway";
+import { env } from "@clip/env";
+import { createClipFileHome } from "@clip/file-store";
 import { input } from "@clip/input-validation";
 import { adaptResult, context, createCli, formatHelp, help, isHelpDocument, isValidationError, meta } from "@clip/kit";
 import { jsonRendererPlugin } from "@clip/renderer-json";
 import { textRendererPlugin } from "@clip/renderer-text";
 import { z } from "zod";
+import { createAppGatewayStore } from "./gateway-store.ts";
 
 export function createAppCli() {
+  const fileHome = createClipFileHome({ env: process.env });
+  const gatewayStore = createAppGatewayStore({ files: fileHome.store("target") });
   const cli = createCli({
     name: "clip",
   })
@@ -18,6 +24,8 @@ export function createAppCli() {
     )
     .use(textRendererPlugin())
     .use(jsonRendererPlugin())
+    .use(env())
+    .use(cliGateway({ store: gatewayStore, adapters: defaultGatewayAdapters() }))
     .use(help());
 
   cli.on("log", (ctx) => {
