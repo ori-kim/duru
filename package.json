@@ -5,7 +5,9 @@
   "private": true,
   "workspaces": ["apps/*", "core/*", "packages/*"],
   "scripts": {
+    "build": "bun build apps/clip-cli/src/main.ts --target bun --outfile dist/clip --packages bundle",
     "dev": "bun apps/clip-cli/src/main.ts",
+    "dev:watch": "bun build apps/clip-cli/src/main.ts --target bun --outfile dist/clip --packages bundle --watch",
     "check": "bun run typecheck && bun run lint && bun run test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
