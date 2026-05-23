@@ -3,6 +3,7 @@ import type { CliEventContext } from "@clip/kit";
 import { apiAdapter } from "./adapters/api";
 import { cliAdapter } from "./adapters/cli";
 import { graphqlAdapter } from "./adapters/graphql";
+import { grpcAdapter } from "./adapters/grpc";
 import { mcpAdapter } from "./adapters/mcp";
 import { scriptAdapter } from "./adapters/script";
 import { installGatewayCommands } from "./commands";
@@ -17,5 +18,5 @@ export function cliGateway(options: CliGatewayOptions): CliGatewayPlugin {
 }
 
 export function defaultGatewayAdapters(): readonly GatewayAdapter[] {
-  return [cliAdapter(), scriptAdapter(), apiAdapter(), graphqlAdapter(), mcpAdapter()];
+  return [cliAdapter(), scriptAdapter(), apiAdapter(), graphqlAdapter(), mcpAdapter(), grpcAdapter()];
 }

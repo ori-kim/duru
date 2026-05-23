@@ -16,7 +16,14 @@ describe("@clip/cli-gateway contract", () => {
 
     const result = await cli.run(["missing"], { render: false });
 
-    expect(defaultGatewayAdapters().map((adapter) => adapter.type)).toEqual(["cli", "script", "api", "graphql", "mcp"]);
+    expect(defaultGatewayAdapters().map((adapter) => adapter.type)).toEqual([
+      "cli",
+      "script",
+      "api",
+      "graphql",
+      "mcp",
+      "grpc",
+    ]);
     expect(result.ok).toBe(false);
   });
 
@@ -236,6 +243,33 @@ describe("@clip/cli-gateway contract", () => {
     expect(result).toEqual({
       ok: true,
       value: { status: 200, statusText: "OK", body: { jsonrpc: "2.0", id: 1, result: { tools: [] } } },
+      exitCode: 0,
+    });
+  });
+
+  test("provides a default grpc adapter that executes grpcurl-compatible commands", async () => {
+    const store = createMemoryGatewayStore();
+    const adapter = defaultGatewayAdapters().find((item) => item.type === "grpc");
+    const config = adapter?.schema.parse({
+      address: "localhost:50051",
+      command: "echo",
+      headers: { "X-Custom-Header": "custom-from-config" },
+      plaintext: true,
+    });
+    const target =
+      adapter && config
+        ? adapter.createTarget({
+            manifest: { name: "catservice", type: "grpc", config },
+            config,
+            context: { store },
+          })
+        : undefined;
+
+    const result = await target?.invoke({ argv: ["CatService.ListCats"] });
+
+    expect(result).toEqual({
+      ok: true,
+      value: "-plaintext -H X-Custom-Header: custom-from-config localhost:50051 CatService.ListCats",
       exitCode: 0,
     });
   });
