@@ -1003,6 +1003,54 @@ describe("@clip/cli-gateway runtime", () => {
     });
   });
 
+  test("enforces target allow and deny rules after alias expansion", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [
+        {
+          name: "test-service",
+          type: "cli",
+          config: { command: "test-service" },
+          allow: ["listCats"],
+          deny: ["deleteCats"],
+        },
+      ],
+      aliases: [{ target: "test-service", name: "cats", operation: "listCats" }],
+    });
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { command: config.command, argv: ctx.argv } };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ command: string }>;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
+
+    const allowed = await cli.run(["test-service", "cats"], { render: false });
+    const denied = await cli.run(["test-service", "deleteCats"], { render: false });
+    const notAllowed = await cli.run(["test-service", "updateCats"], { render: false });
+
+    expect(allowed.result).toEqual({ command: "test-service", argv: ["listCats"] });
+    expect(denied.ok).toBe(false);
+    expect(denied.exitCode).toBe(2);
+    expect(denied.result).toEqual({ message: 'Gateway target "test-service" denied operation: "deleteCats"' });
+    expect(notAllowed.ok).toBe(false);
+    expect(notAllowed.exitCode).toBe(2);
+    expect(notAllowed.result).toEqual({
+      message: 'Gateway target "test-service" does not allow operation: "updateCats"',
+    });
+  });
+
   test("merges target profiles before adapter execution", async () => {
     const store = createMemoryGatewayStore({
       targets: [{ name: "test-service", type: "cli", config: { command: "test-service", args: ["base"] } }],

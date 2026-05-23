@@ -27,7 +27,11 @@ export async function runGatewayTargetInvocation(
   const manifest = mergeTargetProfile(target, profile);
   const config = parseTargetConfig(adapter, manifest);
   const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
-  const result = await gatewayTarget.invoke({ argv: await targetArgv(ctx.argv.slice(1), target.name, options) });
+  const argv = await targetArgv(ctx.argv.slice(1), target.name, options);
+  const aclError = targetAclError(manifest, argv);
+  if (aclError) return ctx.exit(2, { message: aclError });
+
+  const result = await gatewayTarget.invoke({ argv });
   return gatewayExecutionResult(ctx, result);
 }
 
@@ -75,6 +79,21 @@ function mergeTargetProfile(
 function mergeConfig(targetConfig: unknown, profileConfig: unknown): unknown {
   if (!isRecord(targetConfig) || !isRecord(profileConfig)) return profileConfig;
   return { ...targetConfig, ...profileConfig };
+}
+
+function targetAclError(target: GatewayTargetRecord, argv: readonly string[]): string | undefined {
+  const operation = argv[0];
+  if (!operation) return undefined;
+
+  if (target.deny?.includes(operation)) {
+    return `Gateway target "${target.name}" denied operation: "${operation}"`;
+  }
+
+  if (target.allow && target.allow.length > 0 && !target.allow.includes(operation)) {
+    return `Gateway target "${target.name}" does not allow operation: "${operation}"`;
+  }
+
+  return undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
