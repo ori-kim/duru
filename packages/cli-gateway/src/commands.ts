@@ -1,7 +1,15 @@
 import { createCli } from "@clip/kit";
 import type { CliPluginApi } from "@clip/kit";
 import { unknownAdapterMessage, unknownProfileMessage, unknownTargetMessage } from "./runtime";
-import type { AuthContext, CliGatewayOptions, GatewayAdapter } from "./types";
+import type {
+  AuthContext,
+  CliGatewayOptions,
+  GatewayAdapter,
+  GatewayInspectReport,
+  GatewayTarget,
+  GatewayTargetCapabilities,
+  GatewayTool,
+} from "./types";
 
 export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOptions): void {
   const adapters = options.adapters ?? [];
@@ -39,6 +47,10 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
 
   api.command("refresh <target>", "Refresh a gateway target").action(async (ctx) => {
     return refreshCommand(ctx.params.target, options, adapters);
+  });
+
+  api.command("inspect <target>", "Inspect a gateway target").action(async (ctx) => {
+    return inspectCommand(ctx.params.target, options, adapters);
   });
 
   api.command("login <target>", "Login to a gateway target").action(async (ctx) => {
@@ -144,6 +156,66 @@ async function refreshCommand(targetName: string, options: CliGatewayOptions, ad
   return { target: target.name, type: target.type, refreshed: true, updated: true };
 }
 
+async function inspectCommand(
+  targetValue: string,
+  options: CliGatewayOptions,
+  adapters: readonly GatewayAdapter[],
+): Promise<GatewayInspectReport | ReturnType<typeof exit>> {
+  const targetRef = targetReference(targetValue);
+  const target = await options.store.getTarget(targetRef.name);
+  if (!target) return exit(2, { message: unknownTargetMessage(targetRef.name) });
+
+  const profile = targetRef.profile ? await options.store.getProfile(target.name, targetRef.profile) : undefined;
+  if (targetRef.profile && !profile) {
+    return exit(2, { message: unknownProfileMessage(target.name, targetRef.profile) });
+  }
+
+  const adapter = adapters.find((item) => item.type === target.type);
+  if (!adapter) {
+    return {
+      ok: false,
+      target: {
+        name: target.name,
+        type: target.type,
+        ...(targetRef.profile ? { profile: targetRef.profile } : {}),
+        config: { redacted: true },
+        registered: false,
+        capabilities: emptyCapabilities(),
+        operations: [],
+      },
+      diagnostics: [
+        {
+          severity: "error",
+          code: "target.type.unregistered",
+          message: unknownAdapterMessage(target.type),
+          path: ["type"],
+        },
+      ],
+    };
+  }
+
+  const manifest = profile?.config ? { ...target, config: mergeConfig(target.config, profile.config) } : target;
+  const config = adapter.schema.parse(manifest.config);
+  const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
+  const row = await gatewayTarget.listRow?.();
+  const operations = await inspectOperations(gatewayTarget, target.name);
+
+  return {
+    ok: true,
+    target: {
+      name: target.name,
+      type: target.type,
+      ...(targetRef.profile ? { profile: targetRef.profile } : {}),
+      config: { redacted: true },
+      registered: true,
+      ...(row?.summary ? { summary: row.summary } : {}),
+      capabilities: targetCapabilities(gatewayTarget),
+      operations,
+    },
+    diagnostics: [],
+  };
+}
+
 async function authCommand(
   action: "login" | "logout",
   targetValue: string,
@@ -193,6 +265,33 @@ function mergeConfig(targetConfig: unknown, profileConfig: unknown): unknown {
 
 function unsupportedAdapterActionMessage(type: string, action: "login" | "logout" | "refresh"): string {
   return `Gateway adapter "${type}" does not support ${action}`;
+}
+
+async function inspectOperations(target: GatewayTarget, name: string): Promise<readonly GatewayTool[]> {
+  const operations = await target.catalog?.({ target: name });
+  return operations ?? [];
+}
+
+function targetCapabilities(target: GatewayTarget): GatewayTargetCapabilities {
+  return {
+    invoke: true,
+    catalog: Boolean(target.catalog),
+    refresh: Boolean(target.refresh),
+    ...(target.auth
+      ? {
+          auth: {
+            status: Boolean(target.auth.status),
+            login: Boolean(target.auth.login),
+            logout: Boolean(target.auth.logout),
+          },
+        }
+      : {}),
+    complete: Boolean(target.complete),
+  };
+}
+
+function emptyCapabilities(): GatewayTargetCapabilities {
+  return { invoke: false, catalog: false, refresh: false, complete: false };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

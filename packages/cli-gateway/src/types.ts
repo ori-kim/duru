@@ -107,6 +107,42 @@ export type GatewayTarget<TConfig = unknown> = {
   complete?(ctx: GatewayCompletionContext): Promise<readonly CompletionItem[]>;
 };
 
+export type GatewayInspectReport = {
+  ok: boolean;
+  target: GatewayTargetInspection;
+  diagnostics: readonly GatewayDiagnostic[];
+};
+
+export type GatewayTargetInspection = {
+  name: string;
+  type: string;
+  profile?: string;
+  config: { redacted: true };
+  registered: boolean;
+  summary?: string;
+  capabilities: GatewayTargetCapabilities;
+  operations: readonly GatewayTool[];
+};
+
+export type GatewayTargetCapabilities = {
+  invoke: boolean;
+  catalog: boolean;
+  refresh: boolean;
+  auth?: {
+    status: boolean;
+    login: boolean;
+    logout: boolean;
+  };
+  complete: boolean;
+};
+
+export type GatewayDiagnostic = {
+  severity: "error" | "warning" | "info";
+  code: string;
+  message: string;
+  path?: readonly string[];
+};
+
 export type GatewayTargetAuth = {
   status?(ctx: GatewayAuthContext): Promise<GatewayAuthState>;
   login?(ctx: GatewayAuthContext): Promise<GatewayAuthState> | Promise<void>;
