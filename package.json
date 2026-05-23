@@ -6,8 +6,10 @@
   "workspaces": ["apps/*", "core/*", "packages/*"],
   "scripts": {
     "build": "bun build apps/clip-cli/src/main.ts --target bun --outfile dist/clip --packages bundle",
-    "dev": "bun apps/clip-cli/src/main.ts",
+    "dev": "CLIP_HOME=.clip-test bun apps/clip-cli/src/main.ts",
+    "dev:local": "bun run dev",
     "dev:watch": "bun build apps/clip-cli/src/main.ts --target bun --outfile dist/clip --packages bundle --watch",
+    "clip:local": "CLIP_HOME=.clip-test ./dist/clip",
     "check": "bun run typecheck && bun run lint && bun run test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",

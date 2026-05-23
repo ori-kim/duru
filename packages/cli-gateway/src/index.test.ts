@@ -16,8 +16,26 @@ describe("@clip/cli-gateway contract", () => {
 
     const result = await cli.run(["missing"], { render: false });
 
-    expect(defaultGatewayAdapters()).toEqual([]);
+    expect(defaultGatewayAdapters().map((adapter) => adapter.type)).toEqual(["cli"]);
     expect(result.ok).toBe(false);
+  });
+
+  test("provides a default cli adapter that executes local commands", async () => {
+    const store = createMemoryGatewayStore();
+    const adapter = defaultGatewayAdapters().find((item) => item.type === "cli");
+    const config = adapter?.schema.parse({ command: "echo" });
+    const target =
+      adapter && config
+        ? adapter.createTarget({
+            manifest: { name: "say", type: "cli", config },
+            config,
+            context: { store },
+          })
+        : undefined;
+
+    const result = await target?.invoke({ argv: ["hello", "example"] });
+
+    expect(result).toEqual({ ok: true, value: "hello example", exitCode: 0 });
   });
 
   test("stores target records in memory without exposing mutable references", async () => {
