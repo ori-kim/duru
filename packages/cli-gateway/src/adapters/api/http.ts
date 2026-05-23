@@ -1,18 +1,11 @@
 import { oauthAuthorizationHeader } from "../../auth";
 import type { GatewayContext, GatewayInvokeContext, GatewayResult } from "../../types";
 import type { ApiAdapterConfig } from "./config";
-
-type RequestArgs = {
-  method: string;
-  path: string;
-  query: Record<string, string | readonly string[]>;
-  headers: Record<string, string>;
-  body?: string;
-};
+import { buildUrl, isRawRequestStart, parseRequestArgs } from "./raw-request";
+import { responseBody } from "./response";
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
-
-const httpMethods = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]);
+type RequestBody = NonNullable<RequestInit["body"]>;
 
 export async function executeRawApiTarget(
   config: ApiAdapterConfig,
@@ -21,7 +14,7 @@ export async function executeRawApiTarget(
   target: string,
   profile: string | undefined,
 ): Promise<GatewayResult> {
-  let request: RequestArgs;
+  let request: ReturnType<typeof parseRequestArgs>;
 
   try {
     request = parseRequestArgs(ctx.argv);
@@ -40,7 +33,13 @@ export async function executeRawApiTarget(
   const baseHeaders = {
     ...(config.headers ?? {}),
     ...request.headers,
-    ...(request.body && !hasHeader({ ...(config.headers ?? {}), ...request.headers }, "content-type")
+    ...(request.contentType && !hasHeader({ ...(config.headers ?? {}), ...request.headers }, "content-type")
+      ? { "content-type": request.contentType }
+      : {}),
+    ...(request.body &&
+    !request.contentType &&
+    defaultJsonBody(request.body) &&
+    !hasHeader({ ...(config.headers ?? {}), ...request.headers }, "content-type")
       ? { "content-type": "application/json" }
       : {}),
   };
@@ -74,7 +73,7 @@ export async function performApiRequest(
     url: string;
     method: string;
     headers: Record<string, string>;
-    body?: string;
+    body?: RequestBody;
   },
   ctx: GatewayInvokeContext,
   gatewayContext: GatewayContext,
@@ -155,86 +154,10 @@ export async function fetchSpec(
   }
 }
 
-export function isRawRequestStart(value: string): boolean {
-  return httpMethods.has(value.toUpperCase()) || value.startsWith("/") || isAbsoluteHttpUrl(value);
-}
+export { isRawRequestStart };
 
 export function hasHeader(headers: Record<string, string>, name: string): boolean {
   return Object.keys(headers).some((key) => key.toLowerCase() === name.toLowerCase());
-}
-
-function parseRequestArgs(argv: readonly string[]): RequestArgs {
-  const [first, second, ...rest] = argv;
-  const firstMethod = first?.toUpperCase();
-  const method = firstMethod && httpMethods.has(firstMethod) ? firstMethod : "GET";
-  const path = method === "GET" && firstMethod !== "GET" ? (first ?? "/") : (second ?? "/");
-  const args = method === "GET" && firstMethod !== "GET" ? argv.slice(1) : rest;
-  const query: Record<string, string | readonly string[]> = {};
-  const headers: Record<string, string> = {};
-  let body: string | undefined;
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (!arg) continue;
-
-    if (arg === "--header" || arg === "-H") {
-      const header = args[++index];
-      if (!header) throw new Error(`${arg} requires <name:value>`);
-      setHeader(headers, header);
-      continue;
-    }
-
-    if (arg.startsWith("--header=")) {
-      setHeader(headers, arg.slice("--header=".length));
-      continue;
-    }
-
-    if (arg === "--body") {
-      const value = args[++index];
-      if (value === undefined) throw new Error("--body requires a value");
-      body = value;
-      continue;
-    }
-
-    if (arg.startsWith("--body=")) {
-      body = arg.slice("--body=".length);
-      continue;
-    }
-
-    if (arg.startsWith("--")) {
-      const key = arg.slice(2);
-      const value = args[index + 1]?.startsWith("--") || args[index + 1] === undefined ? "true" : args[++index];
-      appendQuery(query, key, value ?? "");
-    }
-  }
-
-  return { method, path, query, headers, ...(body ? { body } : {}) };
-}
-
-function setHeader(headers: Record<string, string>, value: string): void {
-  const separator = value.indexOf(":");
-  if (separator <= 0) throw new Error(`Invalid header: ${value}`);
-  headers[value.slice(0, separator).trim()] = value.slice(separator + 1).trim();
-}
-
-function appendQuery(query: Record<string, string | readonly string[]>, key: string, value: string): void {
-  const current = query[key];
-  if (current === undefined) {
-    query[key] = value;
-    return;
-  }
-  query[key] = Array.isArray(current) ? [...current, value] : [current, value];
-}
-
-function buildUrl(baseUrl: string, path: string, query: RequestArgs["query"]): string {
-  if (isAbsoluteHttpUrl(path)) throw new Error("Absolute api operation paths are not allowed");
-
-  const url = new URL(path, `${baseUrl.replace(/\/+$/, "")}/`);
-  for (const [key, value] of Object.entries(query)) {
-    const values = Array.isArray(value) ? value : [value];
-    for (const item of values) url.searchParams.append(key, item);
-  }
-  return url.toString();
 }
 
 function fetcher(context: GatewayContext): FetchLike {
@@ -242,28 +165,10 @@ function fetcher(context: GatewayContext): FetchLike {
   return typeof candidate === "function" ? (candidate as FetchLike) : fetch;
 }
 
-async function responseBody(response: Response): Promise<unknown> {
-  const text = await response.text();
-  if (!text) return "";
-  if (response.headers.get("content-type")?.includes("json")) {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return text;
-    }
-  }
-  return text;
-}
-
-function isAbsoluteHttpUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function defaultJsonBody(body: RequestBody): boolean {
+  return typeof body === "string";
 }

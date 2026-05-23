@@ -111,6 +111,46 @@ describe("@clip/cli-gateway completion", () => {
     });
   });
 
+  test("uses cached catalog snapshots for operation completion", async () => {
+    let complete: CliPluginApi["complete"] | undefined;
+    let catalogCalls = 0;
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "notes-api", type: "api", config: {} }],
+      catalogs: [{ target: "notes-api", operations: [{ name: "listItems", description: "List items" }] }],
+    });
+    const adapter = {
+      ...fakeAdapter(),
+      createTarget(input) {
+        const target = fakeAdapter().createTarget(input);
+        return {
+          ...target,
+          async catalog() {
+            catalogCalls += 1;
+            return [{ name: "staleItems", description: "Stale items" }];
+          },
+        };
+      },
+    } satisfies GatewayAdapter<Record<string, unknown>>;
+    const capture = createPlugin((api) => {
+      complete = api.complete;
+    });
+    createCli({ name: "clip" })
+      .use(cliGateway({ store, adapters: [adapter] }))
+      .route("gateway", createGatewayCli({ store, adapters: [adapter] }, { group: "Gateway" }))
+      .use(capture);
+
+    const result = await complete?.(completionContext(["notes-api", ""]));
+
+    expect(result?.items).toContainEqual({
+      value: "listItems",
+      description: "List items",
+      kind: "operation",
+      group: "gateway operations",
+    });
+    expect(result?.items.some((item) => item.value === "staleItems")).toBe(false);
+    expect(catalogCalls).toBe(0);
+  });
+
   test("completes MCP tools discovered from SSE catalog responses", async () => {
     let complete: CliPluginApi["complete"] | undefined;
     const store = createMemoryGatewayStore({

@@ -2,6 +2,7 @@ import { createCli } from "@clip/kit";
 import type { CliPluginApi, CommandPattern } from "@clip/kit";
 import { unknownAdapterMessage, unknownProfileMessage, unknownTargetMessage } from "./runtime";
 import type {
+  AddInput,
   AuthContext,
   CliGatewayOptions,
   GatewayAdapter,
@@ -45,18 +46,34 @@ export function installGatewayCommands(
 
   command("add <name> [...args]", "Add a gateway target")
     .option("--type <type>", "Gateway adapter type")
+    .option("--transport <transport>", "Gateway target transport")
+    .option("--description <description>", "Gateway target description")
+    .option("--allow <patterns>", "Allowed gateway operations")
+    .option("--deny <patterns>", "Denied gateway operations")
     .action(async (ctx) => {
       const name = ctx.params.name;
       const explicitType = stringOption(ctx.options.type);
       const argv = stringArrayParam(ctx.params.args);
-      const adapter = await resolveAddAdapter(adapters, { name, type: explicitType, argv });
+      const allow = stringListOption(ctx.options.allow);
+      const deny = stringListOption(ctx.options.deny);
+      const addOptions = {
+        ...(ctx.options.transport ? { transport: ctx.options.transport } : {}),
+        ...(ctx.options.description ? { description: ctx.options.description } : {}),
+      };
+      const adapter = await resolveAddAdapter(adapters, { name, type: explicitType, argv, options: addOptions });
       if (adapter.kind === "error") return ctx.exit(2, { message: adapter.message });
 
       const config = adapter.value.add
-        ? await adapter.value.add({ name, type: adapter.value.type, argv })
+        ? await adapter.value.add({ name, type: adapter.value.type, argv, options: addOptions })
         : adapter.value.schema.parse({});
 
-      await options.store.saveTarget({ name, type: adapter.value.type, config });
+      await options.store.saveTarget({
+        name,
+        type: adapter.value.type,
+        config,
+        ...(allow.length > 0 ? { allow } : {}),
+        ...(deny.length > 0 ? { deny } : {}),
+      });
 
       return { name, type: adapter.value.type };
     });
@@ -120,22 +137,33 @@ export function installGatewayCommands(
     return styleCommand(aliases.command(pattern, description), installOptions);
   };
 
-  aliasCommand("add <target> <name> <operation> [...args]", "Add a gateway target alias").action(async (ctx) => {
-    const target = ctx.params.target;
-    const name = ctx.params.name;
-    const operation = ctx.params.operation;
-    const args = stringArrayParam(ctx.params.args);
+  aliasCommand("add <target> <name> <operation> [...args]", "Add a gateway target alias")
+    .option("--input-json <json>", "Static JSON object input for the alias")
+    .action(async (ctx) => {
+      const target = ctx.params.target;
+      const name = ctx.params.name;
+      const operation = ctx.params.operation;
+      const args = stringArrayParam(ctx.params.args);
+      const input = ctx.options.inputJson === undefined ? undefined : parseJsonObjectOption(ctx.options.inputJson);
+      if (input?.kind === "error") return ctx.exit(2, { message: input.message });
 
-    await options.store.saveAlias(target, { target, name, operation, args });
+      await options.store.saveAlias(target, {
+        target,
+        name,
+        operation,
+        ...(input?.value ? { input: input.value } : {}),
+        args,
+      });
 
-    return { target, name, operation };
-  });
+      return { target, name, operation };
+    });
 
   aliasCommand("list <target>", "List gateway target aliases").action(async (ctx) => ({
     aliases: (await options.store.listAliases(ctx.params.target)).map((alias) => ({
       target: alias.target,
       name: alias.name,
       operation: alias.operation,
+      ...(alias.input ? { input: alias.input } : {}),
       args: alias.args ?? [],
     })),
   }));
@@ -215,7 +243,7 @@ function styleCommand<TBuilder extends { hidden(hidden?: boolean): TBuilder; gro
 
 async function resolveAddAdapter(
   adapters: readonly GatewayAdapter[],
-  input: { name: string; type?: string; argv: readonly string[] },
+  input: AddInput,
 ): Promise<{ kind: "ok"; value: GatewayAdapter } | { kind: "error"; message: string }> {
   if (input.type) {
     const adapter = adapters.find((item) => item.type === input.type);
@@ -246,17 +274,36 @@ async function refreshCommand(targetName: string, options: CliGatewayOptions, ad
   if (!adapter) return exit(2, { message: unknownAdapterMessage(target.type) });
 
   const config = adapter.schema.parse(target.config);
-  const gatewayTarget = adapter.createTarget({ manifest: target, config, context: options });
-  if (!gatewayTarget.refresh) return exit(2, { message: unsupportedAdapterActionMessage(target.type, "refresh") });
-
-  const refreshed = await gatewayTarget.refresh({ target: target.name });
-  if (refreshed?.config === undefined) {
-    return { target: target.name, type: target.type, refreshed: true, updated: false };
+  let manifest = target;
+  let gatewayTarget = adapter.createTarget({ manifest, config, context: options });
+  if (!gatewayTarget.refresh && !gatewayTarget.catalog) {
+    return exit(2, { message: unsupportedAdapterActionMessage(target.type, "refresh") });
   }
 
-  await options.store.saveTarget({ ...target, config: adapter.schema.parse(refreshed.config) });
+  let updated = false;
+  if (gatewayTarget.refresh) {
+    const refreshed = await gatewayTarget.refresh({ target: target.name });
+    if (refreshed?.config !== undefined) {
+      manifest = { ...target, config: adapter.schema.parse(refreshed.config) };
+      await options.store.saveTarget(manifest);
+      gatewayTarget = adapter.createTarget({ manifest, config: manifest.config, context: options });
+      updated = true;
+    }
+  }
 
-  return { target: target.name, type: target.type, refreshed: true, updated: true };
+  await refreshTargetCatalog(gatewayTarget, target.name, options);
+
+  return { target: target.name, type: target.type, refreshed: true, updated };
+}
+
+async function refreshTargetCatalog(
+  target: GatewayTarget,
+  targetName: string,
+  options: CliGatewayOptions,
+): Promise<void> {
+  const operations = await target.catalog?.({ target: targetName });
+  if (!operations || !options.store.saveCatalog) return;
+  await options.store.saveCatalog({ target: targetName, operations, refreshedAt: new Date().toISOString() });
 }
 
 async function checkCommand(
@@ -555,6 +602,31 @@ function stringArrayParam(value: unknown): readonly string[] {
   if (Array.isArray(value)) return value.map(String);
   if (typeof value === "string") return [value];
   return [];
+}
+
+function stringListOption(value: unknown): readonly string[] {
+  const values = stringArrayParam(value);
+  return values.flatMap((item) =>
+    item
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean),
+  );
+}
+
+function parseJsonObjectOption(
+  value: unknown,
+): { kind: "ok"; value: Record<string, unknown> } | { kind: "error"; message: string } | undefined {
+  if (value === undefined) return undefined;
+  const text =
+    typeof value === "string" ? value : Array.isArray(value) ? String(value[value.length - 1]) : String(value);
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!isRecord(parsed)) return { kind: "error", message: "--input-json must be a JSON object" };
+    return { kind: "ok", value: parsed };
+  } catch (error) {
+    return { kind: "error", message: `Invalid --input-json: ${errorMessage(error)}` };
+  }
 }
 
 function exit(exitCode: number, result: unknown) {

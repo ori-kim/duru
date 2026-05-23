@@ -284,7 +284,7 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
   ): Promise<GatewayAliasRecord | undefined> {
     const path = aliasPath(type, target, name, readExtension);
     const record = await files.read<AliasFileRecord>(path);
-    return record ? { ...record, source: source(path, readExtension) } : undefined;
+    return record ? aliasFromFile(record, target, source(path, readExtension)) : undefined;
   }
 
   async function requireTarget(target: string): Promise<GatewayTargetRecord> {
@@ -370,6 +370,21 @@ function bindingPayload(record: GatewayBindingRecord): BindingFileRecord {
 function aliasPayload(target: string, record: GatewayAliasRecord): AliasFileRecord {
   const { source: _source, ...payload } = record;
   return { ...payload, target };
+}
+
+function aliasFromFile(
+  record: AliasFileRecord,
+  target: string,
+  source: GatewayAliasRecord["source"],
+): GatewayAliasRecord {
+  return {
+    target,
+    name: record.name,
+    operation: record.operation,
+    ...(isRecord(record.input) ? { input: record.input } : {}),
+    ...(isStringArray(record.args) ? { args: record.args } : {}),
+    source,
+  };
 }
 
 function withoutUndefined<T extends object>(record: T): T {

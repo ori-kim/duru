@@ -383,6 +383,35 @@ describe("createCli", () => {
     expect(command.rendered?.stdout).toContain("clip call search");
   });
 
+  test("shows namespace help when a dynamic route shares the namespace literal", async () => {
+    const gateway = createCli();
+    gateway.command("add <name>", "Add gateway target").action(() => undefined);
+
+    const targetHelpRoute = createPlugin((api) => {
+      api.helpRoutes(() => [
+        {
+          pattern: "gateway <target> [...args]",
+          description: "Run a gateway target",
+          options: [],
+        },
+      ]);
+    });
+    const cli = createCli({ name: "clip" })
+      .use(helpTextAdapter())
+      .use(renderer(testRenderer()))
+      .route("gateway", gateway)
+      .use(targetHelpRoute)
+      .use(help());
+
+    const result = await cli.run(["gateway", "--help"]);
+    const stdout = result.rendered?.stdout ?? "";
+
+    expect(stdout).toContain("Usage: clip gateway <command>");
+    expect(stdout).toContain("gateway add <name>  Add gateway target");
+    expect(stdout).toContain("gateway <target> [...args]  Run a gateway target");
+    expect(stdout).not.toContain("Usage: clip gateway <target> [...args]");
+  });
+
   test("keeps usage overrides relative to routed app prefixes", async () => {
     const registry = createCli();
     registry

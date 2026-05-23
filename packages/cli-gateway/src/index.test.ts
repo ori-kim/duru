@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   type GatewayAdapter,
   type GatewayContext,
@@ -101,6 +104,46 @@ describe("@clip/cli-gateway contract", () => {
     const result = await target?.invoke({ argv: ["example"] });
 
     expect(result).toEqual({ ok: true, value: "hello example", exitCode: 0 });
+  });
+
+  test("provides a script target with configured commands", async () => {
+    const store = createMemoryGatewayStore();
+    const adapter = defaultGatewayAdapters().find((item) => item.type === "script");
+    const config = adapter?.schema.parse({
+      description: "Local scripts",
+      commands: {
+        greet: {
+          description: "Greet someone",
+          script: "printf 'hello %s\\n' \"$1\"",
+          args: ["name"],
+        },
+      },
+    });
+    const target =
+      adapter && config
+        ? adapter.createTarget({
+            manifest: { name: "local-scripts", type: "script", config },
+            config,
+            context: { store },
+          })
+        : undefined;
+
+    const catalog = await target?.catalog?.({ target: "local-scripts" });
+    const help = await target?.invoke({ argv: ["--help"] });
+    const describe = await target?.invoke({ argv: ["describe", "greet"] });
+    const run = await target?.invoke({ argv: ["greet", "example"] });
+
+    expect(catalog).toEqual([{ name: "greet", description: "Greet someone" }]);
+    expect(help).toMatchObject({
+      ok: true,
+      value: {
+        target: "local-scripts",
+        type: "script",
+        usage: "local-scripts <command>",
+      },
+    });
+    expect(describe).toEqual({ ok: true, value: { name: "greet", description: "Greet someone" }, exitCode: 0 });
+    expect(run).toEqual({ ok: true, value: "hello example", exitCode: 0 });
   });
 
   test("provides a default api adapter that executes HTTP requests", async () => {
@@ -406,11 +449,99 @@ describe("@clip/cli-gateway contract", () => {
           { name: "tools", description: "List available MCP tools" },
           { name: "describe <tool>", description: "Describe an MCP tool" },
           { name: "types", description: "List available MCP types" },
+          { name: "raw <method>", description: "Call a raw MCP JSON-RPC method" },
           { name: "listCats", description: "List cats", inputSchema: { type: "object", properties: {} } },
         ],
       },
       exitCode: 0,
     });
+  });
+
+  test("provides MCP stdio transport catalog discovery", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clip-mcp-stdio-"));
+    const server = join(home, "mcp-server.js");
+    await writeFile(
+      server,
+      [
+        "process.stdin.setEncoding('utf8');",
+        "let buffer = '';",
+        "process.stdin.on('data', (chunk) => {",
+        "  buffer += chunk;",
+        "  const lines = buffer.split('\\n');",
+        "  buffer = lines.pop() ?? '';",
+        "  for (const line of lines) {",
+        "    if (!line.trim()) continue;",
+        "    const req = JSON.parse(line);",
+        "    if (req.method === 'initialize') {",
+        "      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: req.id, result: {} }) + '\\n');",
+        "    } else if (req.method === 'tools/list') {",
+        "      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: req.id, result: { tools: [{ name: 'listCats', description: 'List cats' }] } }) + '\\n');",
+        "    }",
+        "  }",
+        "});",
+      ].join("\n"),
+    );
+    const store = createMemoryGatewayStore();
+    const adapter = defaultGatewayAdapters().find((item) => item.type === "mcp");
+    const config = adapter?.schema.parse({ transport: "stdio", command: "bun", args: [server] });
+    const target =
+      adapter && config
+        ? adapter.createTarget({
+            manifest: { name: "catservice", type: "mcp", config },
+            config,
+            context: { store },
+          })
+        : undefined;
+
+    const catalog = await target?.catalog?.({ target: "catservice" });
+
+    expect(catalog).toEqual([{ name: "listCats", description: "List cats" }]);
+  });
+
+  test("provides MCP SSE transport catalog discovery", async () => {
+    const encoder = new TextEncoder();
+    let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const calls: string[] = [];
+    const store = createMemoryGatewayStore();
+    const adapter = defaultGatewayAdapters().find((item) => item.type === "mcp");
+    const config = adapter?.schema.parse({ transport: "sse", url: "https://catservice.example.com/sse" });
+    const target =
+      adapter && config
+        ? adapter.createTarget({
+            manifest: { name: "catservice", type: "mcp", config },
+            config,
+            context: {
+              store,
+              services: {
+                async fetch(input: string | URL | Request) {
+                  calls.push(String(input));
+                  if (String(input).endsWith("/sse")) {
+                    return new Response(
+                      new ReadableStream<Uint8Array>({
+                        start(streamController) {
+                          controller = streamController;
+                          streamController.enqueue(encoder.encode("event: endpoint\ndata: /messages\n\n"));
+                        },
+                      }),
+                      { headers: { "content-type": "text/event-stream" } },
+                    );
+                  }
+                  controller?.enqueue(
+                    encoder.encode(
+                      'event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"listCats","description":"List cats"}]}}\n\n',
+                    ),
+                  );
+                  return new Response("", { status: 202, statusText: "Accepted" });
+                },
+              },
+            },
+          })
+        : undefined;
+
+    const catalog = await target?.catalog?.({ target: "catservice" });
+
+    expect(catalog).toEqual([{ name: "listCats", description: "List cats" }]);
+    expect(calls).toEqual(["https://catservice.example.com/sse", "https://catservice.example.com/messages"]);
   });
 
   test("provides a default grpc adapter that executes grpcurl-compatible commands", async () => {
@@ -640,6 +771,61 @@ describe("@clip/cli-gateway commands", () => {
     });
   });
 
+  test("passes add options into default gateway adapters", async () => {
+    const store = createMemoryGatewayStore();
+    const cli = createGatewayTestCli({ store, adapters: defaultGatewayAdapters() });
+
+    await cli.run(["gateway", "add", "catservice", "bun", "server.ts", "--type", "mcp", "--transport", "stdio"], {
+      render: false,
+    });
+    await cli.run(["gateway", "add", "local-scripts", "--type", "script", "--description", "Local scripts"], {
+      render: false,
+    });
+
+    expect(await store.getTarget("catservice")).toEqual({
+      name: "catservice",
+      type: "mcp",
+      config: { transport: "stdio", command: "bun", args: ["server.ts"] },
+    });
+    expect(await store.getTarget("local-scripts")).toEqual({
+      name: "local-scripts",
+      type: "script",
+      config: { description: "Local scripts", commands: {} },
+    });
+  });
+
+  test("registers add command with target ACL options", async () => {
+    const store = createMemoryGatewayStore();
+    const cli = createGatewayTestCli({ store, adapters: defaultGatewayAdapters() });
+
+    const result = await cli.run(
+      [
+        "gateway",
+        "add",
+        "catservice",
+        "https://catservice.example.com/mcp",
+        "--type",
+        "mcp",
+        "--allow",
+        "list*",
+        "--allow",
+        "search",
+        "--deny",
+        "delete*",
+      ],
+      { render: false },
+    );
+
+    expect(result.result).toEqual({ name: "catservice", type: "mcp" });
+    expect(await store.getTarget("catservice")).toEqual({
+      name: "catservice",
+      type: "mcp",
+      config: { url: "https://catservice.example.com/mcp" },
+      allow: ["list*", "search"],
+      deny: ["delete*"],
+    });
+  });
+
   test("registers gateway-prefixed management commands", async () => {
     const store = createMemoryGatewayStore();
     const adapter = {
@@ -843,6 +1029,66 @@ describe("@clip/cli-gateway commands", () => {
     expect(await store.listAliases("test-service")).toEqual([]);
   });
 
+  test("registers aliases with JSON object input and expands it before alias args", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+    });
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { command: config.command, argv: ctx.argv } };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ command: string }>;
+    const cli = createGatewayTestCli({ store, adapters: [adapter] });
+
+    const add = await cli.run(
+      [
+        "gateway",
+        "alias",
+        "add",
+        "test-service",
+        "cats",
+        "listCats",
+        "--input-json",
+        '{"tag":"test-service","limit":20}',
+        "--limit",
+        "10",
+      ],
+      { render: false },
+    );
+    const list = await cli.run(["gateway", "alias", "list", "test-service"], { render: false });
+    const run = await cli.run(["test-service", "cats", "--tag", "example"], { render: false });
+
+    expect(add.result).toEqual({ target: "test-service", name: "cats", operation: "listCats" });
+    expect(list.result).toEqual({
+      aliases: [
+        {
+          target: "test-service",
+          name: "cats",
+          operation: "listCats",
+          input: { tag: "test-service", limit: 20 },
+          args: ["--limit", "10"],
+        },
+      ],
+    });
+    expect(run.result).toEqual({
+      command: "test-service",
+      argv: ["listCats", '{"tag":"test-service","limit":20}', "--limit", "10", "--tag", "example"],
+    });
+  });
+
   test("registers profile commands backed by the injected store", async () => {
     const store = createMemoryGatewayStore({
       targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
@@ -989,6 +1235,42 @@ describe("@clip/cli-gateway commands", () => {
       config: { url: "https://api.example.com", refreshedTarget: "notes-api", version: 2 },
       timeoutMs: 30000,
     });
+  });
+
+  test("registers refresh command that persists catalog snapshots", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "notes-api", type: "api", config: { url: "https://api.example.com" } }],
+    });
+    const adapter = {
+      type: "api",
+      schema: {
+        parse(value: unknown) {
+          return value as { url: string };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke() {
+            return { ok: true };
+          },
+          async catalog() {
+            return [{ name: "listItems", description: "List items" }];
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ url: string }>;
+    const cli = createGatewayTestCli({ store, adapters: [adapter] });
+
+    const result = await cli.run(["gateway", "refresh", "notes-api"], { render: false });
+    const catalog = await store.getCatalog?.("notes-api");
+
+    expect(result.result).toEqual({ target: "notes-api", type: "api", refreshed: true, updated: false });
+    expect(catalog?.target).toBe("notes-api");
+    expect(catalog?.operations).toEqual([{ name: "listItems", description: "List items" }]);
+    expect(typeof catalog?.refreshedAt).toBe("string");
   });
 
   test("reports stable refresh command errors for unsupported adapters", async () => {
@@ -1238,6 +1520,75 @@ describe("@clip/cli-gateway runtime", () => {
     expect(result.result).toEqual({ command: "test-service", argv: ["tools"] });
   });
 
+  test("dispatches root target invocations through kit route middleware", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+    });
+    const events: string[] = [];
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { command: config.command, argv: ctx.argv } };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ command: string }>;
+    const cli = createGatewayTestCli({ store, adapters: [adapter] }).use("test-service", async (ctx, next) => {
+      events.push(ctx.request.positionals.join(" "));
+      return next();
+    });
+
+    const result = await cli.run(["test-service", "tools"], { render: false });
+
+    expect(result.result).toEqual({ command: "test-service", argv: ["tools"] });
+    expect(events).toEqual(["test-service tools"]);
+  });
+
+  test("registers catalog operations as scoped kit routes", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+      catalogs: [{ target: "test-service", operations: [{ name: "listCats", description: "List cats" }] }],
+    });
+    const events: string[] = [];
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { command: config.command, argv: ctx.argv } };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ command: string }>;
+    const cli = createGatewayTestCli({ store, adapters: [adapter] }).use("test-service listCats", async (ctx, next) => {
+      events.push(ctx.request.positionals.join(" "));
+      return next();
+    });
+
+    const result = await cli.run(["test-service", "listCats", "limit=10"], { render: false });
+
+    expect(result.result).toEqual({ command: "test-service", argv: ["listCats", "limit=10"] });
+    expect(events).toEqual(["test-service listCats limit=10"]);
+  });
+
   test("dispatches gateway-prefixed target invocations through matching adapters", async () => {
     const store = createMemoryGatewayStore({
       targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
@@ -1267,6 +1618,78 @@ describe("@clip/cli-gateway runtime", () => {
     expect(result.ok).toBe(true);
     expect(result.exitCode).toBe(0);
     expect(result.result).toEqual({ command: "test-service", argv: ["tools"] });
+  });
+
+  test("dispatches gateway-prefixed target invocations through kit route middleware", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+    });
+    const events: string[] = [];
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { command: config.command, argv: ctx.argv } };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ command: string }>;
+    const cli = createGatewayTestCli({ store, adapters: [adapter] }).use("gateway test-service", async (ctx, next) => {
+      events.push(ctx.request.positionals.join(" "));
+      return next();
+    });
+
+    const result = await cli.run(["gateway", "test-service", "tools"], { render: false });
+
+    expect(result.result).toEqual({ command: "test-service", argv: ["tools"] });
+    expect(events).toEqual(["gateway test-service tools"]);
+  });
+
+  test("registers gateway-prefixed catalog operations as scoped kit routes", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+      catalogs: [{ target: "test-service", operations: [{ name: "listCats", description: "List cats" }] }],
+    });
+    const events: string[] = [];
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { command: config.command, argv: ctx.argv } };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ command: string }>;
+    const cli = createGatewayTestCli({ store, adapters: [adapter] }).use(
+      "gateway test-service listCats",
+      async (ctx, next) => {
+        events.push(ctx.request.positionals.join(" "));
+        return next();
+      },
+    );
+
+    const result = await cli.run(["gateway", "test-service", "listCats"], { render: false });
+
+    expect(result.result).toEqual({ command: "test-service", argv: ["listCats"] });
+    expect(events).toEqual(["gateway test-service listCats"]);
   });
 
   test("keeps root target aliases available even when target names match gateway commands", async () => {

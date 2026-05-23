@@ -6,6 +6,7 @@ export type CliGatewayOptions = {
   env?: Readonly<Record<string, string | undefined>>;
   services?: GatewayServices;
   output?: GatewayOutputOptions;
+  snapshot?: GatewaySnapshot;
 };
 
 export type GatewayOutputOptions = {
@@ -34,15 +35,27 @@ export type GatewayStore = {
   getBinding(name: string): Promise<GatewayBindingRecord | undefined>;
   saveBinding(record: GatewayBindingRecord): Promise<void>;
   removeBinding(name: string): Promise<void>;
+  listCatalogs?(): Promise<readonly GatewayCatalogRecord[]>;
+  getCatalog?(target: string): Promise<GatewayCatalogRecord | undefined>;
+  saveCatalog?(record: GatewayCatalogRecord): Promise<void>;
+  removeCatalog?(target: string): Promise<void>;
   listAliases(target: string): Promise<readonly GatewayAliasRecord[]>;
   saveAlias(target: string, alias: GatewayAliasRecord): Promise<void>;
   removeAlias(target: string, name: string): Promise<void>;
+  snapshot?(): GatewaySnapshot;
+};
+
+export type GatewaySnapshot = {
+  targets: readonly GatewayTargetRecord[];
+  bindings: readonly GatewayBindingRecord[];
+  catalogs: readonly GatewayCatalogRecord[];
 };
 
 export type GatewayStoreSeed = {
   targets?: readonly GatewayTargetRecord[];
   profiles?: readonly GatewayProfileRecord[];
   bindings?: readonly GatewayBindingRecord[];
+  catalogs?: readonly GatewayCatalogRecord[];
   aliases?: readonly GatewayAliasRecord[];
 };
 
@@ -74,6 +87,7 @@ export type GatewayAliasRecord = {
   target: string;
   name: string;
   operation: string;
+  input?: Record<string, unknown>;
   args?: readonly string[];
   source?: GatewayRecordSource;
 };
@@ -83,6 +97,13 @@ export type GatewayBindingRecord = {
   target: string;
   profile?: string;
   args?: readonly string[];
+  source?: GatewayRecordSource;
+};
+
+export type GatewayCatalogRecord = {
+  target: string;
+  operations: readonly GatewayTool[];
+  refreshedAt?: string;
   source?: GatewayRecordSource;
 };
 
@@ -228,6 +249,7 @@ export type AddInput = {
   name: string;
   type?: string;
   argv: readonly string[];
+  options?: Readonly<Record<string, unknown>>;
 };
 
 export type NormalizeContext = {

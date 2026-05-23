@@ -126,7 +126,8 @@ async function adapterCompletionItems(
       target: target.name,
       ...(profile?.name ? { profile: profile.name } : {}),
     });
-    const catalog = await gatewayTarget.catalog?.({ target: target.name });
+    const cachedCatalog = await options.store.getCatalog?.(target.name);
+    const catalog = cachedCatalog?.operations ?? (await gatewayTarget.catalog?.({ target: target.name }));
 
     return [
       ...(fromTarget ?? []).map((item) => ({ ...item, group: item.group ?? "gateway operations" })),

@@ -3,6 +3,7 @@ node_modules/
 *.d.ts
 dist/
 .agents/
+AGENTS.md
 .clip-test/
 bin/
 .env

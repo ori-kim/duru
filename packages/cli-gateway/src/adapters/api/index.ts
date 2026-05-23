@@ -1,5 +1,6 @@
 import { createGatewayTargetAuth } from "../../auth";
-import type { GatewayAdapter, GatewayContext, GatewayInvokeContext, GatewayResult } from "../../types";
+import type { GatewayTargetHelpDocument } from "../../help";
+import type { GatewayAdapter, GatewayContext, GatewayInvokeContext, GatewayResult, GatewayTool } from "../../types";
 import { apiConfigFromAddInput, detectApiInput, parseApiConfig } from "./config";
 import type { ApiAdapterConfig } from "./config";
 import { executeRawApiTarget, fetchSpec, isRawRequestStart } from "./http";
@@ -70,6 +71,10 @@ async function executeApiTargetUnsafe(
 ): Promise<GatewayResult> {
   const firstArg = ctx.argv[0];
 
+  if (firstArg === "--help" || firstArg === "-h") {
+    return executeApiHelp(config, ctx, gatewayContext, target);
+  }
+
   if (firstArg === "tools") {
     const spec = await loadParsedSpec(config, gatewayContext, ctx.signal);
     return { ok: true, value: spec?.tools ?? [], exitCode: 0 };
@@ -98,6 +103,30 @@ async function executeApiTargetUnsafe(
   }
 
   return executeRawApiTarget(config, ctx, gatewayContext, target, profile);
+}
+
+async function executeApiHelp(
+  config: ApiAdapterConfig,
+  ctx: GatewayInvokeContext,
+  gatewayContext: GatewayContext,
+  target: string,
+): Promise<GatewayResult> {
+  const spec = await loadParsedSpec(config, gatewayContext, ctx.signal);
+  const value: GatewayTargetHelpDocument = {
+    target,
+    type: "api",
+    usage: `${target} <operation|path>`,
+    operations: [...apiHelpOperations(), ...(spec?.tools ?? [])],
+  };
+  return { ok: true, value, exitCode: 0 };
+}
+
+function apiHelpOperations(): readonly GatewayTool[] {
+  return [
+    { name: "tools", description: "List available API operations" },
+    { name: "describe <operation>", description: "Describe an API operation" },
+    { name: "types", description: "List available API types" },
+  ];
 }
 
 function errorMessage(error: unknown): string {

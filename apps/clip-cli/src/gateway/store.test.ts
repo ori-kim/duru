@@ -3,6 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFileStore } from "@clip/file-store";
+import { withGatewayCatalogCache } from "./catalog-store";
 import { createAppGatewayStore } from "./store";
 
 describe("app gateway store", () => {
@@ -44,5 +45,28 @@ describe("app gateway store", () => {
         scopes: ["items:read", "items:write"],
       },
     });
+  });
+
+  test("persists catalog cache records next to gateway config", async () => {
+    const home = await mkdtemp(join(tmpdir(), "clip-gateway-store-"));
+    const files = createFileStore({ root: join(home, "gateway") });
+    const store = withGatewayCatalogCache(createAppGatewayStore({ files }), files);
+
+    await store.saveCatalog?.({
+      target: "notes-api",
+      operations: [{ name: "listItems", description: "List items" }],
+      refreshedAt: "2026-05-23T00:00:00.000Z",
+    });
+
+    const catalog = await store.getCatalog?.("notes-api");
+    const catalogs = await store.listCatalogs?.();
+
+    expect(catalog).toEqual({
+      target: "notes-api",
+      operations: [{ name: "listItems", description: "List items" }],
+      refreshedAt: "2026-05-23T00:00:00.000Z",
+      source: { path: files.resolve("_catalogs/notes-api.json"), format: "json" },
+    });
+    expect(catalogs?.map((item) => item.target)).toEqual(["notes-api"]);
   });
 });

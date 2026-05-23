@@ -23,9 +23,11 @@ export function help(options: HelpPluginOptions = {}) {
 
 export function formatHelp(document: HelpDocument): string {
   const exact = findExactRoute(document.routes, document.path);
-  if (exact) return commandHelp(document.name, exact, document.globalOptions);
-
   const routes = filterRoutes(document.routes, document.path);
+  if (exact && !hasVisibleNestedRoute(routes, document.path)) {
+    return commandHelp(document.name, exact, document.globalOptions);
+  }
+
   const usage =
     document.path.length === 0 ? `${document.name} <command>` : `${document.name} ${document.path.join(" ")} <command>`;
   const lines = [`Usage: ${usage}`, "", "Commands:"];
@@ -140,6 +142,17 @@ function filterRoutes(routes: readonly HelpRoute[], path: readonly string[]): He
 function findExactRoute(routes: readonly HelpRoute[], path: readonly string[]): HelpRoute | undefined {
   if (path.length === 0) return undefined;
   return routes.find((route) => routePatterns(route).some((pattern) => equals(literalPath(pattern), path)));
+}
+
+function hasVisibleNestedRoute(routes: readonly HelpRoute[], path: readonly string[]): boolean {
+  return routes.some(
+    (route) =>
+      !route.hidden &&
+      routePatterns(route).some((pattern) => {
+        const literal = literalPath(pattern);
+        return literal.length > path.length && startsWith(literal, path);
+      }),
+  );
 }
 
 function commandLines(usage: string): string[] {
