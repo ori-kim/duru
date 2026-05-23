@@ -7,8 +7,15 @@ import { grpcAdapter } from "./adapters/grpc";
 import { mcpAdapter } from "./adapters/mcp";
 import { scriptAdapter } from "./adapters/script";
 import { createGatewayCompletionContributor } from "./completion";
+import {
+  installTargetRoutes,
+  isRoutedInvocation,
+  routeSnapshot,
+  routedInvocationNames,
+  targetHelpArgv,
+} from "./route-invocations";
 import { runGatewayTargetInvocation } from "./runtime";
-import type { CliGatewayOptions, CliGatewayPlugin, GatewayAdapter } from "./types";
+import type { CliGatewayOptions, CliGatewayPlugin, GatewayAdapter, GatewaySnapshot } from "./types";
 
 export type CliGatewayPluginOptions = {
   namespace?: string;
@@ -19,7 +26,10 @@ export function cliGateway(options: CliGatewayOptions, pluginOptions: CliGateway
   return createPlugin((api) => {
     const namespace = pluginOptions.namespace ?? "gateway";
     const group = pluginOptions.group ?? "Gateway";
+    const snapshot = routeSnapshot(options);
+    const routedNames = routedInvocationNames(snapshot);
     api.option(parseOptionSpec("--dry-run", "Preview gateway target execution"));
+    installTargetRoutes(api, options, { namespace }, snapshot);
     api.helpRoutes(() => [
       {
         pattern: `${namespace} <target> [...args]`,
@@ -31,8 +41,15 @@ export function cliGateway(options: CliGatewayOptions, pluginOptions: CliGateway
     api.completion(createGatewayCompletionContributor(options, { namespace }));
     api.middleware(async (ctx, next) => {
       const routes = api.helpDocument([]).routes;
+      const routedHelpArgv = targetHelpArgv(ctx.request.argv, ctx.request.positionals, namespace, routedNames);
+      if (ctx.options.help && routedHelpArgv) {
+        return (await runGatewayTargetInvocation({ ...ctx, argv: routedHelpArgv }, options)) ?? next();
+      }
+
       const gatewayArgv = gatewayTargetArgv(ctx.request.argv, ctx.request.positionals, routes, namespace);
-      if (gatewayArgv) return (await runGatewayTargetInvocation({ ...ctx, argv: gatewayArgv }, options)) ?? next();
+      if (gatewayArgv && !isRoutedInvocation(gatewayArgv[0], routedNames)) {
+        return (await runGatewayTargetInvocation({ ...ctx, argv: gatewayArgv }, options)) ?? next();
+      }
 
       if (ctx.options.help && shouldPassGatewayHelp(ctx.request.positionals, routes)) {
         return (await runGatewayTargetInvocation({ ...ctx, argv: ctx.request.argv }, options)) ?? next();
@@ -46,6 +63,14 @@ export function cliGateway(options: CliGatewayOptions, pluginOptions: CliGateway
 
 export function defaultGatewayAdapters(): readonly GatewayAdapter[] {
   return [cliAdapter(), scriptAdapter(), apiAdapter(), graphqlAdapter(), mcpAdapter(), grpcAdapter()];
+}
+
+export async function loadGatewaySnapshot(options: Pick<CliGatewayOptions, "store">): Promise<GatewaySnapshot> {
+  return {
+    targets: await options.store.listTargets(),
+    bindings: await options.store.listBindings(),
+    catalogs: (await options.store.listCatalogs?.()) ?? [],
+  };
 }
 
 function shouldPassGatewayHelp(positionals: readonly string[], routes: readonly HelpRoute[]): boolean {

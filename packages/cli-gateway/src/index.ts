@@ -6,7 +6,7 @@ export { mcpAdapter } from "./adapters/mcp";
 export { scriptAdapter } from "./adapters/script";
 export { createGatewayCli, installGatewayCommands } from "./commands";
 export { createMemoryGatewayStore } from "./memory-store";
-export { cliGateway, defaultGatewayAdapters } from "./plugin";
+export { cliGateway, defaultGatewayAdapters, loadGatewaySnapshot } from "./plugin";
 export { createGatewayCompletionContributor } from "./completion";
 export { formatGatewayTargetHelp, isGatewayTargetHelpDocument } from "./help";
 export type { GatewayOAuthProviderConfig, GatewayOAuthService, GatewayOAuthServiceInput } from "./auth";
@@ -35,6 +35,7 @@ export type {
   GatewayAuthState,
   GatewayBindingRecord,
   GatewayCatalogContext,
+  GatewayCatalogRecord,
   GatewayCheckReport,
   GatewayCompletionContext,
   GatewayContext,
@@ -49,6 +50,7 @@ export type {
   GatewayResult,
   GatewaySchema,
   GatewayServices,
+  GatewaySnapshot,
   GatewayStore,
   GatewayStoreSeed,
   GatewayTarget,

@@ -21,11 +21,9 @@
         "@clip/completion-zsh": "workspace:*",
         "@clip/env": "workspace:*",
         "@clip/file-store": "workspace:*",
-        "@clip/input-validation": "workspace:*",
         "@clip/kit": "workspace:*",
         "@clip/renderer-json": "workspace:*",
         "@clip/renderer-text": "workspace:*",
-        "zod": "^4.0.0",
       },
     },
     "core/clip-kit": {

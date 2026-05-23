@@ -1,14 +1,10 @@
 import type { GatewayContext, GatewayInvokeContext, GatewayResult } from "../../types";
 import type { ApiAdapterConfig } from "./config";
 import { fetchSpec, hasHeader, performApiRequest } from "./http";
+import { defaultJsonContentType, operationBody } from "./openapi-body";
+import type { OperationArgs } from "./openapi-body";
 import { parseOpenApi } from "./openapi-parser";
 import type { OpenApiTool, ParsedOpenApi } from "./openapi-parser";
-
-type OperationArgs = {
-  params: Record<string, unknown>;
-  headers: Record<string, string>;
-  body?: string;
-};
 
 export async function loadParsedSpec(
   config: ApiAdapterConfig,
@@ -47,14 +43,13 @@ export async function executeOpenApiOperation(
   }
 
   const body = operationBody(tool, args);
+  const requestHeaders = { ...(config.headers ?? {}), ...args.headers };
   const headers = {
     ...(config.headers ?? {}),
     ...headerParams(tool, args.params),
     ...args.headers,
-    ...(body && tool.bodyContentType && !hasHeader({ ...(config.headers ?? {}), ...args.headers }, "content-type")
-      ? { "content-type": tool.bodyContentType }
-      : {}),
-    ...(body && !tool.bodyContentType && !hasHeader({ ...(config.headers ?? {}), ...args.headers }, "content-type")
+    ...(body?.contentType && !hasHeader(requestHeaders, "content-type") ? { "content-type": body.contentType } : {}),
+    ...(body && !body.contentType && defaultJsonContentType(tool) && !hasHeader(requestHeaders, "content-type")
       ? { "content-type": "application/json" }
       : {}),
   };
@@ -64,7 +59,7 @@ export async function executeOpenApiOperation(
       url,
       method: tool.method,
       headers,
-      ...(body ? { body } : {}),
+      ...(body ? { body: body.body } : {}),
     },
     ctx,
     gatewayContext,
@@ -76,6 +71,7 @@ function parseOperationArgs(argv: readonly string[]): OperationArgs {
   const params: Record<string, unknown> = {};
   const headers: Record<string, string> = {};
   let body: string | undefined;
+  let bodyBase64: string | undefined;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -101,6 +97,26 @@ function parseOperationArgs(argv: readonly string[]): OperationArgs {
       continue;
     }
 
+    if (arg === "--body-base64") {
+      bodyBase64 = requiredNext(argv, ++index, "--body-base64");
+      continue;
+    }
+
+    if (arg.startsWith("--body-base64=")) {
+      bodyBase64 = arg.slice("--body-base64=".length);
+      continue;
+    }
+
+    if (arg === "--input") {
+      Object.assign(params, parseJsonObject(requiredNext(argv, ++index, "--input"), "--input"));
+      continue;
+    }
+
+    if (arg.startsWith("--input=")) {
+      Object.assign(params, parseJsonObject(arg.slice("--input=".length), "--input"));
+      continue;
+    }
+
     if (arg.startsWith("--") && arg.includes("=")) {
       const separator = arg.indexOf("=");
       params[arg.slice(2, separator)] = parseCliValue(arg.slice(separator + 1));
@@ -120,7 +136,7 @@ function parseOperationArgs(argv: readonly string[]): OperationArgs {
     }
   }
 
-  return { params, headers, ...(body ? { body } : {}) };
+  return { params, headers, ...(body ? { body } : {}), ...(bodyBase64 ? { bodyBase64 } : {}) };
 }
 
 function buildOperationUrl(baseUrl: string, tool: OpenApiTool, params: Record<string, unknown>): string {
@@ -157,23 +173,6 @@ function headerParams(tool: OpenApiTool, params: Record<string, unknown>): Recor
   return headers;
 }
 
-function operationBody(tool: OpenApiTool, args: OperationArgs): string | undefined {
-  if (args.body !== undefined) return args.body;
-  if (!methodSupportsBody(tool.method)) return undefined;
-
-  const bodyParams: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(args.params)) {
-    if (tool.pathParams.includes(key) || tool.queryParams.includes(key) || tool.headerParams.includes(key)) continue;
-    bodyParams[key] = value;
-  }
-
-  if (Object.keys(bodyParams).length === 0) return undefined;
-  if (Object.keys(bodyParams).length === 1 && bodyParams.body !== undefined) {
-    return typeof bodyParams.body === "string" ? bodyParams.body : JSON.stringify(bodyParams.body);
-  }
-  return JSON.stringify(bodyParams);
-}
-
 function setHeader(headers: Record<string, string>, value: string): void {
   const separator = value.indexOf(":");
   if (separator <= 0) throw new Error(`Invalid header: ${value}`);
@@ -201,12 +200,14 @@ function parseCliValue(value: string): unknown {
   return value;
 }
 
-function paramString(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value);
+function parseJsonObject(value: string, option: string): Record<string, unknown> {
+  const parsed = JSON.parse(value) as unknown;
+  if (!isRecord(parsed)) throw new Error(`${option} must be a JSON object`);
+  return parsed;
 }
 
-function methodSupportsBody(method: string): boolean {
-  return method !== "GET" && method !== "HEAD";
+function paramString(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

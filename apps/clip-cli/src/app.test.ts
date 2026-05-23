@@ -4,44 +4,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAppCli } from "./app.ts";
 
-describe("clip-cli demo app", () => {
-  test("renders text output by default", async () => {
-    const result = await createAppCli().run(["hello", "example", "--uppercase"]);
+describe("clip-cli app", () => {
+  test("renders root help as text by default", async () => {
+    const result = await createAppCli().run(["--help"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.rendered?.stdout).toBe("hello EXAMPLE\n");
+    expect(result.rendered?.stdout ?? "").toContain("Usage: clip");
   });
 
-  test("can render command output as json", async () => {
-    const result = await createAppCli().run(["inspect", "--json"]);
+  test("can render gateway command output as json", async () => {
+    const home = await tempDir("gateway-list-json");
+    const result = await withClipHome(home, () => createAppCli().run(["gateway", "list", "--json"]));
 
     expect(result.exitCode).toBe(0);
-    expect(result.rendered?.stdout).toContain('"app": "clip-cli"');
-  });
-
-  test("renders command json presenters without output envelopes", async () => {
-    const result = await createAppCli().run(["hello", "example", "--json"]);
-
-    expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.rendered?.stdout ?? "")).toEqual({ greeting: "hello example" });
-  });
-
-  test("runs nested router commands", async () => {
-    const result = await createAppCli().run(["ext", "registry", "add", "example"]);
-
-    expect(result.exitCode).toBe(0);
-    expect(result.value).toEqual({ registry: "example", status: "added" });
-  });
-
-  test("runs custom event observer demo", async () => {
-    const result = await createAppCli().run(["events", "--json", "--events"]);
-
-    expect(result.exitCode).toBe(0);
-    expect(result.value).toEqual({ observed: "event observer ran" });
-    expect(JSON.parse(result.rendered?.stdout ?? "")).toEqual({
-      result: { observed: "event observer ran" },
-      events: [{ name: "log", payload: { message: "event observer ran" } }],
-    });
+    expect(JSON.parse(result.rendered?.stdout ?? "")).toEqual({ targets: [] });
   });
 
   test("shows gateway management under the gateway namespace in root help", async () => {
@@ -113,7 +89,49 @@ describe("clip-cli demo app", () => {
     });
   });
 
-  test("uses notFound observer output", async () => {
+  test("renders gateway api target help as text by default", async () => {
+    const home = await tempDir("gateway-api-help");
+    const targetDir = join(home, "gateway", "api", "notes-api");
+
+    await mkdir(targetDir, { recursive: true });
+    await writeFile(
+      join(targetDir, "config.yml"),
+      [
+        "name: notes-api",
+        "type: api",
+        "baseUrl: https://api.example.com",
+        "openapiUrl: https://api.example.com/openapi.json",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(targetDir, "spec.json"),
+      JSON.stringify({
+        openapi: "3.0.0",
+        info: { title: "Notes API", version: "1.0.0" },
+        paths: {
+          "/v1/items": {
+            get: {
+              operationId: "listItems",
+              description: "List items",
+              responses: { "200": { description: "OK" } },
+            },
+          },
+        },
+      }),
+    );
+
+    const result = await withClipHome(home, () => createAppCli().run(["gateway", "notes-api", "--help"]));
+    const stdout = result.rendered?.stdout ?? "";
+
+    expect(result.exitCode).toBe(0);
+    expect(stdout).toContain("Usage: notes-api <operation|path>");
+    expect(stdout).toContain("Target: notes-api (api)");
+    expect(stdout).toContain("listItems");
+    expect(stdout).toContain("List items");
+    expect(stdout).not.toStartWith("{");
+  });
+
+  test("reports unknown commands", async () => {
     const home = await tempDir("missing");
     const result = await withClipHome(home, () => createAppCli().run(["missing", "--json"]));
 
@@ -122,52 +140,6 @@ describe("clip-cli demo app", () => {
       error: { message: "Unknown command: missing --json" },
       hint: "Run clip --help",
     });
-  });
-
-  test("uses catch handler output", async () => {
-    const result = await createAppCli().run(["fail", "--json"]);
-
-    expect(result.exitCode).toBe(1);
-    expect(result.value).toEqual({
-      error: { message: "demo failure" },
-      hint: "The catch handler converted this failure",
-    });
-  });
-
-  test("runs zod-backed command input examples", async () => {
-    const result = await createAppCli().run(["call", "42", "--timeout-ms", "1500", "--dry-run"], { render: false });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toEqual({ operation: 42, timeoutMs: 1500, dryRun: true });
-  });
-
-  test("runs command metadata alias examples", async () => {
-    const result = await createAppCli().run(["meta", "pub", "notes"], { render: false });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toEqual({ name: "notes", status: "published", dryRun: false });
-  });
-
-  test("runs explicit mount and partial path middleware examples", async () => {
-    const result = await createAppCli().run(["tools", "echo", "hello"], { render: false });
-
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toEqual({ value: "hello" });
-    expect(result.events).toEqual([{ name: "log", payload: { message: "tools subtree", path: "tools echo hello" } }]);
-  });
-
-  test("runs route-level error boundary examples", async () => {
-    const result = await createAppCli().run(["tools", "fail"], { render: false });
-
-    expect(result.exitCode).toBe(4);
-    expect(result.result).toEqual({ handledBy: "tools", message: "tool failure" });
-  });
-
-  test("runs command-level error boundary examples", async () => {
-    const result = await createAppCli().run(["tools", "recover"], { render: false });
-
-    expect(result.exitCode).toBe(3);
-    expect(result.result).toEqual({ handledBy: "command", message: "recoverable failure" });
   });
 
   test("persists cli gateway targets in CLIP_HOME and dispatches them", async () => {
@@ -483,6 +455,30 @@ describe("clip-cli demo app", () => {
       expect(run.result).toBe("hello example");
       expect(config).toContain('name = "hi"');
       expect(config).toContain('operation = "hello"');
+    });
+  });
+
+  test("persists gateway target ACL and alias input JSON in CLIP_HOME", async () => {
+    const home = await tempDir("gateway-policy-alias-input");
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(
+        ["gateway", "add", "say", "echo", "--type", "cli", "--allow", "hello*", "--deny", "helloSecret"],
+        { render: false },
+      );
+      await createAppCli().run(
+        ["gateway", "alias", "add", "say", "hi", "hello", "--input-json", '{"tag":"test-service"}', "--limit", "10"],
+        { render: false },
+      );
+
+      const targetConfig = await readFile(join(home, "gateway", "cli", "say", "config.toml"), "utf8");
+      const aliasConfig = await readFile(join(home, "gateway", "cli", "say", "aliases", "hi.toml"), "utf8");
+
+      expect(targetConfig).toContain('allow = ["hello*"]');
+      expect(targetConfig).toContain('deny = ["helloSecret"]');
+      expect(aliasConfig).toContain("[input]");
+      expect(aliasConfig).toContain('tag = "test-service"');
+      expect(aliasConfig).toContain('args = ["--limit", "10"]');
     });
   });
 

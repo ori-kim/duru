@@ -1,6 +1,7 @@
 import type {
   GatewayAliasRecord,
   GatewayBindingRecord,
+  GatewayCatalogRecord,
   GatewayProfileRecord,
   GatewayStore,
   GatewayStoreSeed,
@@ -11,11 +12,13 @@ export function createMemoryGatewayStore(seed: GatewayStoreSeed = {}): GatewaySt
   const targets = new Map<string, GatewayTargetRecord>();
   const profiles = new Map<string, GatewayProfileRecord>();
   const bindings = new Map<string, GatewayBindingRecord>();
+  const catalogs = new Map<string, GatewayCatalogRecord>();
   const aliases = new Map<string, GatewayAliasRecord>();
 
   for (const target of seed.targets ?? []) targets.set(target.name, clone(target));
   for (const profile of seed.profiles ?? []) profiles.set(scopedKey(profile.target, profile.name), clone(profile));
   for (const binding of seed.bindings ?? []) bindings.set(binding.name, clone(binding));
+  for (const catalog of seed.catalogs ?? []) catalogs.set(catalog.target, clone(catalog));
   for (const alias of seed.aliases ?? []) aliases.set(scopedKey(alias.target, alias.name), clone(alias));
 
   return {
@@ -33,6 +36,7 @@ export function createMemoryGatewayStore(seed: GatewayStoreSeed = {}): GatewaySt
       deleteScoped(profiles, name);
       deleteScoped(aliases, name);
       deleteBindingsForTarget(bindings, name);
+      catalogs.delete(name);
     },
     async listProfiles(target) {
       return sortedByName(scopedValues(profiles, target)).map(clone);
@@ -58,6 +62,18 @@ export function createMemoryGatewayStore(seed: GatewayStoreSeed = {}): GatewaySt
     async removeBinding(name) {
       bindings.delete(name);
     },
+    async listCatalogs() {
+      return sortedByTarget([...catalogs.values()]).map(clone);
+    },
+    async getCatalog(target) {
+      return cloneOptional(catalogs.get(target));
+    },
+    async saveCatalog(record) {
+      catalogs.set(record.target, clone(record));
+    },
+    async removeCatalog(target) {
+      catalogs.delete(target);
+    },
     async listAliases(target) {
       return sortedByName(scopedValues(aliases, target)).map(clone);
     },
@@ -66,6 +82,13 @@ export function createMemoryGatewayStore(seed: GatewayStoreSeed = {}): GatewaySt
     },
     async removeAlias(target, name) {
       aliases.delete(scopedKey(target, name));
+    },
+    snapshot() {
+      return {
+        targets: sortedByName([...targets.values()]).map(clone),
+        bindings: sortedByName([...bindings.values()]).map(clone),
+        catalogs: sortedByTarget([...catalogs.values()]).map(clone),
+      };
     },
   };
 }
@@ -92,6 +115,10 @@ function deleteBindingsForTarget(records: Map<string, GatewayBindingRecord>, tar
 
 function sortedByName<T extends { name: string }>(records: T[]): T[] {
   return records.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function sortedByTarget<T extends { target: string }>(records: T[]): T[] {
+  return records.sort((left, right) => left.target.localeCompare(right.target));
 }
 
 function cloneOptional<T>(value: T | undefined): T | undefined {

@@ -78,7 +78,11 @@ async function targetArgv(
   const alias = (await options.store.listAliases(target)).find((item) => item.name === aliasName);
   if (!alias) return argv;
 
-  return [alias.operation, ...(alias.args ?? []), ...argv.slice(1)];
+  return [alias.operation, ...aliasInputArgv(alias.input), ...(alias.args ?? []), ...argv.slice(1)];
+}
+
+function aliasInputArgv(input: Record<string, unknown> | undefined): readonly string[] {
+  return input ? [JSON.stringify(input)] : [];
 }
 
 async function targetBinding(name: string, options: CliGatewayOptions): Promise<GatewayBindingRecord | undefined> {
@@ -126,12 +130,39 @@ function targetAclError(target: GatewayTargetRecord, argv: readonly string[]): s
   if (!operation) return undefined;
   if (isGatewayIntrospectionOperation(operation)) return undefined;
 
-  if (target.deny?.includes(operation)) {
+  const treeError = target.acl ? targetTreeAclError(target.name, target.acl, operation, argv[1]) : undefined;
+  if (treeError) return treeError;
+  if (target.acl && Object.hasOwn(target.acl, operation)) return undefined;
+
+  if (target.deny && matchesAny(target.deny, operation)) {
     return `Gateway target "${target.name}" denied operation: "${operation}"`;
   }
 
-  if (target.allow && target.allow.length > 0 && !target.allow.includes(operation)) {
+  if (target.allow && target.allow.length > 0 && !matchesAny(target.allow, operation)) {
     return `Gateway target "${target.name}" does not allow operation: "${operation}"`;
+  }
+
+  return undefined;
+}
+
+function targetTreeAclError(
+  targetName: string,
+  acl: Record<string, unknown>,
+  operation: string,
+  subOperation: string | undefined,
+): string | undefined {
+  const node = acl[operation];
+  if (!isRecord(node) || !subOperation) return undefined;
+
+  const deny = stringArray(node.deny);
+  const fullOperation = `${operation} ${subOperation}`;
+  if (deny && matchesAny(deny, subOperation)) {
+    return `Gateway target "${targetName}" denied operation: "${fullOperation}"`;
+  }
+
+  const allow = stringArray(node.allow);
+  if (allow && allow.length > 0 && !matchesAny(allow, subOperation)) {
+    return `Gateway target "${targetName}" does not allow operation: "${fullOperation}". Allowed: ${allow.join(", ")}`;
   }
 
   return undefined;
@@ -172,6 +203,23 @@ function dryRunOption(options: Record<string, unknown>): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringArray(value: unknown): readonly string[] | undefined {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : undefined;
+}
+
+function matchesAny(patterns: readonly string[], value: string): boolean {
+  return patterns.some((pattern) => matchesPattern(pattern, value));
+}
+
+function matchesPattern(pattern: string, value: string): boolean {
+  if (!pattern.includes("*")) return pattern === value;
+  const expression = pattern
+    .split("*")
+    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(`^${expression}$`).test(value);
 }
 
 function gatewayExecutionResult(ctx: GatewayRuntimeContext, result: GatewayResult): unknown {
