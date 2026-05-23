@@ -132,6 +132,20 @@ describe("clip-cli demo app", () => {
     expect(result.result).toEqual({ message: 'Unknown gateway target: "missing-target"' });
   });
 
+  test("reports unsupported gateway login as an error", async () => {
+    const home = await tempDir("gateway-login-unsupported");
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+
+      const result = await createAppCli().run(["login", "say"], { render: false });
+
+      expect(result.ok).toBe(false);
+      expect(result.exitCode).toBe(2);
+      expect(result.result).toEqual({ message: 'Gateway adapter "cli" does not support login' });
+    });
+  });
+
   test("persists gateway aliases in CLIP_HOME and dispatches them", async () => {
     const home = await tempDir("gateway-alias");
 

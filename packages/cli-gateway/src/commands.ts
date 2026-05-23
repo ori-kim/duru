@@ -1,7 +1,13 @@
 import { createCli } from "@clip/kit";
 import type { CliPluginApi } from "@clip/kit";
-import { unknownAdapterMessage, unknownTargetMessage } from "./runtime";
-import type { CliGatewayOptions, GatewayAdapter } from "./types";
+import { unknownAdapterMessage, unknownProfileMessage, unknownTargetMessage } from "./runtime";
+import type {
+  AuthContext,
+  CliGatewayOptions,
+  GatewayAdapter,
+  GatewayProfileRecord,
+  GatewayTargetRecord,
+} from "./types";
 
 export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOptions): void {
   const adapters = options.adapters ?? [];
@@ -35,6 +41,14 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
 
     await options.store.removeTarget(name);
     return { removed: name };
+  });
+
+  api.command("login <target>", "Login to a gateway target").action(async (ctx) => {
+    return authCommand("login", ctx.params.target, options, adapters);
+  });
+
+  api.command("logout <target>", "Logout from a gateway target").action(async (ctx) => {
+    return authCommand("logout", ctx.params.target, options, adapters);
   });
 
   const aliases = createCli();
@@ -111,6 +125,61 @@ function addAdapterMessage(type: string | undefined): string {
   return type ? unknownAdapterMessage(type) : "Gateway adapter type is required";
 }
 
+async function authCommand(
+  action: "login" | "logout",
+  targetValue: string,
+  options: CliGatewayOptions,
+  adapters: readonly GatewayAdapter[],
+) {
+  const targetRef = targetReference(targetValue);
+  const target = await options.store.getTarget(targetRef.name);
+  if (!target) return exit(2, { message: unknownTargetMessage(targetRef.name) });
+
+  const adapter = adapters.find((item) => item.type === target.type);
+  if (!adapter) return exit(2, { message: unknownAdapterMessage(target.type) });
+
+  const profile = targetRef.profile ? await options.store.getProfile(target.name, targetRef.profile) : undefined;
+  if (targetRef.profile && !profile) {
+    return exit(2, { message: unknownProfileMessage(target.name, targetRef.profile) });
+  }
+
+  const manifest = profile?.config ? { ...target, config: mergeConfig(target.config, profile.config) } : target;
+  const config = adapter.schema.parse(manifest.config);
+  const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
+  const authHandler = gatewayTarget.auth?.[action];
+  if (!authHandler) return exit(2, { message: unsupportedAuthMessage(target.type, action) });
+
+  await authHandler(authContext(target.name, targetRef.profile));
+
+  return { target: target.name, type: target.type, action };
+}
+
+function targetReference(value: string): { name: string; profile?: string } {
+  const separator = value.indexOf("@");
+  if (separator <= 0) return { name: value };
+  const profile = value.slice(separator + 1);
+  if (!profile) return { name: value.slice(0, separator) };
+
+  return { name: value.slice(0, separator), profile };
+}
+
+function authContext(target: string, profile: string | undefined): AuthContext {
+  return profile ? { target, profile } : { target };
+}
+
+function mergeConfig(targetConfig: unknown, profileConfig: unknown): unknown {
+  if (!isRecord(targetConfig) || !isRecord(profileConfig)) return profileConfig;
+  return { ...targetConfig, ...profileConfig };
+}
+
+function unsupportedAuthMessage(type: string, action: "login" | "logout"): string {
+  return `Gateway adapter "${type}" does not support ${action}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function stringOption(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
@@ -119,4 +188,8 @@ function stringArrayParam(value: unknown): readonly string[] {
   if (Array.isArray(value)) return value.map(String);
   if (typeof value === "string") return [value];
   return [];
+}
+
+function exit(exitCode: number, result: unknown) {
+  return { kind: "clip.exit", ok: false, exitCode, result } as const;
 }
