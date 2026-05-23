@@ -31,8 +31,13 @@ export async function runGatewayTargetInvocation(
   const aclError = targetAclError(manifest, argv);
   if (aclError) return ctx.exit(2, { message: aclError });
 
-  const result = await gatewayTarget.invoke({ argv });
-  return gatewayExecutionResult(ctx, result);
+  const timeout = targetTimeout(manifest, options);
+  try {
+    const result = await gatewayTarget.invoke({ argv, ...(timeout.signal ? { signal: timeout.signal } : {}) });
+    return gatewayExecutionResult(ctx, result);
+  } finally {
+    timeout.dispose();
+  }
 }
 
 function targetReference(value: string | undefined): { name: string; profile?: string } | undefined {
@@ -94,6 +99,29 @@ function targetAclError(target: GatewayTargetRecord, argv: readonly string[]): s
   }
 
   return undefined;
+}
+
+function targetTimeout(
+  target: GatewayTargetRecord,
+  options: CliGatewayOptions,
+): { signal?: AbortSignal; dispose(): void } {
+  const timeoutMs = target.timeoutMs ?? parseTimeoutMs(options.env?.CLIP_TARGET_TIMEOUT_MS);
+  if (timeoutMs === undefined) return { dispose() {} };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return {
+    signal: controller.signal,
+    dispose() {
+      clearTimeout(timer);
+    },
+  };
+}
+
+function parseTimeoutMs(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const timeoutMs = Number(value);
+  return Number.isFinite(timeoutMs) && timeoutMs >= 0 ? timeoutMs : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

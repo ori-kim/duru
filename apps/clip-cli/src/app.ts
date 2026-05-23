@@ -25,7 +25,7 @@ export function createAppCli() {
     .use(textRendererPlugin())
     .use(jsonRendererPlugin())
     .use(env())
-    .use(cliGateway({ store: gatewayStore, adapters: defaultGatewayAdapters() }))
+    .use(cliGateway({ store: gatewayStore, adapters: defaultGatewayAdapters(), env: process.env }))
     .use(help());
 
   cli.on("log", (ctx) => {

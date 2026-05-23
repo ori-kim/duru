@@ -963,6 +963,35 @@ describe("@clip/cli-gateway runtime", () => {
     expect(result.result).toEqual({ message: "denied" });
   });
 
+  test("passes target timeout signals into adapter invocation", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" }, timeoutMs: 1000 }],
+    });
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { hasSignal: Boolean(ctx.signal), aborted: ctx.signal?.aborted ?? false } };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ command: string }>;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
+
+    const result = await cli.run(["test-service", "listCats"], { render: false });
+
+    expect(result.result).toEqual({ hasSignal: true, aborted: false });
+  });
+
   test("expands target aliases before adapter execution", async () => {
     const store = createMemoryGatewayStore({
       targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
