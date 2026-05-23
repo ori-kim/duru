@@ -57,12 +57,13 @@ export function parseApiConfig(value: unknown): ApiAdapterConfig {
     throw new Error("Invalid api target config: headers must be a string record");
   }
 
+  const auth = value.auth ? parseOptionalOAuthProviderConfig(value.auth) : undefined;
   return {
     ...(baseUrl ? { baseUrl } : {}),
     ...(openapiUrl ? { openapiUrl } : {}),
     ...(hasSpec ? { spec: value.spec } : {}),
     ...(value.headers ? { headers: value.headers } : {}),
-    ...(value.auth ? { auth: parseOptionalOAuthProviderConfig(value.auth) } : {}),
+    ...(auth ? { auth } : {}),
   };
 }
 

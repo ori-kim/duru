@@ -1,3 +1,9 @@
+import type {
+  CompletionContext,
+  CompletionContributor,
+  CompletionOptions,
+  CompletionResult,
+} from "../completion/index.ts";
 import type { Cli } from "./cli.ts";
 import type { EmptyObject } from "./common.ts";
 import type { Context } from "./context.ts";
@@ -32,6 +38,9 @@ export type CliPluginApi = {
   on(name: string, handler: CliEventHandler): void;
   compose(composer: CommandComposer): void;
   composers(): readonly CommandComposer[];
+  completion(contributor: CompletionContributor): void;
+  completions(): readonly CompletionContributor[];
+  complete(ctx: CompletionContext, options?: CompletionOptions): Promise<CompletionResult>;
   helpDocument(argv: readonly string[]): HelpDocument;
   helpRoutes(provider: () => readonly HelpRoute[]): void;
   usage(provider: (name: string) => string): void;

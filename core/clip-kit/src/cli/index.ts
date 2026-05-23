@@ -1,3 +1,8 @@
+import {
+  commandGraphCompletionContributor,
+  completeFromContributors,
+  createCompletionRegistry,
+} from "../completion/index.ts";
 import { commandAliasesComposer } from "../compose/index.ts";
 import { createContext, createEmptyContext } from "../context/index.ts";
 import { helpPath, usageHelpRoutes } from "../help/index.ts";
@@ -64,6 +69,7 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
   const coreCommandComposerCount = 1;
   const commandComposers: CommandComposer[] = [commandAliasesComposer];
   const optionFallbackProviders: OptionFallbackProvider[] = [];
+  const completions = createCompletionRegistry();
   const helpProviders: Array<() => readonly HelpRoute[]> = [];
   const usageProviders: Array<(name: string) => string> = [];
   const services = new Map<string, unknown>();
@@ -180,6 +186,19 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
       },
       composers() {
         return commandComposerDefinitions();
+      },
+      completion(contributor) {
+        completions.add(contributor);
+      },
+      completions() {
+        return completions.list();
+      },
+      complete(ctx, options) {
+        return completeFromContributors(
+          ctx,
+          [commandGraphCompletionContributor(helpDocument), ...completions.list()],
+          options,
+        );
       },
       helpDocument(argv: readonly string[]) {
         return helpDocument(argv);

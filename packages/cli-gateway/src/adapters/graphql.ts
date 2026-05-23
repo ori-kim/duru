@@ -71,10 +71,11 @@ function parseGraphqlConfig(value: unknown): GraphqlAdapterConfig {
     throw new Error("Invalid graphql target config: headers must be a string record");
   }
 
+  const auth = value.auth ? parseOptionalOAuthProviderConfig(value.auth) : undefined;
   return {
     endpoint: value.endpoint,
     ...(value.headers ? { headers: value.headers } : {}),
-    ...(value.auth ? { auth: parseOptionalOAuthProviderConfig(value.auth) } : {}),
+    ...(auth ? { auth } : {}),
   };
 }
 

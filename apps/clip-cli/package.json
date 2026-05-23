@@ -9,6 +9,7 @@
   "dependencies": {
     "@clip/auth": "workspace:*",
     "@clip/cli-gateway": "workspace:*",
+    "@clip/completion-zsh": "workspace:*",
     "@clip/env": "workspace:*",
     "@clip/file-store": "workspace:*",
     "@clip/kit": "workspace:*",

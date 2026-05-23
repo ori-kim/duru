@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAppCli } from "./app.ts";
@@ -41,6 +41,75 @@ describe("clip-cli demo app", () => {
     expect(JSON.parse(result.rendered?.stdout ?? "")).toEqual({
       result: { observed: "event observer ran" },
       events: [{ name: "log", payload: { message: "event observer ran" } }],
+    });
+  });
+
+  test("shows gateway management under the gateway namespace in root help", async () => {
+    const result = await createAppCli().run(["--help"]);
+    const stdout = result.rendered?.stdout ?? "";
+
+    expect(stdout).toContain("gateway add <name> [...args]  Add a gateway target");
+    expect(stdout).toContain("gateway <target> [...args]  Run a gateway target");
+    expect(stdout).not.toContain("\n    add <name> [...args]  Add a gateway target");
+  });
+
+  test("owns zsh completion routes and gateway styles at the app layer", async () => {
+    const home = await tempDir("completion");
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(["gateway", "add", "catservice", "https://catservice.example.com/mcp"], {
+        render: false,
+      });
+
+      const query = await createAppCli().run(["completion", "query", "--shell", "zsh", "--", "clip", "gateway", ""], {
+        render: false,
+      });
+      const script = await createAppCli().run(["completion", "zsh", "--name", "clip-dev"], { render: false });
+
+      expect(query.exitCode).toBe(0);
+      expect(query.result).toMatchObject({
+        items: expect.arrayContaining([
+          { value: "catservice", description: "mcp target", kind: "target", group: "mcp-targets" },
+        ]),
+      });
+      expect(script.result).toContain("compdef _clip_completion clip-dev");
+      expect(script.result).toContain("zstyle ':completion:*:*:clip-dev:*:mcp-targets' list-colors '=*=33'");
+      expect(script.result).toContain(
+        "zstyle ':completion:*:*:clip-dev:*:gateway-operations' list-colors '=*=38;5;246'",
+      );
+    });
+  });
+
+  test("renders gateway mcp target help as text by default", async () => {
+    const home = await tempDir("gateway-mcp-help");
+    const previousFetch = globalThis.fetch;
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(["gateway", "add", "catservice", "https://catservice.example.com/mcp"], {
+        render: false,
+      });
+      globalThis.fetch = (async () =>
+        new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            result: { tools: [{ name: "listCats", description: "List cats" }] },
+          }),
+          { headers: { "content-type": "application/json" } },
+        )) as unknown as typeof fetch;
+
+      try {
+        const result = await createAppCli().run(["gateway", "catservice", "--help"]);
+        const stdout = result.rendered?.stdout ?? "";
+
+        expect(result.exitCode).toBe(0);
+        expect(stdout).toContain("Usage: catservice <tool|method>");
+        expect(stdout).toContain("listCats");
+        expect(stdout).toContain("List cats");
+        expect(stdout).not.toStartWith("{");
+      } finally {
+        globalThis.fetch = previousFetch;
+      }
     });
   });
 
@@ -105,8 +174,8 @@ describe("clip-cli demo app", () => {
     const home = await tempDir("gateway");
 
     await withClipHome(home, async () => {
-      const add = await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
-      const list = await createAppCli().run(["list"], { render: false });
+      const add = await createAppCli().run(["gateway", "add", "say", "echo", "--type", "cli"], { render: false });
+      const list = await createAppCli().run(["gateway", "list"], { render: false });
       const run = await createAppCli().run(["say", "hello", "example"], { render: false });
       const config = await readFile(join(home, "gateway", "cli", "say", "config.toml"), "utf8");
 
@@ -126,7 +195,9 @@ describe("clip-cli demo app", () => {
     const home = await tempDir("gateway-script");
 
     await withClipHome(home, async () => {
-      const add = await createAppCli().run(["add", "say", "echo", "hello", "--type", "script"], { render: false });
+      const add = await createAppCli().run(["gateway", "add", "say", "echo", "hello", "--type", "script"], {
+        render: false,
+      });
       const run = await createAppCli().run(["say", "example"], { render: false });
       const config = await readFile(join(home, "gateway", "script", "say", "config.toml"), "utf8");
 
@@ -141,10 +212,13 @@ describe("clip-cli demo app", () => {
     const home = await tempDir("gateway-api");
 
     await withClipHome(home, async () => {
-      const add = await createAppCli().run(["add", "notes-api", "https://api.example.com", "--type", "api"], {
-        render: false,
-      });
-      const check = await createAppCli().run(["check"], { render: false });
+      const add = await createAppCli().run(
+        ["gateway", "add", "notes-api", "https://api.example.com", "--type", "api"],
+        {
+          render: false,
+        },
+      );
+      const check = await createAppCli().run(["gateway", "check"], { render: false });
       const config = await readFile(join(home, "gateway", "api", "notes-api", "config.toml"), "utf8");
 
       expect(add.result).toEqual({ name: "notes-api", type: "api" });
@@ -159,15 +233,63 @@ describe("clip-cli demo app", () => {
     });
   });
 
+  test("loads migrated api sidecar OpenAPI specs from CLIP_HOME", async () => {
+    const home = await tempDir("gateway-sidecar-spec");
+    const targetDir = join(home, "gateway", "api", "notes-api");
+
+    await mkdir(targetDir, { recursive: true });
+    await writeFile(
+      join(targetDir, "config.yml"),
+      [
+        "name: notes-api",
+        "type: api",
+        "baseUrl: https://api.example.com",
+        "openapiUrl: https://api.example.com/openapi.json",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(targetDir, "spec.json"),
+      JSON.stringify({
+        openapi: "3.0.0",
+        info: { title: "Notes API", version: "1.0.0" },
+        paths: {
+          "/v1/items": {
+            get: {
+              operationId: "listItems",
+              description: "List items",
+              responses: { "200": { description: "OK" } },
+            },
+          },
+        },
+      }),
+    );
+
+    const result = await withClipHome(home, () => createAppCli().run(["notes-api", "tools"], { render: false }));
+
+    expect(result.exitCode).toBe(0);
+    expect(result.result).toEqual([
+      {
+        name: "listItems",
+        description: "List items",
+        method: "GET",
+        path: "/v1/items",
+        inputSchema: { type: "object", properties: {} },
+        pathParams: [],
+        queryParams: [],
+        headerParams: [],
+      },
+    ]);
+  });
+
   test("persists graphql gateway targets in CLIP_HOME", async () => {
     const home = await tempDir("gateway-graphql");
 
     await withClipHome(home, async () => {
       const add = await createAppCli().run(
-        ["add", "search-api", "https://api.example.com/graphql", "--type", "graphql"],
+        ["gateway", "add", "search-api", "https://api.example.com/graphql", "--type", "graphql"],
         { render: false },
       );
-      const check = await createAppCli().run(["check"], { render: false });
+      const check = await createAppCli().run(["gateway", "check"], { render: false });
       const config = await readFile(join(home, "gateway", "graphql", "search-api", "config.toml"), "utf8");
 
       expect(add.result).toEqual({ name: "search-api", type: "graphql" });
@@ -187,10 +309,10 @@ describe("clip-cli demo app", () => {
 
     await withClipHome(home, async () => {
       const add = await createAppCli().run(
-        ["add", "catservice", "https://catservice.example.com/mcp", "--type", "mcp"],
+        ["gateway", "add", "catservice", "https://catservice.example.com/mcp", "--type", "mcp"],
         { render: false },
       );
-      const check = await createAppCli().run(["check"], { render: false });
+      const check = await createAppCli().run(["gateway", "check"], { render: false });
       const config = await readFile(join(home, "gateway", "mcp", "catservice", "config.toml"), "utf8");
 
       expect(add.result).toEqual({ name: "catservice", type: "mcp" });
@@ -205,14 +327,50 @@ describe("clip-cli demo app", () => {
     });
   });
 
+  test("keeps app renderer options out of gateway target invocations", async () => {
+    const home = await tempDir("gateway-renderer-options");
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(
+        ["gateway", "add", "catservice", "https://catservice.example.com/mcp", "--type", "mcp"],
+        {
+          render: false,
+        },
+      );
+
+      const result = await createAppCli().run(["gateway", "catservice", "--dry-run", "--json"], { render: false });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.result).toMatchObject({
+        request: {
+          url: "https://catservice.example.com/mcp",
+          rpcMethod: "tools/list",
+        },
+      });
+    });
+  });
+
+  test("keeps renderer-like options after gateway target operations", async () => {
+    const home = await tempDir("gateway-target-options");
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(["gateway", "add", "say", "echo", "--type", "cli"], { render: false });
+
+      const result = await createAppCli().run(["say", "hello", "--json"], { render: false });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.result).toBe("hello --json");
+    });
+  });
+
   test("persists grpc gateway targets in CLIP_HOME", async () => {
     const home = await tempDir("gateway-grpc");
 
     await withClipHome(home, async () => {
-      const add = await createAppCli().run(["add", "catservice", "localhost:50051", "--type", "grpc"], {
+      const add = await createAppCli().run(["gateway", "add", "catservice", "localhost:50051", "--type", "grpc"], {
         render: false,
       });
-      const check = await createAppCli().run(["check"], { render: false });
+      const check = await createAppCli().run(["gateway", "check"], { render: false });
       const config = await readFile(join(home, "gateway", "grpc", "catservice", "config.toml"), "utf8");
 
       expect(add.result).toEqual({ name: "catservice", type: "grpc" });
@@ -230,7 +388,9 @@ describe("clip-cli demo app", () => {
   test("reports missing gateway target removal as an error", async () => {
     const home = await tempDir("gateway-remove-missing");
 
-    const result = await withClipHome(home, () => createAppCli().run(["remove", "missing-target"], { render: false }));
+    const result = await withClipHome(home, () =>
+      createAppCli().run(["gateway", "remove", "missing-target"], { render: false }),
+    );
 
     expect(result.ok).toBe(false);
     expect(result.exitCode).toBe(2);
@@ -241,9 +401,9 @@ describe("clip-cli demo app", () => {
     const home = await tempDir("gateway-login-unsupported");
 
     await withClipHome(home, async () => {
-      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+      await createAppCli().run(["gateway", "add", "say", "echo", "--type", "cli"], { render: false });
 
-      const result = await createAppCli().run(["login", "say"], { render: false });
+      const result = await createAppCli().run(["gateway", "login", "say"], { render: false });
 
       expect(result.ok).toBe(false);
       expect(result.exitCode).toBe(2);
@@ -255,9 +415,9 @@ describe("clip-cli demo app", () => {
     const home = await tempDir("gateway-refresh-unsupported");
 
     await withClipHome(home, async () => {
-      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+      await createAppCli().run(["gateway", "add", "say", "echo", "--type", "cli"], { render: false });
 
-      const result = await createAppCli().run(["refresh", "say"], { render: false });
+      const result = await createAppCli().run(["gateway", "refresh", "say"], { render: false });
 
       expect(result.ok).toBe(false);
       expect(result.exitCode).toBe(2);
@@ -269,9 +429,9 @@ describe("clip-cli demo app", () => {
     const home = await tempDir("gateway-inspect");
 
     await withClipHome(home, async () => {
-      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+      await createAppCli().run(["gateway", "add", "say", "echo", "--type", "cli"], { render: false });
 
-      const result = await createAppCli().run(["inspect", "say"], { render: false });
+      const result = await createAppCli().run(["gateway", "inspect", "say"], { render: false });
 
       expect(result.result).toEqual({
         ok: true,
@@ -281,7 +441,7 @@ describe("clip-cli demo app", () => {
           config: { redacted: true },
           registered: true,
           summary: "echo",
-          capabilities: { invoke: true, catalog: false, refresh: false, complete: false, check: false },
+          capabilities: { invoke: true, catalog: false, refresh: false, complete: true, check: false },
           operations: [],
         },
         diagnostics: [],
@@ -293,9 +453,9 @@ describe("clip-cli demo app", () => {
     const home = await tempDir("gateway-check");
 
     await withClipHome(home, async () => {
-      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+      await createAppCli().run(["gateway", "add", "say", "echo", "--type", "cli"], { render: false });
 
-      const result = await createAppCli().run(["check"], { render: false });
+      const result = await createAppCli().run(["gateway", "check"], { render: false });
 
       expect(result.result).toEqual({
         ok: true,
@@ -311,10 +471,10 @@ describe("clip-cli demo app", () => {
     const home = await tempDir("gateway-alias");
 
     await withClipHome(home, async () => {
-      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+      await createAppCli().run(["gateway", "add", "say", "echo", "--type", "cli"], { render: false });
 
-      const addAlias = await createAppCli().run(["alias", "add", "say", "hi", "hello"], { render: false });
-      const listAliases = await createAppCli().run(["alias", "list", "say"], { render: false });
+      const addAlias = await createAppCli().run(["gateway", "alias", "add", "say", "hi", "hello"], { render: false });
+      const listAliases = await createAppCli().run(["gateway", "alias", "list", "say"], { render: false });
       const run = await createAppCli().run(["say", "hi", "example"], { render: false });
       const config = await readFile(join(home, "gateway", "cli", "say", "aliases", "hi.toml"), "utf8");
 
@@ -330,10 +490,10 @@ describe("clip-cli demo app", () => {
     const home = await tempDir("gateway-bind");
 
     await withClipHome(home, async () => {
-      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+      await createAppCli().run(["gateway", "add", "say", "echo", "--type", "cli"], { render: false });
 
-      const bind = await createAppCli().run(["bind", "hi", "say", "hello"], { render: false });
-      const list = await createAppCli().run(["binds"], { render: false });
+      const bind = await createAppCli().run(["gateway", "bind", "hi", "say", "hello"], { render: false });
+      const list = await createAppCli().run(["gateway", "binds"], { render: false });
       const run = await createAppCli().run(["hi", "example"], { render: false });
       const config = await readFile(join(home, "gateway", "_bindings", "hi.toml"), "utf8");
       const shim = await readFile(join(home, "bin", "hi"), "utf8");
@@ -352,11 +512,13 @@ describe("clip-cli demo app", () => {
     const home = await tempDir("gateway-profile");
 
     await withClipHome(home, async () => {
-      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+      await createAppCli().run(["gateway", "add", "say", "echo", "--type", "cli"], { render: false });
 
-      const addProfile = await createAppCli().run(["profile", "add", "say", "dev", "hello"], { render: false });
-      const useProfile = await createAppCli().run(["profile", "use", "say", "dev"], { render: false });
-      const listProfiles = await createAppCli().run(["profile", "list", "say"], { render: false });
+      const addProfile = await createAppCli().run(["gateway", "profile", "add", "say", "dev", "hello"], {
+        render: false,
+      });
+      const useProfile = await createAppCli().run(["gateway", "profile", "use", "say", "dev"], { render: false });
+      const listProfiles = await createAppCli().run(["gateway", "profile", "list", "say"], { render: false });
       const run = await createAppCli().run(["say", "example"], { render: false });
       const targetConfig = await readFile(join(home, "gateway", "cli", "say", "config.toml"), "utf8");
       const config = await readFile(join(home, "gateway", "cli", "say", "profiles", "dev.toml"), "utf8");

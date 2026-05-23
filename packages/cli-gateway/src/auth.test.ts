@@ -5,15 +5,21 @@ import { createMemoryGatewayStore } from "./memory-store";
 
 describe("@clip/cli-gateway oauth auth provider integration", () => {
   test("parses optional OAuth token store selection", () => {
+    expect(parseOptionalOAuthProviderConfig("oauth")).toBeUndefined();
+
     expect(
       parseOptionalOAuthProviderConfig({
         provider: "test-provider",
         authorizationEndpoint: "https://auth.example.com/oauth/authorize",
         tokenEndpoint: "https://auth.example.com/oauth/token",
-        clientId: "example-client",
+        registrationEndpoint: "https://auth.example.com/oauth/register",
         store: "file",
       }),
-    ).toMatchObject({ provider: "test-provider", store: "file" });
+    ).toMatchObject({
+      provider: "test-provider",
+      registrationEndpoint: "https://auth.example.com/oauth/register",
+      store: "file",
+    });
 
     expect(() =>
       parseOptionalOAuthProviderConfig({

@@ -189,9 +189,50 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
     for (const readExtension of readExtensions) {
       const path = targetConfigPath(type, name, readExtension);
       const record = await files.read<Record<string, unknown>>(path);
-      if (record) return targetFromFile(record, type, name, source(path, readExtension));
+      if (record) return targetWithSidecars(targetFromFile(record, type, name, source(path, readExtension)));
     }
     return undefined;
+  }
+
+  async function targetWithSidecars(target: GatewayTargetRecord): Promise<GatewayTargetRecord> {
+    return targetWithLegacyAuthSidecar(await targetWithSidecarSpec(target));
+  }
+
+  async function targetWithSidecarSpec(target: GatewayTargetRecord): Promise<GatewayTargetRecord> {
+    if (target.type !== "api" || !isRecord(target.config) || Object.hasOwn(target.config, "spec")) return target;
+
+    const spec = await readSidecarSpec(target.type, target.name);
+    if (spec === undefined) return target;
+
+    return {
+      ...target,
+      config: { ...target.config, spec },
+    };
+  }
+
+  async function targetWithLegacyAuthSidecar(target: GatewayTargetRecord): Promise<GatewayTargetRecord> {
+    if (!isRecord(target.config) || target.config.auth !== "oauth") return target;
+
+    const auth = await readLegacyOAuthProvider(target.type, target.name);
+    if (!auth) return target;
+
+    return {
+      ...target,
+      config: { ...target.config, auth },
+    };
+  }
+
+  async function readSidecarSpec(type: string, target: string): Promise<unknown | undefined> {
+    for (const readExtension of readExtensions) {
+      const spec = await files.read<unknown>(sidecarSpecPath(type, target, readExtension));
+      if (spec !== undefined) return spec;
+    }
+    return undefined;
+  }
+
+  async function readLegacyOAuthProvider(type: string, target: string): Promise<Record<string, unknown> | undefined> {
+    const record = await files.read<Record<string, unknown>>(legacyAuthPath(type, target));
+    return record ? legacyOAuthProviderFromSidecar(record) : undefined;
   }
 
   async function readProfileAt(type: string, target: string, name: string): Promise<GatewayProfileRecord | undefined> {
@@ -277,6 +318,14 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
 
 function targetConfigPath(type: string, name: string, extension: string): string {
   return `${assertStoreSegment(type, "target type")}/${assertStoreSegment(name, "target name")}/config.${extension}`;
+}
+
+function sidecarSpecPath(type: string, name: string, extension: string): string {
+  return `${assertStoreSegment(type, "target type")}/${assertStoreSegment(name, "target name")}/spec.${extension}`;
+}
+
+function legacyAuthPath(type: string, name: string): string {
+  return `${assertStoreSegment(type, "target type")}/${assertStoreSegment(name, "target name")}/auth.json`;
 }
 
 function profileDir(type: string, target: string): string {
@@ -365,6 +414,52 @@ function legacyTargetConfig(record: Record<string, unknown>): Record<string, unk
   return config;
 }
 
+function legacyOAuthProviderFromSidecar(record: Record<string, unknown>): Record<string, unknown> | undefined {
+  const provider =
+    stringValue(record.provider) ??
+    stringValue(record.authorization_server) ??
+    stringValue(record.issuer) ??
+    stringValue(record.resource_url);
+  const authorizationEndpoint = stringValue(record.authorizationEndpoint) ?? stringValue(record.authorization_endpoint);
+  const tokenEndpoint = stringValue(record.tokenEndpoint) ?? stringValue(record.token_endpoint);
+  const registrationEndpoint = stringValue(record.registrationEndpoint) ?? stringValue(record.registration_endpoint);
+  const redirectUri = stringValue(record.redirectUri) ?? stringValue(record.redirect_uri);
+  const legacyClientId = stringValue(record.clientId) ?? stringValue(record.client_id);
+  const clientId = legacyClientId && (!registrationEndpoint || redirectUri) ? legacyClientId : undefined;
+
+  if (!provider || !authorizationEndpoint || !tokenEndpoint || (!clientId && !registrationEndpoint)) return undefined;
+
+  return withoutUndefined({
+    provider,
+    authorizationEndpoint,
+    tokenEndpoint,
+    clientId,
+    registrationEndpoint,
+    store: storeValue(record.store),
+    scopes: scopesValue(record.scopes) ?? scopeStringValue(record.scope),
+    redirectUri,
+    extraParams: isStringRecord(record.extraParams) ? record.extraParams : undefined,
+  });
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function storeValue(value: unknown): "keychain" | "file" | undefined {
+  return value === "keychain" || value === "file" ? value : undefined;
+}
+
+function scopesValue(value: unknown): readonly string[] | undefined {
+  return isStringArray(value) && value.length > 0 ? value : undefined;
+}
+
+function scopeStringValue(value: unknown): readonly string[] | undefined {
+  if (typeof value !== "string") return undefined;
+  const scopes = value.split(/\s+/).filter(Boolean);
+  return scopes.length > 0 ? scopes : undefined;
+}
+
 function formatExtension(format: AppGatewayStoreFormat): string {
   if (format === "json") return "json";
   if (format === "toml") return "toml";
@@ -406,4 +501,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
 }

@@ -69,6 +69,7 @@ function parseToken(stdout: string): OAuthToken {
     ...(typeof parsed.refreshToken === "string" ? { refreshToken: parsed.refreshToken } : {}),
     ...(typeof parsed.expiresAt === "number" ? { expiresAt: parsed.expiresAt } : {}),
     ...(typeof parsed.scope === "string" ? { scope: parsed.scope } : {}),
+    ...(typeof parsed.clientId === "string" ? { clientId: parsed.clientId } : {}),
   };
 }
 
