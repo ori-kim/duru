@@ -291,6 +291,26 @@ describe("@clip/cli-gateway commands", () => {
     expect(remove.result).toEqual({ removed: { target: "test-service", name: "cats" } });
     expect(await store.listAliases("test-service")).toEqual([]);
   });
+
+  test("registers profile commands backed by the injected store", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+    });
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store }));
+
+    const add = await cli.run(["profile", "add", "test-service", "dev", "--prefix", "example"], {
+      render: false,
+    });
+    const list = await cli.run(["profile", "list", "test-service"], { render: false });
+    const remove = await cli.run(["profile", "remove", "test-service", "dev"], { render: false });
+
+    expect(add.result).toEqual({ target: "test-service", name: "dev" });
+    expect(list.result).toEqual({
+      profiles: [{ target: "test-service", name: "dev", config: { args: ["--prefix", "example"] } }],
+    });
+    expect(remove.result).toEqual({ removed: { target: "test-service", name: "dev" } });
+    expect(await store.listProfiles("test-service")).toEqual([]);
+  });
 });
 
 describe("@clip/cli-gateway runtime", () => {
@@ -411,5 +431,61 @@ describe("@clip/cli-gateway runtime", () => {
       command: "test-service",
       argv: ["listCats", "--limit", "10", "--verbose"],
     });
+  });
+
+  test("merges target profiles before adapter execution", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service", args: ["base"] } }],
+      profiles: [
+        {
+          target: "test-service",
+          name: "dev",
+          config: { args: ["profile"] },
+        },
+      ],
+    });
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string; args?: readonly string[] };
+        },
+      },
+      async execute(config, ctx) {
+        return { ok: true, value: { config, argv: ctx.argv } };
+      },
+    } satisfies GatewayAdapter<{ command: string; args?: readonly string[] }>;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
+
+    const result = await cli.run(["test-service@dev", "cats"], { render: false });
+
+    expect(result.result).toEqual({
+      config: { command: "test-service", args: ["profile"] },
+      argv: ["cats"],
+    });
+  });
+
+  test("reports missing explicit target profiles", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+    });
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string };
+        },
+      },
+      async execute(config, ctx) {
+        return { ok: true, value: { config, argv: ctx.argv } };
+      },
+    } satisfies GatewayAdapter<{ command: string }>;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
+
+    const result = await cli.run(["test-service@missing", "cats"], { render: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(2);
+    expect(result.result).toEqual({ message: 'Unknown gateway profile: "test-service@missing"' });
   });
 });
