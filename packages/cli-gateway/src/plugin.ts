@@ -1,4 +1,4 @@
-import { createPlugin } from "@clip/kit";
+import { createPlugin, parseOptionSpec } from "@clip/kit";
 import type { CliEventContext } from "@clip/kit";
 import { apiAdapter } from "./adapters/api";
 import { cliAdapter } from "./adapters/cli";
@@ -12,6 +12,7 @@ import type { CliGatewayOptions, CliGatewayPlugin, GatewayAdapter } from "./type
 
 export function cliGateway(options: CliGatewayOptions): CliGatewayPlugin {
   return createPlugin((api) => {
+    api.option(parseOptionSpec("--dry-run", "Preview gateway target execution"));
     installGatewayCommands(api, options);
     api.on("notFound", (ctx) => runGatewayTargetInvocation(ctx as CliEventContext<"notFound">, options));
   });

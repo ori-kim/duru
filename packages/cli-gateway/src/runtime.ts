@@ -27,13 +27,17 @@ export async function runGatewayTargetInvocation(
   const manifest = mergeTargetProfile(target, profile);
   const config = parseTargetConfig(adapter, manifest);
   const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
-  const argv = await targetArgv(ctx.argv.slice(1), target.name, options);
+  const argv = await targetArgv(stripGatewayOptions(ctx.argv.slice(1)), target.name, options);
   const aclError = targetAclError(manifest, argv);
   if (aclError) return ctx.exit(2, { message: aclError });
 
   const timeout = targetTimeout(manifest, options);
   try {
-    const result = await gatewayTarget.invoke({ argv, ...(timeout.signal ? { signal: timeout.signal } : {}) });
+    const result = await gatewayTarget.invoke({
+      argv,
+      dryRun: dryRunOption(ctx.options),
+      ...(timeout.signal ? { signal: timeout.signal } : {}),
+    });
     return gatewayExecutionResult(ctx, result);
   } finally {
     timeout.dispose();
@@ -63,6 +67,10 @@ async function targetArgv(
   if (!alias) return argv;
 
   return [alias.operation, ...(alias.args ?? []), ...argv.slice(1)];
+}
+
+function stripGatewayOptions(argv: readonly string[]): readonly string[] {
+  return argv.filter((item) => item !== "--dry-run");
 }
 
 function parseTargetConfig<TConfig>(adapter: GatewayAdapter<TConfig>, target: GatewayTargetRecord): TConfig {
@@ -122,6 +130,10 @@ function parseTimeoutMs(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const timeoutMs = Number(value);
   return Number.isFinite(timeoutMs) && timeoutMs >= 0 ? timeoutMs : undefined;
+}
+
+function dryRunOption(options: Record<string, unknown>): boolean {
+  return options.dryRun === true;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
