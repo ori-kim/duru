@@ -151,7 +151,7 @@ describe("clip-cli demo app", () => {
       expect(check.result).toEqual({
         ok: true,
         scope: "gateway",
-        adapters: ["cli", "script", "api", "graphql", "mcp"],
+        adapters: ["cli", "script", "api", "graphql", "mcp", "grpc"],
         targets: [{ name: "notes-api", type: "api", ok: true, diagnostics: [] }],
         diagnostics: [],
       });
@@ -174,7 +174,7 @@ describe("clip-cli demo app", () => {
       expect(check.result).toEqual({
         ok: true,
         scope: "gateway",
-        adapters: ["cli", "script", "api", "graphql", "mcp"],
+        adapters: ["cli", "script", "api", "graphql", "mcp", "grpc"],
         targets: [{ name: "search-api", type: "graphql", ok: true, diagnostics: [] }],
         diagnostics: [],
       });
@@ -197,11 +197,33 @@ describe("clip-cli demo app", () => {
       expect(check.result).toEqual({
         ok: true,
         scope: "gateway",
-        adapters: ["cli", "script", "api", "graphql", "mcp"],
+        adapters: ["cli", "script", "api", "graphql", "mcp", "grpc"],
         targets: [{ name: "catservice", type: "mcp", ok: true, diagnostics: [] }],
         diagnostics: [],
       });
       expect(config).toContain('url = "https://catservice.example.com/mcp"');
+    });
+  });
+
+  test("persists grpc gateway targets in CLIP_HOME", async () => {
+    const home = await tempDir("gateway-grpc");
+
+    await withClipHome(home, async () => {
+      const add = await createAppCli().run(["add", "catservice", "localhost:50051", "--type", "grpc"], {
+        render: false,
+      });
+      const check = await createAppCli().run(["check"], { render: false });
+      const config = await readFile(join(home, "target", "grpc", "catservice", "config.toml"), "utf8");
+
+      expect(add.result).toEqual({ name: "catservice", type: "grpc" });
+      expect(check.result).toEqual({
+        ok: true,
+        scope: "gateway",
+        adapters: ["cli", "script", "api", "graphql", "mcp", "grpc"],
+        targets: [{ name: "catservice", type: "grpc", ok: true, diagnostics: [] }],
+        diagnostics: [],
+      });
+      expect(config).toContain('address = "localhost:50051"');
     });
   });
 
@@ -278,7 +300,7 @@ describe("clip-cli demo app", () => {
       expect(result.result).toEqual({
         ok: true,
         scope: "gateway",
-        adapters: ["cli", "script", "api", "graphql", "mcp"],
+        adapters: ["cli", "script", "api", "graphql", "mcp", "grpc"],
         targets: [{ name: "say", type: "cli", ok: true, diagnostics: [] }],
         diagnostics: [],
       });
