@@ -1,4 +1,4 @@
-import type { CompletionContext, CompletionContributor, CompletionItem } from "@clip/kit";
+import type { CompletionContext, CompletionContributor, CompletionItem } from "@duru/cli-kit";
 import type {
   CliGatewayOptions,
   GatewayAdapter,
@@ -18,7 +18,7 @@ export function createGatewayCompletionContributor(
 ): CompletionContributor {
   const namespace = contributorOptions.namespace ?? "gateway";
   return {
-    id: "clip.gateway",
+    id: "duru.gateway",
     async complete(ctx) {
       return completeGateway(ctx, options, namespace);
     },

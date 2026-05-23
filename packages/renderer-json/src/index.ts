@@ -1,5 +1,5 @@
-import { createPlugin, parseOptionSpec } from "@clip/kit";
-import type { CliPlugin, Renderer } from "@clip/kit";
+import { createPlugin, parseOptionSpec } from "@duru/cli-kit";
+import type { CliPlugin, Renderer } from "@duru/cli-kit";
 
 export function jsonRenderer(): Renderer {
   return {

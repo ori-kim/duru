@@ -1,4 +1,4 @@
-import { ClipFileStoreCodecError } from "./errors";
+import { DuruFileStoreCodecError } from "./errors";
 import type { FileCodec } from "./types";
 
 export function jsonCodec(): FileCodec {
@@ -49,14 +49,14 @@ export function codecRegistry(codecs: readonly FileCodec[]): CodecRegistry {
 
 export function codecById(registry: CodecRegistry, id: string): FileCodec {
   const codec = registry.byId.get(id);
-  if (!codec) throw new ClipFileStoreCodecError(id);
+  if (!codec) throw new DuruFileStoreCodecError(id);
   return codec;
 }
 
 export function codecByPath(registry: CodecRegistry, path: string): FileCodec {
   const extension = path.match(/(\.[^./\\]+)$/)?.[1]?.toLowerCase();
   const codec = extension ? registry.byExtension.get(extension) : undefined;
-  if (!codec) throw new ClipFileStoreCodecError(path);
+  if (!codec) throw new DuruFileStoreCodecError(path);
   return codec;
 }
 

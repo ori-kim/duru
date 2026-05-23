@@ -3,7 +3,7 @@ import { apiAdapter } from "./adapters/api";
 import { parseOptionalOAuthProviderConfig } from "./auth";
 import { createMemoryGatewayStore } from "./memory-store";
 
-describe("@clip/cli-gateway oauth auth provider integration", () => {
+describe("@duru/cli-gateway oauth auth provider integration", () => {
   test("parses optional OAuth token store selection", () => {
     expect(parseOptionalOAuthProviderConfig("oauth")).toBeUndefined();
 

@@ -1,5 +1,5 @@
-import { createPlugin } from "@clip/kit";
-import type { CliPlugin, Renderer } from "@clip/kit";
+import { createPlugin } from "@duru/cli-kit";
+import type { CliPlugin, Renderer } from "@duru/cli-kit";
 
 export function textRenderer(): Renderer {
   return {

@@ -1,5 +1,5 @@
-import { createCli } from "@clip/kit";
-import type { CliPluginApi, Context } from "@clip/kit";
+import { createCli } from "@duru/cli-kit";
+import type { CliPluginApi, Context } from "@duru/cli-kit";
 import { runGatewayTargetInvocation } from "./runtime";
 import type { CliGatewayOptions, GatewayBindingRecord, GatewaySnapshot, GatewayTool } from "./types";
 

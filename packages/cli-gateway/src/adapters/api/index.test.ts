@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { createCli } from "@clip/kit";
+import { createCli } from "@duru/cli-kit";
 import { createGatewayCli } from "../../commands";
 import { createMemoryGatewayStore } from "../../memory-store";
 import { cliGateway, defaultGatewayAdapters } from "../../plugin";
 import { apiAdapter } from "./index";
 
-describe("@clip/cli-gateway api adapter", () => {
+describe("@duru/cli-gateway api adapter", () => {
   test("discovers OpenAPI tools and executes operation ids", async () => {
     const store = createMemoryGatewayStore();
     const calls: unknown[] = [];
@@ -104,7 +104,7 @@ describe("@clip/cli-gateway api adapter", () => {
         },
       },
     };
-    const cli = createCli({ name: "clip" })
+    const cli = createCli({ name: "duru" })
       .use(cliGateway(gatewayOptions))
       .route("gateway", createGatewayCli(gatewayOptions, { group: "Gateway" }));
 

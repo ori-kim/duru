@@ -3,43 +3,43 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  ClipFileStoreCodecError,
-  ClipFileStoreParseError,
-  ClipFileStorePathError,
+  DuruFileStoreCodecError,
+  DuruFileStoreParseError,
+  DuruFileStorePathError,
   assertSafeStorePath,
-  createClipFileHome,
+  createDuruFileHome,
   createFileStore,
   jsonCodec,
   tomlCodec,
   yamlCodec,
-} from "@clip/file-store";
+} from "@duru/file-store";
 
-describe("@clip/file-store", () => {
-  test("resolves home from explicit option, CLIP_HOME, then defaultHome", async () => {
+describe("@duru/file-store", () => {
+  test("resolves home from explicit option, DURU_HOME, then defaultHome", async () => {
     const explicitHome = await tempDir("explicit");
     const envHome = await tempDir("env");
     const defaultHome = await tempDir("default");
 
-    expect(createClipFileHome({ home: explicitHome, env: { CLIP_HOME: envHome }, defaultHome }).root).toBe(
+    expect(createDuruFileHome({ home: explicitHome, env: { DURU_HOME: envHome }, defaultHome }).root).toBe(
       resolve(explicitHome),
     );
-    expect(createClipFileHome({ env: { CLIP_HOME: envHome }, defaultHome }).root).toBe(resolve(envHome));
-    expect(createClipFileHome({ env: {}, defaultHome }).root).toBe(resolve(defaultHome));
+    expect(createDuruFileHome({ env: { DURU_HOME: envHome }, defaultHome }).root).toBe(resolve(envHome));
+    expect(createDuruFileHome({ env: {}, defaultHome }).root).toBe(resolve(defaultHome));
   });
 
   test("creates scoped stores while rejecting unsafe relative paths", async () => {
     const root = await tempDir("paths");
-    const home = createClipFileHome({ home: root });
+    const home = createDuruFileHome({ home: root });
     const gatewayFiles = home.store("gateway").scope("cli");
 
     expect(gatewayFiles.root).toBe(resolve(root, "gateway", "cli"));
     expect(gatewayFiles.resolve("test-service/config.yml")).toBe(
       resolve(root, "gateway", "cli", "test-service", "config.yml"),
     );
-    expect(() => assertSafeStorePath("../config.yml")).toThrow(ClipFileStorePathError);
-    expect(() => gatewayFiles.resolve("/tmp/config.yml")).toThrow(ClipFileStorePathError);
-    expect(() => assertSafeStorePath("C:\\temp\\config.yml")).toThrow(ClipFileStorePathError);
-    expect(() => gatewayFiles.scope("bad/../name")).toThrow(ClipFileStorePathError);
+    expect(() => assertSafeStorePath("../config.yml")).toThrow(DuruFileStorePathError);
+    expect(() => gatewayFiles.resolve("/tmp/config.yml")).toThrow(DuruFileStorePathError);
+    expect(() => assertSafeStorePath("C:\\temp\\config.yml")).toThrow(DuruFileStorePathError);
+    expect(() => gatewayFiles.scope("bad/../name")).toThrow(DuruFileStorePathError);
   });
 
   test("reads, writes, lists, and removes text and binary files", async () => {
@@ -96,15 +96,15 @@ describe("@clip/file-store", () => {
   test("reports codec and parse failures with typed errors", async () => {
     const store = codecStore(await tempDir("errors"));
 
-    await expect(store.write("config.unknown", { name: "example" })).rejects.toThrow(ClipFileStoreCodecError);
+    await expect(store.write("config.unknown", { name: "example" })).rejects.toThrow(DuruFileStoreCodecError);
     await writeFile(store.resolve("bad.json"), "{");
 
-    await expect(store.read("bad.json")).rejects.toThrow(ClipFileStoreParseError);
+    await expect(store.read("bad.json")).rejects.toThrow(DuruFileStoreParseError);
   });
 });
 
 async function tempDir(label: string): Promise<string> {
-  return mkdtemp(join(tmpdir(), `clip-file-store-${label}-`));
+  return mkdtemp(join(tmpdir(), `duru-file-store-${label}-`));
 }
 
 function codecStore(root: string) {

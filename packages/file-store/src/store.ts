@@ -3,20 +3,20 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/p
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { codecById, codecByPath, codecRegistry, defaultCodecs } from "./codecs";
-import { ClipFileStoreParseError, ClipFileStoreWriteError } from "./errors";
+import { DuruFileStoreParseError, DuruFileStoreWriteError } from "./errors";
 import { resolveStorePath, safeJoin } from "./path";
 import type {
-  ClipFileHome,
-  CreateClipFileHomeOptions,
+  CreateDuruFileHomeOptions,
   CreateFileStoreOptions,
+  DuruFileHome,
   FileCodec,
   FileStore,
   ReadStructuredOptions,
   WriteOptions,
 } from "./types";
 
-export function createClipFileHome(options: CreateClipFileHomeOptions = {}): ClipFileHome {
-  const root = resolve(options.home ?? options.env?.CLIP_HOME ?? options.defaultHome ?? join(homedir(), ".clip"));
+export function createDuruFileHome(options: CreateDuruFileHomeOptions = {}): DuruFileHome {
+  const root = resolve(options.home ?? options.env?.DURU_HOME ?? options.defaultHome ?? join(homedir(), ".duru"));
   const codecs = options.codecs ?? defaultCodecs();
   return {
     root,
@@ -123,7 +123,7 @@ async function readStructured<T = unknown>(root: string, path: string, codec: Fi
   try {
     return codec.parse(text, { path: resolved, codec: codec.id }) as T;
   } catch (error) {
-    throw new ClipFileStoreParseError(resolved, codec.id, error);
+    throw new DuruFileStoreParseError(resolved, codec.id, error);
   }
 }
 
@@ -139,7 +139,7 @@ async function writeStructured(
   try {
     text = codec.stringify(value, { path: resolved, codec: codec.id });
   } catch (error) {
-    throw new ClipFileStoreWriteError(resolved, error);
+    throw new DuruFileStoreWriteError(resolved, error);
   }
   await writeStoreFile(resolved, text, options);
 }
@@ -156,7 +156,7 @@ async function writeStoreFile(path: string, value: string | Uint8Array, options:
     await writeFile(tempPath, value);
     await rename(tempPath, path);
   } catch (error) {
-    throw new ClipFileStoreWriteError(path, error);
+    throw new DuruFileStoreWriteError(path, error);
   } finally {
     await rm(tempPath, { force: true });
   }

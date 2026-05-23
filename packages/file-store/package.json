@@ -1,5 +1,5 @@
 {
-  "name": "@clip/file-store",
+  "name": "@duru/file-store",
   "version": "0.0.0",
   "type": "module",
   "private": true,

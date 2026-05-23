@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createCli } from "@clip/kit";
+import { createCli } from "@duru/cli-kit";
 import { cliGateway, createGatewayCli } from "./index";
 import { createMemoryGatewayStore } from "./memory-store";
 import type { CliGatewayOptions, GatewayAdapter } from "./types";
 
-describe("@clip/cli-gateway runtime ACL", () => {
+describe("@duru/cli-gateway runtime ACL", () => {
   test("enforces wildcard allow and deny rules", async () => {
     const store = createMemoryGatewayStore({
       targets: [
@@ -60,7 +60,7 @@ describe("@clip/cli-gateway runtime ACL", () => {
 });
 
 function createGatewayTestCli(options: CliGatewayOptions) {
-  return createCli({ name: "clip" })
+  return createCli({ name: "duru" })
     .use(cliGateway(options))
     .route("gateway", createGatewayCli(options, { group: "Gateway" }));
 }

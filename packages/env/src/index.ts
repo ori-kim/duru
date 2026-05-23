@@ -1,5 +1,5 @@
-import { createPlugin, validationError } from "@clip/kit";
-import type { CliPlugin, OptionDefinition, ValidationIssue } from "@clip/kit";
+import { createPlugin, validationError } from "@duru/cli-kit";
+import type { CliPlugin, OptionDefinition, ValidationIssue } from "@duru/cli-kit";
 
 export type EnvSource = Readonly<Record<string, string | undefined>>;
 

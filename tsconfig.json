@@ -15,18 +15,19 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "paths": {
-      "@clip/kit": ["./core/clip-kit/src/index.ts"],
-      "@clip/auth": ["./packages/auth/src/index.ts"],
-      "@clip/env": ["./packages/env/src/index.ts"],
-      "@clip/file-store": ["./packages/file-store/src/index.ts"],
-      "@clip/cli-gateway": ["./packages/cli-gateway/src/index.ts"],
-      "@clip/completion-zsh": ["./packages/completion-zsh/src/index.ts"],
-      "@clip/input-validation": ["./packages/input-validation/src/index.ts"],
-      "@clip/renderer-json": ["./packages/renderer-json/src/index.ts"],
-      "@clip/renderer-text": ["./packages/renderer-text/src/index.ts"],
-      "@clip/virtual-plugins": ["./packages/virtual-plugins/src/index.ts"]
+      "@duru/cli-kit": ["./core/cli/src/index.ts"],
+      "@duru/auth": ["./packages/auth/src/index.ts"],
+      "@duru/env": ["./packages/env/src/index.ts"],
+      "@duru/file-route": ["./packages/file-route/src/index.ts"],
+      "@duru/file-store": ["./packages/file-store/src/index.ts"],
+      "@duru/cli-gateway": ["./packages/cli-gateway/src/index.ts"],
+      "@duru/completion-zsh": ["./packages/completion-zsh/src/index.ts"],
+      "@duru/input-validation": ["./packages/input-validation/src/index.ts"],
+      "@duru/renderer-json": ["./packages/renderer-json/src/index.ts"],
+      "@duru/renderer-text": ["./packages/renderer-text/src/index.ts"],
+      "@duru/virtual-plugins": ["./packages/virtual-plugins/src/index.ts"]
     }
   },
   "include": ["apps/**/*.ts", "core/**/*.ts", "packages/**/*.ts"],
-  "exclude": ["node_modules", "dist", ".agents", ".claude", ".clip-test"]
+  "exclude": ["node_modules", "dist", ".agents", ".claude", ".duru-test"]
 }

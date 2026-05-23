@@ -10,11 +10,11 @@ import {
   createGatewayCli,
   createMemoryGatewayStore,
   defaultGatewayAdapters,
-} from "@clip/cli-gateway";
-import { createCli, help } from "@clip/kit";
+} from "@duru/cli-gateway";
+import { createCli, help } from "@duru/cli-kit";
 import type { CliGatewayOptions } from "./types";
 
-describe("@clip/cli-gateway contract", () => {
+describe("@duru/cli-gateway contract", () => {
   test("creates an installable plugin without owning persistence", async () => {
     const store = createMemoryGatewayStore();
     const cli = createGatewayTestCli({ store });
@@ -458,7 +458,7 @@ describe("@clip/cli-gateway contract", () => {
   });
 
   test("provides MCP stdio transport catalog discovery", async () => {
-    const home = await mkdtemp(join(tmpdir(), "clip-mcp-stdio-"));
+    const home = await mkdtemp(join(tmpdir(), "duru-mcp-stdio-"));
     const server = join(home, "mcp-server.js");
     await writeFile(
       server,
@@ -638,7 +638,7 @@ describe("@clip/cli-gateway contract", () => {
 
   test("exposes adapter authoring types for gateway targets", async () => {
     const store = createMemoryGatewayStore();
-    const context: GatewayContext = { store, env: { CLIP_HOME: "test-home" } };
+    const context: GatewayContext = { store, env: { DURU_HOME: "test-home" } };
     const manifest = { name: "test-service", type: "cli", config: { command: "test-service" } };
     const adapter = {
       type: "cli",
@@ -655,7 +655,7 @@ describe("@clip/cli-gateway contract", () => {
           async invoke(ctx) {
             return {
               ok: true,
-              value: { command: config.command, argv: ctx.argv, home: context.env?.CLIP_HOME },
+              value: { command: config.command, argv: ctx.argv, home: context.env?.DURU_HOME },
             };
           },
           listRow() {
@@ -734,7 +734,7 @@ describe("@clip/cli-gateway contract", () => {
   });
 });
 
-describe("@clip/cli-gateway commands", () => {
+describe("@duru/cli-gateway commands", () => {
   test("registers add command that saves adapter-created target records", async () => {
     const store = createMemoryGatewayStore();
     const adapter = {
@@ -884,7 +884,7 @@ describe("@clip/cli-gateway commands", () => {
       },
     } satisfies GatewayAdapter<{ command: string; args: readonly string[] }>;
     const gatewayOptions = { store, adapters: [adapter] };
-    const cli = createCli({ name: "clip" })
+    const cli = createCli({ name: "duru" })
       .use(cliGateway(gatewayOptions, { namespace: "targets" }))
       .route("targets", createGatewayCli(gatewayOptions, { group: "Gateway" }));
 
@@ -1488,7 +1488,7 @@ describe("@clip/cli-gateway commands", () => {
   });
 });
 
-describe("@clip/cli-gateway runtime", () => {
+describe("@duru/cli-gateway runtime", () => {
   test("dispatches unknown commands as target invocations through matching adapters", async () => {
     const store = createMemoryGatewayStore({
       targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
@@ -1745,7 +1745,7 @@ describe("@clip/cli-gateway runtime", () => {
         };
       },
     } satisfies GatewayAdapter<{ command: string }>;
-    const cli = createCli({ name: "clip" })
+    const cli = createCli({ name: "duru" })
       .use(cliGateway({ store, adapters: [adapter] }))
       .use(help());
 
@@ -1778,7 +1778,7 @@ describe("@clip/cli-gateway runtime", () => {
         };
       },
     } satisfies GatewayAdapter<{ command: string }>;
-    const cli = createCli({ name: "clip" })
+    const cli = createCli({ name: "duru" })
       .use(cliGateway({ store, adapters: [adapter] }))
       .use(help());
 
@@ -1806,7 +1806,7 @@ describe("@clip/cli-gateway runtime", () => {
         },
       },
     };
-    const cli = createCli({ name: "clip" })
+    const cli = createCli({ name: "duru" })
       .use(cliGateway(gatewayOptions))
       .route("gateway", createGatewayCli(gatewayOptions, { group: "Gateway" }))
       .use(help());
@@ -2169,7 +2169,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function createGatewayTestCli(options: CliGatewayOptions) {
-  return createCli({ name: "clip" })
+  return createCli({ name: "duru" })
     .use(cliGateway(options))
     .route("gateway", createGatewayCli(options, { group: "Gateway" }));
 }

@@ -1,4 +1,4 @@
-import type { CompletionItem } from "@clip/kit";
+import type { CompletionItem } from "@duru/cli-kit";
 
 export type RenderZshCompletionOptions = {
   commandName?: string;

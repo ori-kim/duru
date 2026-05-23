@@ -77,7 +77,7 @@ async function initialize(
     params: {
       protocolVersion,
       capabilities: {},
-      clientInfo: { name: "clip", version: "0.1.0" },
+      clientInfo: { name: "duru", version: "0.1.0" },
     },
   });
   if (response.error) throw new Error(`MCP initialize error: ${jsonErrorMessage(response.error)}`);

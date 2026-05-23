@@ -250,7 +250,7 @@ async function registerOAuthClient(input: {
   if (!input.provider.registrationEndpoint) throw new Error("OAuth provider requires registrationEndpoint");
 
   const body = {
-    client_name: input.provider.clientName ?? "clip",
+    client_name: input.provider.clientName ?? "duru",
     redirect_uris: [input.redirectUri],
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],

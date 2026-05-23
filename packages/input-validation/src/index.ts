@@ -1,5 +1,5 @@
-import { input as coreInput, parseOptionSpec, validationError } from "@clip/kit";
-import type { CommandFeature, EmptyObject, OptionDefinition, ParamDefinition, ValidationIssue } from "@clip/kit";
+import { input as coreInput, parseOptionSpec, validationError } from "@duru/cli-kit";
+import type { CommandFeature, EmptyObject, OptionDefinition, ParamDefinition, ValidationIssue } from "@duru/cli-kit";
 
 type StandardSchema<TInput = unknown, TOutput = TInput> = {
   readonly "~standard": {

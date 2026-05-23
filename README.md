@@ -1,12 +1,12 @@
-# clip
+# duru
 
-<img src="assets/icon.png" alt="clip icon" width="120" />
+<img src="assets/icon.png" alt="duru icon" width="120" />
 
 [한국어](README.ko.md)
 
-> **Pre-release:** clip is not yet production-ready. APIs and configuration formats may change without notice between versions.
+> **Pre-release:** duru is not yet production-ready. APIs and configuration formats may change without notice between versions.
 
-A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules, handle OAuth auth, and integrate with AI agents from one command.
+A framework service for wiring CLI tools, MCP servers, APIs, skills, and agent workflows behind one command surface.
 
 ## Table of Contents
 
@@ -20,7 +20,7 @@ A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules,
 
 ## Features
 
-- **Unified proxy** — wrap any CLI tool, MCP server, REST/GraphQL/gRPC API behind a single gateway
+- **Unified framework surface** — wrap CLI tools, MCP servers, REST/GraphQL/gRPC APIs, and workflow helpers behind one runtime
 - **ACL enforcement** — allow or deny subcommands per target with tree-based rules
 - **OAuth 2.1 PKCE** — secure token management for MCP server authentication
 - **Agent integration** — install as a Claude Code skill for AI agent workflows
@@ -32,15 +32,15 @@ A unified CLI proxy gateway for MCP servers and CLI tools — enforce ACL rules,
 **Pre-built binary** (Apple Silicon only, no dependencies):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ori-kim/cli-proxy/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/ori-kim/duru/main/install.sh | sh
 ```
 
-Default install path: `~/.local/bin/clip`. Override with `CLIP_INSTALL_DIR`.
+Default install path: `~/.local/bin/duru`. Override with `DURU_INSTALL_DIR`.
 
 **Via Bun** (requires [Bun](https://bun.sh) ≥ 1.0):
 
 ```sh
-bun install -g github:ori-kim/cli-proxy
+bun install -g github:ori-kim/duru
 ```
 
 Add to PATH if needed:
@@ -49,18 +49,19 @@ Add to PATH if needed:
 export PATH="$PATH:$HOME/.bun/bin"
 ```
 
-**Native bind** — route commands through clip without the `clip` prefix:
+**Native bind** — route commands through duru without the `duru` prefix:
 
 ```sh
-clip bind gh
-export PATH="$HOME/.clip/bin:$PATH"   # add before other entries
-gh pr list   # routes through clip
+duru gateway add gh gh
+duru gateway bind gh gh
+export PATH="$HOME/.duru/bin:$PATH"   # add before other entries
+gh pr list   # routes through duru
 ```
 
 **Agents skill:**
 
 ```sh
-npx skills add ori-kim/cli-proxy
+npx skills add ori-kim/duru
 ```
 
 Install via [skills.sh](https://skills.sh) — GitHub repo-based skill registry.
@@ -68,85 +69,86 @@ Install via [skills.sh](https://skills.sh) — GitHub repo-based skill registry.
 **Zsh completion:**
 
 ```sh
-eval "$(clip completion zsh)"
+eval "$(duru completion zsh)"
 ```
 
 **Update:**
 
 ```sh
-clip update --check
-clip update --yes
+duru update --check
+duru update --yes
 ```
 
 ## Quick Start
 
 ```sh
 # CLI tool
-clip add gh gh --deny delete
-clip gh pr list
+duru gateway add gh gh --deny delete
+duru gh pr list
 
 # HTTP MCP server (with OAuth)
-clip add notion https://mcp.notion.com/mcp
-clip login notion
-clip notion search --query "..."
+duru gateway add notion https://mcp.notion.com/mcp
+duru gateway login notion
+duru notion search --query "..."
 
 # OpenAPI REST
-clip add petstore https://petstore3.swagger.io/api/v3/openapi.json
-clip petstore getPetById --petId 1
+duru gateway add petstore https://petstore3.swagger.io/api/v3/openapi.json
+duru petstore getPetById --petId 1
 
 # gRPC
-clip add my-api localhost:50051 --grpc ./api.proto
-clip my-api UserService.GetUser --id 123
+duru gateway add my-api localhost:50051 --grpc ./api.proto
+duru my-api UserService.GetUser --id 123
 
 # GraphQL
-clip add gql https://api.example.com/graphql --graphql
-clip gql query --query '{ users { id name } }'
+duru gateway add gql https://api.example.com/graphql --graphql
+duru gql query --query '{ users { id name } }'
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `clip add <name> <cmd>` | Register a CLI target |
-| `clip add <name> <https://...mcp>` | Register HTTP MCP |
-| `clip add <name> --sse <url>` | Register SSE MCP (legacy) |
-| `clip add <name> --stdio <cmd> [args]` | Register STDIO MCP |
-| `clip add <name> <https://.../openapi.json>` | Register OpenAPI REST |
-| `clip add <name> <host:port> --grpc [proto]` | Register gRPC |
-| `clip add <name> <https://.../graphql> --graphql` | Register GraphQL |
-| `clip add <name> --script` | Register script target |
-| `clip remove <name>` | Unregister |
-| `clip list` | List all targets |
-| `clip login / logout <target>` | OAuth authentication |
-| `clip refresh <target>` | Re-fetch spec or schema |
-| `clip update [--check]` | Update the local clip binary from the latest release |
-| `clip <target> tools` | List available tools/operations |
-| `clip <target> describe <op>` | Show method/type details |
-| `clip <target> types` | List all types (gRPC/GraphQL) |
-| `clip profile add/use/list/remove/unset` | Manage profiles |
-| `clip <target>@<profile> <args>` | One-shot profile override |
-| `clip bind / unbind <target>` | Native command shim |
-| `clip binds` | List bound targets |
-| `clip skills add <name>` | Create a prompt-template skill |
-| `clip skills list` | List skills (shows installed agents) |
-| `clip skills get <name> [--input k=v ...]` | Render skill with inputs |
-| `clip skills install <name> --to <agent>` | Install skill to agent |
-| `clip skills uninstall <name>` | Remove skill from agent |
-| `npx skills add ori-kim/cli-proxy` | Install agent skill via skills.sh |
-| `clip completion zsh` | Print zsh completion |
+| `duru gateway add <name> <cmd>` | Register a CLI target |
+| `duru gateway add <name> <https://...mcp>` | Register HTTP MCP |
+| `duru gateway add <name> --sse <url>` | Register SSE MCP (legacy) |
+| `duru gateway add <name> --stdio <cmd> [args]` | Register STDIO MCP |
+| `duru gateway add <name> <https://.../openapi.json>` | Register OpenAPI REST |
+| `duru gateway add <name> <host:port> --grpc [proto]` | Register gRPC |
+| `duru gateway add <name> <https://.../graphql> --graphql` | Register GraphQL |
+| `duru gateway add <name> --script` | Register script target |
+| `duru gateway remove <name>` | Unregister |
+| `duru gateway list` | List all targets |
+| `duru gateway login / logout <target>` | OAuth authentication |
+| `duru gateway refresh <target>` | Re-fetch spec or schema |
+| `duru update [--check]` | Update the local duru binary from the latest release |
+| `duru <target> tools` | List available tools/operations |
+| `duru <target> describe <op>` | Show method/type details |
+| `duru <target> types` | List all types (gRPC/GraphQL) |
+| `duru gateway profile add/use/list/remove/unset` | Manage profiles |
+| `duru <target>@<profile> <args>` | One-shot profile override |
+| `duru gateway bind <name> <target> [...args]` | Native command shim |
+| `duru gateway unbind <name>` | Remove native command shim |
+| `duru gateway binds` | List bound targets |
+| `duru skills add <name>` | Create a prompt-template skill |
+| `duru skills list` | List skills (shows installed agents) |
+| `duru skills get <name> [--input k=v ...]` | Render skill with inputs |
+| `duru skills install <name> --to <agent>` | Install skill to agent |
+| `duru skills uninstall <name>` | Remove skill from agent |
+| `npx skills add ori-kim/duru` | Install agent skill via skills.sh |
+| `duru completion zsh` | Print zsh completion |
 
 **Global flags:** `--json`, `--json-output`, `--pipe`, `--dry-run`, `--help`, `--version`
 
-Flags can be placed anywhere: `clip gh pr list --json`, `clip petstore getPetById --petId 1 --dry-run`
+Flags can be placed anywhere: `duru gh pr list --json`, `duru petstore getPetById --petId 1 --dry-run`
 
-**Target timeout:** `timeoutMs` in target config wins, then `CLIP_TARGET_TIMEOUT_MS`, then default `30000` ms.
+**Target timeout:** `timeoutMs` in target config wins, then `DURU_TARGET_TIMEOUT_MS`, then default `30000` ms.
 
 ## Extensions
 
-Drop a `.ts` file into `~/.clip/extensions/` to add hooks or new target types:
+Drop a `.ts` file into `~/.duru/extensions/` to add hooks or new target types:
 
 ```ts
-// ~/.clip/extensions/trace.ts
+// ~/.duru/extensions/trace.ts
 export default {
   name: "my:trace",
   init(api) {
@@ -177,14 +179,14 @@ Requires [Bun](https://bun.sh) ≥ 1.1.
 
 ```sh
 bun install
-bun run src/clip.ts --help
+bun run src/duru.ts --help
 bun run build   # → dist/
 bun test
 ```
 
 ## Versioning
 
-clip uses **[HeadVer](https://techblog.lycorp.co.jp/ko/headver-new-versioning-system-for-product-teams)** — a versioning system designed for product teams by LY Corporation.
+duru uses **[HeadVer](https://techblog.lycorp.co.jp/ko/headver-new-versioning-system-for-product-teams)** — a versioning system designed for product teams by LY Corporation.
 
 Format: `Head.YearWeek.Build`
 

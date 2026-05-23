@@ -1,4 +1,4 @@
-import type { CompletionContext, CompletionItem, CompletionResult } from "@clip/kit";
+import type { CompletionContext, CompletionItem, CompletionResult } from "@duru/cli-kit";
 import type { CompletionQueryOptions, CompletionQueryOutput } from "./types";
 
 export type CompletionQueryRunnerOptions = CompletionQueryOptions & {

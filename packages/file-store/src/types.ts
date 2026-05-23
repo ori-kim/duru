@@ -1,4 +1,4 @@
-export type ClipFileHome = {
+export type DuruFileHome = {
   readonly root: string;
   resolve(path?: string): string;
   scope(name: string): FileStore;
@@ -43,7 +43,7 @@ export type FileCodecContext = {
   readonly codec: string;
 };
 
-export type CreateClipFileHomeOptions = {
+export type CreateDuruFileHomeOptions = {
   readonly home?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly defaultHome?: string;

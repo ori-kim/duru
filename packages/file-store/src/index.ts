@@ -1,15 +1,15 @@
 export { jsonCodec, tomlCodec, yamlCodec } from "./codecs";
 export {
-  ClipFileStoreCodecError,
-  ClipFileStoreParseError,
-  ClipFileStorePathError,
-  ClipFileStoreWriteError,
+  DuruFileStoreCodecError,
+  DuruFileStoreParseError,
+  DuruFileStorePathError,
+  DuruFileStoreWriteError,
 } from "./errors";
 export { assertSafeStorePath } from "./path";
-export { createClipFileHome, createFileStore } from "./store";
+export { createDuruFileHome, createFileStore } from "./store";
 export type {
-  ClipFileHome,
-  CreateClipFileHomeOptions,
+  DuruFileHome,
+  CreateDuruFileHomeOptions,
   CreateFileStoreOptions,
   FileCodec,
   FileCodecContext,

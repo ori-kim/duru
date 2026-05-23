@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createMemoryGatewayStore } from "../../memory-store";
 import { mcpAdapter } from "./index";
 
-describe("@clip/cli-gateway mcp adapter", () => {
+describe("@duru/cli-gateway mcp adapter", () => {
   test("invokes MCP tools through tools/call with JSON object input", async () => {
     const calls: Array<{ input: string; body: unknown }> = [];
     const adapter = mcpAdapter();
@@ -97,7 +97,7 @@ describe("@clip/cli-gateway mcp adapter", () => {
   });
 
   test("invokes MCP stdio tools through tools/call", async () => {
-    const home = await mkdtemp(join(tmpdir(), "clip-mcp-stdio-call-"));
+    const home = await mkdtemp(join(tmpdir(), "duru-mcp-stdio-call-"));
     const server = join(home, "mcp-server.js");
     await writeFile(
       server,

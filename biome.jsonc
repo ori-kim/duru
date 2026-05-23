@@ -1,6 +1,6 @@
 {
   "files": {
-    "ignore": ["node_modules", "dist", ".agents", ".claude", ".clip-test"]
+    "ignore": ["node_modules", "dist", ".agents", ".claude", ".duru-test"]
   },
   "formatter": {
     "indentStyle": "space",
