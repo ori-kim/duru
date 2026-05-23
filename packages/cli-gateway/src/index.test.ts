@@ -992,6 +992,35 @@ describe("@clip/cli-gateway runtime", () => {
     expect(result.result).toEqual({ hasSignal: true, aborted: false });
   });
 
+  test("passes gateway dry-run option into adapter invocation", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+    });
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { argv: ctx.argv, dryRun: ctx.dryRun ?? false } };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ command: string }>;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
+
+    const result = await cli.run(["test-service", "listCats", "--dry-run"], { render: false });
+
+    expect(result.result).toEqual({ argv: ["listCats"], dryRun: true });
+  });
+
   test("expands target aliases before adapter execution", async () => {
     const store = createMemoryGatewayStore({
       targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
