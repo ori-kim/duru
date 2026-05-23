@@ -108,7 +108,7 @@ describe("clip-cli demo app", () => {
       const add = await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
       const list = await createAppCli().run(["list"], { render: false });
       const run = await createAppCli().run(["say", "hello", "example"], { render: false });
-      const config = await readFile(join(home, "target", "cli", "say", "config.toml"), "utf8");
+      const config = await readFile(join(home, "gateway", "cli", "say", "config.toml"), "utf8");
 
       expect(add.exitCode).toBe(0);
       expect(add.result).toEqual({ name: "say", type: "cli" });
@@ -128,7 +128,7 @@ describe("clip-cli demo app", () => {
     await withClipHome(home, async () => {
       const add = await createAppCli().run(["add", "say", "echo", "hello", "--type", "script"], { render: false });
       const run = await createAppCli().run(["say", "example"], { render: false });
-      const config = await readFile(join(home, "target", "script", "say", "config.toml"), "utf8");
+      const config = await readFile(join(home, "gateway", "script", "say", "config.toml"), "utf8");
 
       expect(add.result).toEqual({ name: "say", type: "script" });
       expect(run.result).toBe("hello example");
@@ -145,7 +145,7 @@ describe("clip-cli demo app", () => {
         render: false,
       });
       const check = await createAppCli().run(["check"], { render: false });
-      const config = await readFile(join(home, "target", "api", "notes-api", "config.toml"), "utf8");
+      const config = await readFile(join(home, "gateway", "api", "notes-api", "config.toml"), "utf8");
 
       expect(add.result).toEqual({ name: "notes-api", type: "api" });
       expect(check.result).toEqual({
@@ -168,7 +168,7 @@ describe("clip-cli demo app", () => {
         { render: false },
       );
       const check = await createAppCli().run(["check"], { render: false });
-      const config = await readFile(join(home, "target", "graphql", "search-api", "config.toml"), "utf8");
+      const config = await readFile(join(home, "gateway", "graphql", "search-api", "config.toml"), "utf8");
 
       expect(add.result).toEqual({ name: "search-api", type: "graphql" });
       expect(check.result).toEqual({
@@ -191,7 +191,7 @@ describe("clip-cli demo app", () => {
         { render: false },
       );
       const check = await createAppCli().run(["check"], { render: false });
-      const config = await readFile(join(home, "target", "mcp", "catservice", "config.toml"), "utf8");
+      const config = await readFile(join(home, "gateway", "mcp", "catservice", "config.toml"), "utf8");
 
       expect(add.result).toEqual({ name: "catservice", type: "mcp" });
       expect(check.result).toEqual({
@@ -213,7 +213,7 @@ describe("clip-cli demo app", () => {
         render: false,
       });
       const check = await createAppCli().run(["check"], { render: false });
-      const config = await readFile(join(home, "target", "grpc", "catservice", "config.toml"), "utf8");
+      const config = await readFile(join(home, "gateway", "grpc", "catservice", "config.toml"), "utf8");
 
       expect(add.result).toEqual({ name: "catservice", type: "grpc" });
       expect(check.result).toEqual({
@@ -316,7 +316,7 @@ describe("clip-cli demo app", () => {
       const addAlias = await createAppCli().run(["alias", "add", "say", "hi", "hello"], { render: false });
       const listAliases = await createAppCli().run(["alias", "list", "say"], { render: false });
       const run = await createAppCli().run(["say", "hi", "example"], { render: false });
-      const config = await readFile(join(home, "target", "cli", "say", "aliases", "hi.toml"), "utf8");
+      const config = await readFile(join(home, "gateway", "cli", "say", "aliases", "hi.toml"), "utf8");
 
       expect(addAlias.result).toEqual({ target: "say", name: "hi", operation: "hello" });
       expect(listAliases.result).toEqual({ aliases: [{ target: "say", name: "hi", operation: "hello", args: [] }] });
@@ -335,7 +335,7 @@ describe("clip-cli demo app", () => {
       const bind = await createAppCli().run(["bind", "hi", "say", "hello"], { render: false });
       const list = await createAppCli().run(["binds"], { render: false });
       const run = await createAppCli().run(["hi", "example"], { render: false });
-      const config = await readFile(join(home, "target", "_bindings", "hi.toml"), "utf8");
+      const config = await readFile(join(home, "gateway", "_bindings", "hi.toml"), "utf8");
       const shim = await readFile(join(home, "bin", "hi"), "utf8");
 
       expect(bind.result).toEqual({ name: "hi", target: "say", args: ["hello"] });
@@ -358,8 +358,8 @@ describe("clip-cli demo app", () => {
       const useProfile = await createAppCli().run(["profile", "use", "say", "dev"], { render: false });
       const listProfiles = await createAppCli().run(["profile", "list", "say"], { render: false });
       const run = await createAppCli().run(["say", "example"], { render: false });
-      const targetConfig = await readFile(join(home, "target", "cli", "say", "config.toml"), "utf8");
-      const config = await readFile(join(home, "target", "cli", "say", "profiles", "dev.toml"), "utf8");
+      const targetConfig = await readFile(join(home, "gateway", "cli", "say", "config.toml"), "utf8");
+      const config = await readFile(join(home, "gateway", "cli", "say", "profiles", "dev.toml"), "utf8");
 
       expect(addProfile.result).toEqual({ target: "say", name: "dev" });
       expect(useProfile.result).toEqual({ target: "say", name: "dev" });

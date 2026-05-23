@@ -26,6 +26,8 @@ export async function executeOpenApiOperation(
   tool: OpenApiTool,
   ctx: GatewayInvokeContext,
   gatewayContext: GatewayContext,
+  target: string,
+  profile: string | undefined,
 ): Promise<GatewayResult> {
   let args: OperationArgs;
 
@@ -66,6 +68,7 @@ export async function executeOpenApiOperation(
     },
     ctx,
     gatewayContext,
+    { target, ...(profile ? { profile } : {}), config },
   );
 }
 

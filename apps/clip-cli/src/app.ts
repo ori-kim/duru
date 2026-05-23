@@ -6,11 +6,21 @@ import { adaptResult, context, createCli, formatHelp, help, isHelpDocument, isVa
 import { jsonRendererPlugin } from "@clip/renderer-json";
 import { textRendererPlugin } from "@clip/renderer-text";
 import { z } from "zod";
+import { createConfiguredOAuthTokenStore } from "./auth/configured-token-store.ts";
+import { createTargetFileOAuthTokenStore } from "./auth/file-token-store.ts";
+import { createMacOSKeychainOAuthTokenStore } from "./auth/keychain-store.ts";
+import { createAppOAuthGatewayService } from "./auth/oauth-services.ts";
 import { createAppGatewayStore } from "./gateway-store.ts";
 
 export function createAppCli() {
   const fileHome = createClipFileHome({ env: process.env });
-  const gatewayStore = createAppGatewayStore({ files: fileHome.store("target"), shims: fileHome.store("bin") });
+  const gatewayFiles = fileHome.store("gateway");
+  const gatewayStore = createAppGatewayStore({ files: gatewayFiles, shims: fileHome.store("bin") });
+  const oauthTokenStore = createConfiguredOAuthTokenStore({
+    targets: gatewayStore,
+    keychain: createMacOSKeychainOAuthTokenStore(),
+    file: createTargetFileOAuthTokenStore({ files: gatewayFiles, targets: gatewayStore }),
+  });
   const cli = createCli({
     name: "clip",
   })
@@ -25,7 +35,14 @@ export function createAppCli() {
     .use(textRendererPlugin())
     .use(jsonRendererPlugin())
     .use(env())
-    .use(cliGateway({ store: gatewayStore, adapters: defaultGatewayAdapters(), env: process.env }))
+    .use(
+      cliGateway({
+        store: gatewayStore,
+        adapters: defaultGatewayAdapters(),
+        env: process.env,
+        services: { oauth: createAppOAuthGatewayService({ tokens: oauthTokenStore }) },
+      }),
+    )
     .use(help());
 
   cli.on("log", (ctx) => {

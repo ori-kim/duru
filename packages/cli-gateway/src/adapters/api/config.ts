@@ -1,3 +1,5 @@
+import { parseOptionalOAuthProviderConfig } from "../../auth";
+import type { GatewayOAuthProviderConfig } from "../../auth";
 import type { AddInput } from "../../types";
 
 export type ApiAdapterConfig = {
@@ -5,6 +7,7 @@ export type ApiAdapterConfig = {
   openapiUrl?: string;
   spec?: unknown;
   headers?: Record<string, string>;
+  auth?: GatewayOAuthProviderConfig;
 };
 
 export function detectApiInput(input: AddInput): boolean {
@@ -59,6 +62,7 @@ export function parseApiConfig(value: unknown): ApiAdapterConfig {
     ...(openapiUrl ? { openapiUrl } : {}),
     ...(hasSpec ? { spec: value.spec } : {}),
     ...(value.headers ? { headers: value.headers } : {}),
+    ...(value.auth ? { auth: parseOptionalOAuthProviderConfig(value.auth) } : {}),
   };
 }
 

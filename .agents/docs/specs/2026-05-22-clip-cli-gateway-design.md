@@ -61,7 +61,7 @@ createCli({ name: "clip" }).use(
 ```ts
 const files = createClipFileHome({ env: process.env });
 const store: GatewayStore = createAppGatewayStore({
-  files: files.store("target"),
+  files: files.store("gateway"),
   format: "toml",
 });
 
@@ -105,8 +105,8 @@ type GatewayStore = {
 `apps/clip`의 file-backed 구현은 기존 호환 layout을 유지할 수 있다.
 
 ```text
-$CLIP_HOME/target/<type>/<name>/config.yml
-$CLIP_HOME/target/<type>/<name>/.env
+$CLIP_HOME/gateway/<type>/<name>/config.yml
+$CLIP_HOME/gateway/<type>/<name>/.env
 ```
 
 현재 app 구현의 기본 쓰기 format은 TOML이고, 읽기는 TOML/YAML/JSON을 허용한다. 이 layout과 format 선택은 gateway contract가 아니라 app store 구현 세부사항이다.

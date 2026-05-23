@@ -30,16 +30,16 @@ describe("@clip/file-store", () => {
   test("creates scoped stores while rejecting unsafe relative paths", async () => {
     const root = await tempDir("paths");
     const home = createClipFileHome({ home: root });
-    const targetFiles = home.store("target").scope("cli");
+    const gatewayFiles = home.store("gateway").scope("cli");
 
-    expect(targetFiles.root).toBe(resolve(root, "target", "cli"));
-    expect(targetFiles.resolve("test-service/config.yml")).toBe(
-      resolve(root, "target", "cli", "test-service", "config.yml"),
+    expect(gatewayFiles.root).toBe(resolve(root, "gateway", "cli"));
+    expect(gatewayFiles.resolve("test-service/config.yml")).toBe(
+      resolve(root, "gateway", "cli", "test-service", "config.yml"),
     );
     expect(() => assertSafeStorePath("../config.yml")).toThrow(ClipFileStorePathError);
-    expect(() => targetFiles.resolve("/tmp/config.yml")).toThrow(ClipFileStorePathError);
+    expect(() => gatewayFiles.resolve("/tmp/config.yml")).toThrow(ClipFileStorePathError);
     expect(() => assertSafeStorePath("C:\\temp\\config.yml")).toThrow(ClipFileStorePathError);
-    expect(() => targetFiles.scope("bad/../name")).toThrow(ClipFileStorePathError);
+    expect(() => gatewayFiles.scope("bad/../name")).toThrow(ClipFileStorePathError);
   });
 
   test("reads, writes, lists, and removes text and binary files", async () => {

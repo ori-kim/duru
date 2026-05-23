@@ -16,6 +16,7 @@
         "clip": "./src/main.ts",
       },
       "dependencies": {
+        "@clip/auth": "workspace:*",
         "@clip/cli-gateway": "workspace:*",
         "@clip/env": "workspace:*",
         "@clip/file-store": "workspace:*",
@@ -28,6 +29,10 @@
     },
     "core/clip-kit": {
       "name": "@clip/kit",
+      "version": "0.0.0",
+    },
+    "packages/auth": {
+      "name": "@clip/auth",
       "version": "0.0.0",
     },
     "packages/cli-gateway": {
@@ -103,6 +108,8 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@1.9.4", "", { "os": "win32", "cpu": "x64" }, "sha512-8Y5wMhVIPaWe6jw2H+KlEm4wP/f7EW3810ZLmDlrEEy5KvBsb9ECEfu/kMWD484ijfQ8+nIi0giMgu9g1UAuuA=="],
 
+    "@clip/auth": ["@clip/auth@workspace:packages/auth"],
+
     "@clip/cli-gateway": ["@clip/cli-gateway@workspace:packages/cli-gateway"],
 
     "@clip/env": ["@clip/env@workspace:packages/env"],
@@ -129,6 +136,6 @@
 
     "undici-types": ["undici-types@7.19.2", "", {}, "sha512-qYVnV5OEm2AW8cJMCpdV20CDyaN3g0AjDlOGf1OW4iaDEx8MwdtChUp4zu4H0VP3nDRF/8RKWH+IPp9uW0YGZg=="],
 
-    "zod": ["zod@4.4.3", "https://registry.npmjs.org/zod/-/zod-4.4.3.tgz", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
+    "zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
   }
 }

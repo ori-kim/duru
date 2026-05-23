@@ -16,6 +16,7 @@
     "noImplicitOverride": true,
     "paths": {
       "@clip/kit": ["./core/clip-kit/src/index.ts"],
+      "@clip/auth": ["./packages/auth/src/index.ts"],
       "@clip/env": ["./packages/env/src/index.ts"],
       "@clip/file-store": ["./packages/file-store/src/index.ts"],
       "@clip/cli-gateway": ["./packages/cli-gateway/src/index.ts"],
