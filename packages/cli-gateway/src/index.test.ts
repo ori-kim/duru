@@ -322,6 +322,63 @@ describe("@clip/cli-gateway commands", () => {
     expect(remove.result).toEqual({ removed: { target: "test-service", name: "dev" } });
     expect(await store.listProfiles("test-service")).toEqual([]);
   });
+
+  test("registers login and logout commands backed by adapter auth hooks", async () => {
+    const calls: Array<{ action: string; config: { url: string }; ctx: { target: string; profile?: string } }> = [];
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "notes-api", type: "api", config: { url: "https://api.example.com" } }],
+    });
+    const adapter = {
+      type: "api",
+      schema: {
+        parse(value: unknown) {
+          return value as { url: string };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke() {
+            return { ok: true };
+          },
+          auth: {
+            async login(ctx) {
+              calls.push({ action: "login", config, ctx });
+            },
+            async logout(ctx) {
+              calls.push({ action: "logout", config, ctx });
+            },
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ url: string }>;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
+
+    const login = await cli.run(["login", "notes-api"], { render: false });
+    const logout = await cli.run(["logout", "notes-api"], { render: false });
+
+    expect(login.result).toEqual({ target: "notes-api", type: "api", action: "login" });
+    expect(logout.result).toEqual({ target: "notes-api", type: "api", action: "logout" });
+    expect(calls).toEqual([
+      { action: "login", config: { url: "https://api.example.com" }, ctx: { target: "notes-api" } },
+      { action: "logout", config: { url: "https://api.example.com" }, ctx: { target: "notes-api" } },
+    ]);
+  });
+
+  test("reports stable auth command errors for unsupported adapters", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+    });
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: defaultGatewayAdapters() }));
+
+    const result = await cli.run(["login", "test-service"], { render: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(2);
+    expect(result.result).toEqual({ message: 'Gateway adapter "cli" does not support login' });
+  });
 });
 
 describe("@clip/cli-gateway runtime", () => {
@@ -430,8 +487,15 @@ describe("@clip/cli-gateway runtime", () => {
           return value as { command: string };
         },
       },
-      async execute(config, ctx) {
-        return { ok: true, value: { command: config.command, argv: ctx.argv } };
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { command: config.command, argv: ctx.argv } };
+          },
+        };
       },
     } satisfies GatewayAdapter<{ command: string }>;
     const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
@@ -462,8 +526,15 @@ describe("@clip/cli-gateway runtime", () => {
           return value as { command: string; args?: readonly string[] };
         },
       },
-      async execute(config, ctx) {
-        return { ok: true, value: { config, argv: ctx.argv } };
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { config, argv: ctx.argv } };
+          },
+        };
       },
     } satisfies GatewayAdapter<{ command: string; args?: readonly string[] }>;
     const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
@@ -487,8 +558,15 @@ describe("@clip/cli-gateway runtime", () => {
           return value as { command: string };
         },
       },
-      async execute(config, ctx) {
-        return { ok: true, value: { config, argv: ctx.argv } };
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { config, argv: ctx.argv } };
+          },
+        };
       },
     } satisfies GatewayAdapter<{ command: string }>;
     const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
