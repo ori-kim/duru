@@ -151,11 +151,34 @@ describe("clip-cli demo app", () => {
       expect(check.result).toEqual({
         ok: true,
         scope: "gateway",
-        adapters: ["cli", "script", "api"],
+        adapters: ["cli", "script", "api", "graphql"],
         targets: [{ name: "notes-api", type: "api", ok: true, diagnostics: [] }],
         diagnostics: [],
       });
       expect(config).toContain('baseUrl = "https://api.example.com"');
+    });
+  });
+
+  test("persists graphql gateway targets in CLIP_HOME", async () => {
+    const home = await tempDir("gateway-graphql");
+
+    await withClipHome(home, async () => {
+      const add = await createAppCli().run(
+        ["add", "search-api", "https://api.example.com/graphql", "--type", "graphql"],
+        { render: false },
+      );
+      const check = await createAppCli().run(["check"], { render: false });
+      const config = await readFile(join(home, "target", "graphql", "search-api", "config.toml"), "utf8");
+
+      expect(add.result).toEqual({ name: "search-api", type: "graphql" });
+      expect(check.result).toEqual({
+        ok: true,
+        scope: "gateway",
+        adapters: ["cli", "script", "api", "graphql"],
+        targets: [{ name: "search-api", type: "graphql", ok: true, diagnostics: [] }],
+        diagnostics: [],
+      });
+      expect(config).toContain('endpoint = "https://api.example.com/graphql"');
     });
   });
 
@@ -232,7 +255,7 @@ describe("clip-cli demo app", () => {
       expect(result.result).toEqual({
         ok: true,
         scope: "gateway",
-        adapters: ["cli", "script", "api"],
+        adapters: ["cli", "script", "api", "graphql"],
         targets: [{ name: "say", type: "cli", ok: true, diagnostics: [] }],
         diagnostics: [],
       });

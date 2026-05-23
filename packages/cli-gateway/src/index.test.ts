@@ -16,7 +16,7 @@ describe("@clip/cli-gateway contract", () => {
 
     const result = await cli.run(["missing"], { render: false });
 
-    expect(defaultGatewayAdapters().map((adapter) => adapter.type)).toEqual(["cli", "script", "api"]);
+    expect(defaultGatewayAdapters().map((adapter) => adapter.type)).toEqual(["cli", "script", "api", "graphql"]);
     expect(result.ok).toBe(false);
   });
 
@@ -116,6 +116,68 @@ describe("@clip/cli-gateway contract", () => {
     expect(result).toEqual({
       ok: true,
       value: { status: 200, statusText: "OK", body: { ok: true } },
+      exitCode: 0,
+    });
+  });
+
+  test("provides a default graphql adapter that executes GraphQL requests", async () => {
+    const store = createMemoryGatewayStore();
+    const calls: unknown[] = [];
+    const adapter = defaultGatewayAdapters().find((item) => item.type === "graphql");
+    const config = adapter?.schema.parse({
+      endpoint: "https://api.example.com/graphql",
+      headers: { "X-Custom-Header": "custom-from-config" },
+    });
+    const target =
+      adapter && config
+        ? adapter.createTarget({
+            manifest: { name: "search-api", type: "graphql", config },
+            config,
+            context: {
+              store,
+              services: {
+                async fetch(input: string | URL | Request, init?: RequestInit) {
+                  calls.push({ input: String(input), init });
+                  return new Response(JSON.stringify({ data: { search: [] } }), {
+                    status: 200,
+                    statusText: "OK",
+                    headers: { "content-type": "application/json" },
+                  });
+                },
+              },
+            },
+          })
+        : undefined;
+
+    const result = await target?.invoke({
+      argv: [
+        "--query",
+        "query Search($tag: String!) { search(tag: $tag) { id } }",
+        "--variables",
+        '{"tag":"test-service"}',
+      ],
+    });
+
+    expect(calls).toEqual([
+      {
+        input: "https://api.example.com/graphql",
+        init: {
+          method: "POST",
+          signal: undefined,
+          headers: {
+            "X-Custom-Header": "custom-from-config",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            query: "query Search($tag: String!) { search(tag: $tag) { id } }",
+            variables: { tag: "test-service" },
+          }),
+        },
+      },
+    ]);
+    expect(result).toEqual({
+      ok: true,
+      value: { status: 200, statusText: "OK", body: { data: { search: [] } } },
       exitCode: 0,
     });
   });
