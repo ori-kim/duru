@@ -1,10 +1,10 @@
-import type { GatewayAdapter, GatewayContext, GatewayInvokeContext, GatewayResult } from "../types";
-import { apiConfigFromAddInput, detectApiInput, parseApiConfig } from "./api-config";
-import type { ApiAdapterConfig } from "./api-config";
-import { executeRawApiTarget, fetchSpec, isRawRequestStart } from "./api-http";
-import { executeOpenApiOperation, loadParsedSpec } from "./api-openapi";
+import type { GatewayAdapter, GatewayContext, GatewayInvokeContext, GatewayResult } from "../../types";
+import { apiConfigFromAddInput, detectApiInput, parseApiConfig } from "./config";
+import type { ApiAdapterConfig } from "./config";
+import { executeRawApiTarget, fetchSpec, isRawRequestStart } from "./http";
+import { executeOpenApiOperation, loadParsedSpec } from "./openapi-runtime";
 
-export type { ApiAdapterConfig } from "./api-config";
+export type { ApiAdapterConfig } from "./config";
 
 export function apiAdapter(): GatewayAdapter<ApiAdapterConfig> {
   return {

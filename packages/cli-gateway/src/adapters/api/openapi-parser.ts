@@ -1,4 +1,4 @@
-import type { GatewayTool } from "../types";
+import type { GatewayTool } from "../../types";
 
 export type OpenApiTool = GatewayTool & {
   method: string;

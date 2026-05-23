@@ -43,8 +43,12 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
   async function saveTarget(record: GatewayTargetRecord): Promise<void> {
     const name = assertStoreSegment(record.name, "target name");
     const type = assertStoreSegment(record.type, "target type");
-    await removeTarget(name);
+    const existing = await getTarget(name);
+    if (existing && existing.type !== type) {
+      await removeTarget(name);
+    }
     await files.write(targetConfigPath(type, name, extension), targetPayload(record));
+    await removeOtherTargetConfigs(type, name, extension);
   }
 
   async function removeTarget(name: string): Promise<void> {
@@ -52,6 +56,13 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
     for (const typeEntry of await files.list()) {
       if (!typeEntry.isDirectory) continue;
       await files.remove(`${typeEntry.name}/${targetName}`, { recursive: true });
+    }
+  }
+
+  async function removeOtherTargetConfigs(type: string, name: string, keptExtension: string): Promise<void> {
+    for (const readExtension of readExtensions) {
+      if (readExtension === keptExtension) continue;
+      await files.remove(targetConfigPath(type, name, readExtension));
     }
   }
 
@@ -218,7 +229,7 @@ function aliasPath(type: string, target: string, name: string, extension: string
 
 function targetPayload(record: GatewayTargetRecord): TargetFileRecord {
   const { source: _source, ...payload } = record;
-  return payload;
+  return withoutUndefined(payload);
 }
 
 function profilePayload(target: string, record: GatewayProfileRecord): ProfileFileRecord {
@@ -229,6 +240,10 @@ function profilePayload(target: string, record: GatewayProfileRecord): ProfileFi
 function aliasPayload(target: string, record: GatewayAliasRecord): AliasFileRecord {
   const { source: _source, ...payload } = record;
   return { ...payload, target };
+}
+
+function withoutUndefined<T extends object>(record: T): T {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined)) as T;
 }
 
 function targetFromFile(
@@ -244,6 +259,7 @@ function targetFromFile(
     allow: isStringArray(record.allow) ? record.allow : undefined,
     deny: isStringArray(record.deny) ? record.deny : undefined,
     acl: isRecord(record.acl) ? record.acl : undefined,
+    defaultProfile: typeof record.defaultProfile === "string" ? record.defaultProfile : undefined,
     timeoutMs: typeof record.timeoutMs === "number" ? record.timeoutMs : undefined,
     source,
   };
@@ -256,6 +272,7 @@ function legacyTargetConfig(record: Record<string, unknown>): Record<string, unk
     allow: _allow,
     deny: _deny,
     acl: _acl,
+    defaultProfile: _defaultProfile,
     timeoutMs: _timeoutMs,
     source: _source,
     ...config

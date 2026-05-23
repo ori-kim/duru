@@ -333,13 +333,19 @@ describe("clip-cli demo app", () => {
       await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
 
       const addProfile = await createAppCli().run(["profile", "add", "say", "dev", "hello"], { render: false });
+      const useProfile = await createAppCli().run(["profile", "use", "say", "dev"], { render: false });
       const listProfiles = await createAppCli().run(["profile", "list", "say"], { render: false });
-      const run = await createAppCli().run(["say@dev", "example"], { render: false });
+      const run = await createAppCli().run(["say", "example"], { render: false });
+      const targetConfig = await readFile(join(home, "target", "cli", "say", "config.toml"), "utf8");
       const config = await readFile(join(home, "target", "cli", "say", "profiles", "dev.toml"), "utf8");
 
       expect(addProfile.result).toEqual({ target: "say", name: "dev" });
-      expect(listProfiles.result).toEqual({ profiles: [{ target: "say", name: "dev", config: { args: ["hello"] } }] });
+      expect(useProfile.result).toEqual({ target: "say", name: "dev" });
+      expect(listProfiles.result).toEqual({
+        profiles: [{ target: "say", name: "dev", config: { args: ["hello"] }, active: true }],
+      });
       expect(run.result).toBe("hello example");
+      expect(targetConfig).toContain('defaultProfile = "dev"');
       expect(config).toContain('name = "dev"');
       expect(config).toContain("[config]");
       expect(config).toContain('args = ["hello"]');

@@ -53,6 +53,7 @@ export type GatewayTargetRecord<TConfig = unknown> = {
   allow?: readonly string[];
   deny?: readonly string[];
   acl?: AclTree;
+  defaultProfile?: string;
   timeoutMs?: number;
   source?: GatewayRecordSource;
 };

@@ -8,6 +8,7 @@ import type {
   GatewayCheckReport,
   GatewayDiagnostic,
   GatewayInspectReport,
+  GatewayProfileRecord,
   GatewayTarget,
   GatewayTargetCapabilities,
   GatewayTargetCheck,
@@ -114,18 +115,40 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
   });
 
   profiles.command("list <target>", "List gateway target profiles").action(async (ctx) => ({
-    profiles: (await options.store.listProfiles(ctx.params.target)).map((profile) => ({
-      target: profile.target,
-      name: profile.name,
-      config: profile.config,
-    })),
+    profiles: await profileList(options, ctx.params.target),
   }));
 
   profiles.command("remove <target> <name>", "Remove a gateway target profile").action(async (ctx) => {
     const target = ctx.params.target;
     const name = ctx.params.name;
+    const record = await options.store.getTarget(target);
     await options.store.removeProfile(target, name);
+    if (record?.defaultProfile === name) {
+      await options.store.saveTarget(withoutDefaultProfile(record));
+    }
     return { removed: { target, name } };
+  });
+
+  profiles.command("use <target> <name>", "Use a gateway target profile by default").action(async (ctx) => {
+    const target = await options.store.getTarget(ctx.params.target);
+    if (!target) return ctx.exit(2, { message: unknownTargetMessage(ctx.params.target) });
+
+    const profile = await options.store.getProfile(target.name, ctx.params.name);
+    if (!profile) return ctx.exit(2, { message: unknownProfileMessage(target.name, ctx.params.name) });
+
+    await options.store.saveTarget({ ...target, defaultProfile: profile.name });
+
+    return { target: target.name, name: profile.name };
+  });
+
+  profiles.command("unset <target>", "Unset a gateway target default profile").action(async (ctx) => {
+    const target = await options.store.getTarget(ctx.params.target);
+    if (!target) return ctx.exit(2, { message: unknownTargetMessage(ctx.params.target) });
+
+    const previous = target.defaultProfile;
+    await options.store.saveTarget(withoutDefaultProfile(target));
+
+    return { target: target.name, unset: previous ?? null };
   });
 
   api.route("profile", profiles);
@@ -251,10 +274,8 @@ async function inspectCommand(
   const target = await options.store.getTarget(targetRef.name);
   if (!target) return exit(2, { message: unknownTargetMessage(targetRef.name) });
 
-  const profile = targetRef.profile ? await options.store.getProfile(target.name, targetRef.profile) : undefined;
-  if (targetRef.profile && !profile) {
-    return exit(2, { message: unknownProfileMessage(target.name, targetRef.profile) });
-  }
+  const resolvedProfile = await resolveTargetProfile(target, targetRef.profile, options);
+  if (resolvedProfile.kind === "error") return exit(2, { message: resolvedProfile.message });
 
   const adapter = adapters.find((item) => item.type === target.type);
   if (!adapter) {
@@ -263,7 +284,7 @@ async function inspectCommand(
       target: {
         name: target.name,
         type: target.type,
-        ...(targetRef.profile ? { profile: targetRef.profile } : {}),
+        ...(resolvedProfile.name ? { profile: resolvedProfile.name } : {}),
         config: { redacted: true },
         registered: false,
         capabilities: emptyCapabilities(),
@@ -280,6 +301,7 @@ async function inspectCommand(
     };
   }
 
+  const profile = resolvedProfile.profile;
   const manifest = profile?.config ? { ...target, config: mergeConfig(target.config, profile.config) } : target;
   const config = adapter.schema.parse(manifest.config);
   const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
@@ -291,7 +313,7 @@ async function inspectCommand(
     target: {
       name: target.name,
       type: target.type,
-      ...(targetRef.profile ? { profile: targetRef.profile } : {}),
+      ...(resolvedProfile.name ? { profile: resolvedProfile.name } : {}),
       config: { redacted: true },
       registered: true,
       ...(row?.summary ? { summary: row.summary } : {}),
@@ -315,20 +337,50 @@ async function authCommand(
   const adapter = adapters.find((item) => item.type === target.type);
   if (!adapter) return exit(2, { message: unknownAdapterMessage(target.type) });
 
-  const profile = targetRef.profile ? await options.store.getProfile(target.name, targetRef.profile) : undefined;
-  if (targetRef.profile && !profile) {
-    return exit(2, { message: unknownProfileMessage(target.name, targetRef.profile) });
-  }
+  const resolvedProfile = await resolveTargetProfile(target, targetRef.profile, options);
+  if (resolvedProfile.kind === "error") return exit(2, { message: resolvedProfile.message });
 
+  const profile = resolvedProfile.profile;
   const manifest = profile?.config ? { ...target, config: mergeConfig(target.config, profile.config) } : target;
   const config = adapter.schema.parse(manifest.config);
   const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
   const authHandler = gatewayTarget.auth?.[action];
   if (!authHandler) return exit(2, { message: unsupportedAdapterActionMessage(target.type, action) });
 
-  await authHandler(authContext(target.name, targetRef.profile));
+  await authHandler(authContext(target.name, resolvedProfile.name));
 
   return { target: target.name, type: target.type, action };
+}
+
+async function profileList(options: CliGatewayOptions, targetName: string) {
+  const target = await options.store.getTarget(targetName);
+  const active = target?.defaultProfile;
+
+  return (await options.store.listProfiles(targetName)).map((profile) => ({
+    target: profile.target,
+    name: profile.name,
+    config: profile.config,
+    ...(profile.name === active ? { active: true } : {}),
+  }));
+}
+
+async function resolveTargetProfile(
+  target: GatewayTargetRecord,
+  explicitProfile: string | undefined,
+  options: CliGatewayOptions,
+): Promise<{ kind: "ok"; name?: string; profile?: GatewayProfileRecord } | { kind: "error"; message: string }> {
+  const name = explicitProfile ?? target.defaultProfile;
+  if (!name) return { kind: "ok" };
+
+  const profile = await options.store.getProfile(target.name, name);
+  if (!profile) return { kind: "error", message: unknownProfileMessage(target.name, name) };
+
+  return { kind: "ok", name, profile };
+}
+
+function withoutDefaultProfile(target: GatewayTargetRecord): GatewayTargetRecord {
+  const { defaultProfile: _defaultProfile, ...record } = target;
+  return record;
 }
 
 function targetReference(value: string): { name: string; profile?: string } {
