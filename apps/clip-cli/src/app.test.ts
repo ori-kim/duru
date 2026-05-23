@@ -176,9 +176,27 @@ describe("clip-cli demo app", () => {
           config: { redacted: true },
           registered: true,
           summary: "echo",
-          capabilities: { invoke: true, catalog: false, refresh: false, complete: false },
+          capabilities: { invoke: true, catalog: false, refresh: false, complete: false, check: false },
           operations: [],
         },
+        diagnostics: [],
+      });
+    });
+  });
+
+  test("checks persisted gateway targets", async () => {
+    const home = await tempDir("gateway-check");
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+
+      const result = await createAppCli().run(["check"], { render: false });
+
+      expect(result.result).toEqual({
+        ok: true,
+        scope: "gateway",
+        adapters: ["cli"],
+        targets: [{ name: "say", type: "cli", ok: true, diagnostics: [] }],
         diagnostics: [],
       });
     });
