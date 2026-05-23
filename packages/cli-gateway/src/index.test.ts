@@ -623,7 +623,7 @@ describe("@clip/cli-gateway commands", () => {
     });
   });
 
-  test("registers login and logout commands backed by adapter auth hooks", async () => {
+  test("registers auth, login, and logout commands backed by adapter auth hooks", async () => {
     const calls: Array<{ action: string; config: { url: string }; ctx: { target: string; profile?: string } }> = [];
     const store = createMemoryGatewayStore({
       targets: [{ name: "notes-api", type: "api", config: { url: "https://api.example.com" } }],
@@ -644,6 +644,10 @@ describe("@clip/cli-gateway commands", () => {
             return { ok: true };
           },
           auth: {
+            async status(ctx) {
+              calls.push({ action: "status", config, ctx });
+              return { authenticated: true, label: "example-token" };
+            },
             async login(ctx) {
               calls.push({ action: "login", config, ctx });
             },
@@ -656,12 +660,21 @@ describe("@clip/cli-gateway commands", () => {
     } satisfies GatewayAdapter<{ url: string }>;
     const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
 
+    const status = await cli.run(["auth", "notes-api"], { render: false });
     const login = await cli.run(["login", "notes-api"], { render: false });
     const logout = await cli.run(["logout", "notes-api"], { render: false });
 
+    expect(status.result).toEqual({
+      target: "notes-api",
+      type: "api",
+      action: "status",
+      authenticated: true,
+      label: "example-token",
+    });
     expect(login.result).toEqual({ target: "notes-api", type: "api", action: "login" });
     expect(logout.result).toEqual({ target: "notes-api", type: "api", action: "logout" });
     expect(calls).toEqual([
+      { action: "status", config: { url: "https://api.example.com" }, ctx: { target: "notes-api" } },
       { action: "login", config: { url: "https://api.example.com" }, ctx: { target: "notes-api" } },
       { action: "logout", config: { url: "https://api.example.com" }, ctx: { target: "notes-api" } },
     ]);
@@ -673,11 +686,11 @@ describe("@clip/cli-gateway commands", () => {
     });
     const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: defaultGatewayAdapters() }));
 
-    const result = await cli.run(["login", "test-service"], { render: false });
+    const result = await cli.run(["auth", "test-service"], { render: false });
 
     expect(result.ok).toBe(false);
     expect(result.exitCode).toBe(2);
-    expect(result.result).toEqual({ message: 'Gateway adapter "cli" does not support login' });
+    expect(result.result).toEqual({ message: 'Gateway adapter "cli" does not support status' });
   });
 
   test("registers refresh command that persists adapter-updated config", async () => {
