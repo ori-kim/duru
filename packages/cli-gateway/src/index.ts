@@ -25,6 +25,7 @@ export type {
   GatewayAliasRecord,
   GatewayAuthContext,
   GatewayAuthState,
+  GatewayBindingRecord,
   GatewayCatalogContext,
   GatewayCheckReport,
   GatewayCompletionContext,

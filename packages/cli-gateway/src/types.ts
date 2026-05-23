@@ -30,6 +30,10 @@ export type GatewayStore = {
   getProfile(target: string, name: string): Promise<GatewayProfileRecord | undefined>;
   saveProfile(target: string, profile: GatewayProfileRecord): Promise<void>;
   removeProfile(target: string, name: string): Promise<void>;
+  listBindings(): Promise<readonly GatewayBindingRecord[]>;
+  getBinding(name: string): Promise<GatewayBindingRecord | undefined>;
+  saveBinding(record: GatewayBindingRecord): Promise<void>;
+  removeBinding(name: string): Promise<void>;
   listAliases(target: string): Promise<readonly GatewayAliasRecord[]>;
   saveAlias(target: string, alias: GatewayAliasRecord): Promise<void>;
   removeAlias(target: string, name: string): Promise<void>;
@@ -38,6 +42,7 @@ export type GatewayStore = {
 export type GatewayStoreSeed = {
   targets?: readonly GatewayTargetRecord[];
   profiles?: readonly GatewayProfileRecord[];
+  bindings?: readonly GatewayBindingRecord[];
   aliases?: readonly GatewayAliasRecord[];
 };
 
@@ -69,6 +74,14 @@ export type GatewayAliasRecord = {
   target: string;
   name: string;
   operation: string;
+  args?: readonly string[];
+  source?: GatewayRecordSource;
+};
+
+export type GatewayBindingRecord = {
+  name: string;
+  target: string;
+  profile?: string;
   args?: readonly string[];
   source?: GatewayRecordSource;
 };

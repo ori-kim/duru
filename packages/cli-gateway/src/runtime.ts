@@ -2,6 +2,7 @@ import type { CliEventContext } from "@clip/kit";
 import type {
   CliGatewayOptions,
   GatewayAdapter,
+  GatewayBindingRecord,
   GatewayProfileRecord,
   GatewayResult,
   GatewayTargetRecord,
@@ -14,9 +15,10 @@ export async function runGatewayTargetInvocation(
   const targetRef = targetReference(ctx.argv[0]);
   if (!targetRef) return undefined;
 
-  const target = await options.store.getTarget(targetRef.name);
+  const binding = await targetBinding(targetRef.name, options);
+  const target = await options.store.getTarget(binding?.target ?? targetRef.name);
   if (!target) return undefined;
-  const profileName = targetRef.profile ?? target.defaultProfile;
+  const profileName = targetRef.profile ?? binding?.profile ?? target.defaultProfile;
   const profile = profileName ? await options.store.getProfile(target.name, profileName) : undefined;
   if (profileName && !profile) {
     return ctx.exit(2, { message: unknownProfileMessage(target.name, profileName) });
@@ -28,7 +30,7 @@ export async function runGatewayTargetInvocation(
   const manifest = mergeTargetProfile(target, profile);
   const config = parseTargetConfig(adapter, manifest);
   const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
-  const argv = await targetArgv(stripGatewayOptions(ctx.argv.slice(1)), target.name, options);
+  const argv = await targetArgv(bindingArgv(binding, stripGatewayOptions(ctx.argv.slice(1))), target.name, options);
   const aclError = targetAclError(manifest, argv);
   if (aclError) return ctx.exit(2, { message: aclError });
 
@@ -68,6 +70,15 @@ async function targetArgv(
   if (!alias) return argv;
 
   return [alias.operation, ...(alias.args ?? []), ...argv.slice(1)];
+}
+
+async function targetBinding(name: string, options: CliGatewayOptions): Promise<GatewayBindingRecord | undefined> {
+  if (await options.store.getTarget(name)) return undefined;
+  return options.store.getBinding(name);
+}
+
+function bindingArgv(binding: GatewayBindingRecord | undefined, argv: readonly string[]): readonly string[] {
+  return binding ? [...(binding.args ?? []), ...argv] : argv;
 }
 
 function stripGatewayOptions(argv: readonly string[]): readonly string[] {

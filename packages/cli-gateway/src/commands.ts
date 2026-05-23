@@ -5,6 +5,7 @@ import type {
   AuthContext,
   CliGatewayOptions,
   GatewayAdapter,
+  GatewayBindingRecord,
   GatewayCheckReport,
   GatewayDiagnostic,
   GatewayInspectReport,
@@ -52,6 +53,23 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     if (!target) return ctx.exit(2, { message: unknownTargetMessage(name) });
 
     await options.store.removeTarget(name);
+    return { removed: name };
+  });
+
+  api.command("bind <name> <target> [...args]", "Bind a command name to a gateway target").action(async (ctx) => {
+    return bindCommand(ctx.params.name, ctx.params.target, stringArrayParam(ctx.params.args), ctx, options);
+  });
+
+  api.command("binds", "List gateway target bindings").action(async () => ({
+    bindings: (await options.store.listBindings()).map(bindingRow),
+  }));
+
+  api.command("unbind <name>", "Remove a gateway target binding").action(async (ctx) => {
+    const name = ctx.params.name;
+    const binding = await options.store.getBinding(name);
+    if (!binding) return ctx.exit(2, { message: unknownBindingMessage(name) });
+
+    await options.store.removeBinding(name);
     return { removed: name };
   });
 
@@ -269,6 +287,45 @@ function targetCheck(target: GatewayTargetRecord, diagnostics: readonly GatewayD
   };
 }
 
+async function bindCommand(
+  name: string,
+  targetValue: string,
+  args: readonly string[],
+  ctx: { exit(exitCode: number, result: unknown): unknown },
+  options: CliGatewayOptions,
+) {
+  if (await options.store.getTarget(name))
+    return ctx.exit(2, { message: `Gateway binding conflicts with target: "${name}"` });
+  if (await options.store.getBinding(name))
+    return ctx.exit(2, { message: `Gateway binding already exists: "${name}"` });
+
+  const targetRef = targetReference(targetValue);
+  const target = await options.store.getTarget(targetRef.name);
+  if (!target) return ctx.exit(2, { message: unknownTargetMessage(targetRef.name) });
+
+  if (targetRef.profile && !(await options.store.getProfile(target.name, targetRef.profile))) {
+    return ctx.exit(2, { message: unknownProfileMessage(target.name, targetRef.profile) });
+  }
+
+  const binding: GatewayBindingRecord = {
+    name,
+    target: target.name,
+    ...(targetRef.profile ? { profile: targetRef.profile } : {}),
+    args,
+  };
+  await options.store.saveBinding(binding);
+
+  return bindingRow(binding);
+}
+
+function bindingRow(binding: GatewayBindingRecord) {
+  return {
+    name: binding.name,
+    target: binding.profile ? `${binding.target}@${binding.profile}` : binding.target,
+    args: binding.args ?? [],
+  };
+}
+
 async function inspectCommand(
   targetValue: string,
   options: CliGatewayOptions,
@@ -443,6 +500,10 @@ function emptyCapabilities(): GatewayTargetCapabilities {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function unknownBindingMessage(name: string): string {
+  return `Unknown gateway binding: "${name}"`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

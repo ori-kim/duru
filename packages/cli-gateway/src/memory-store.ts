@@ -1,5 +1,6 @@
 import type {
   GatewayAliasRecord,
+  GatewayBindingRecord,
   GatewayProfileRecord,
   GatewayStore,
   GatewayStoreSeed,
@@ -9,10 +10,12 @@ import type {
 export function createMemoryGatewayStore(seed: GatewayStoreSeed = {}): GatewayStore {
   const targets = new Map<string, GatewayTargetRecord>();
   const profiles = new Map<string, GatewayProfileRecord>();
+  const bindings = new Map<string, GatewayBindingRecord>();
   const aliases = new Map<string, GatewayAliasRecord>();
 
   for (const target of seed.targets ?? []) targets.set(target.name, clone(target));
   for (const profile of seed.profiles ?? []) profiles.set(scopedKey(profile.target, profile.name), clone(profile));
+  for (const binding of seed.bindings ?? []) bindings.set(binding.name, clone(binding));
   for (const alias of seed.aliases ?? []) aliases.set(scopedKey(alias.target, alias.name), clone(alias));
 
   return {
@@ -29,6 +32,7 @@ export function createMemoryGatewayStore(seed: GatewayStoreSeed = {}): GatewaySt
       targets.delete(name);
       deleteScoped(profiles, name);
       deleteScoped(aliases, name);
+      deleteBindingsForTarget(bindings, name);
     },
     async listProfiles(target) {
       return sortedByName(scopedValues(profiles, target)).map(clone);
@@ -41,6 +45,18 @@ export function createMemoryGatewayStore(seed: GatewayStoreSeed = {}): GatewaySt
     },
     async removeProfile(target, name) {
       profiles.delete(scopedKey(target, name));
+    },
+    async listBindings() {
+      return sortedByName([...bindings.values()]).map(clone);
+    },
+    async getBinding(name) {
+      return cloneOptional(bindings.get(name));
+    },
+    async saveBinding(record) {
+      bindings.set(record.name, clone(record));
+    },
+    async removeBinding(name) {
+      bindings.delete(name);
     },
     async listAliases(target) {
       return sortedByName(scopedValues(aliases, target)).map(clone);
@@ -63,6 +79,12 @@ function scopedValues<T extends { target: string }>(records: Map<string, T>, tar
 }
 
 function deleteScoped<T extends { target: string }>(records: Map<string, T>, target: string): void {
+  for (const [key, record] of records.entries()) {
+    if (record.target === target) records.delete(key);
+  }
+}
+
+function deleteBindingsForTarget(records: Map<string, GatewayBindingRecord>, target: string): void {
   for (const [key, record] of records.entries()) {
     if (record.target === target) records.delete(key);
   }

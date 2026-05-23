@@ -84,6 +84,10 @@ type GatewayStore = {
   getProfile(target: string, name: string): Promise<GatewayProfileRecord | undefined>;
   saveProfile(target: string, profile: GatewayProfileRecord): Promise<void>;
   removeProfile(target: string, name: string): Promise<void>;
+  listBindings(): Promise<readonly GatewayBindingRecord[]>;
+  getBinding(name: string): Promise<GatewayBindingRecord | undefined>;
+  saveBinding(record: GatewayBindingRecord): Promise<void>;
+  removeBinding(name: string): Promise<void>;
   listAliases(target: string): Promise<readonly GatewayAliasRecord[]>;
   saveAlias(target: string, alias: GatewayAliasRecord): Promise<void>;
   removeAlias(target: string, name: string): Promise<void>;
@@ -191,11 +195,8 @@ Gateway command는 target system을 위한 product command다.
 - `clip check`
 - `clip inspect <target>`
 - `clip profile add/list/remove/use/unset ...`
+- `clip bind/binds/unbind ...`
 - `clip alias add/list/remove ...`
-
-현재 구현하지 않은 command:
-
-- `clip bind/unbind/binds`
 
 Target subcommand는 runtime이 routing한다.
 
