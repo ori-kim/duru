@@ -1,5 +1,5 @@
-import { createPlugin, parseOptionSpec } from "@clip/kit";
-import type { CliEventContext, HelpRoute } from "@clip/kit";
+import { createPlugin, parseOptionSpec } from "@duru/cli-kit";
+import type { CliEventContext, HelpRoute } from "@duru/cli-kit";
 import { apiAdapter } from "./adapters/api";
 import { cliAdapter } from "./adapters/cli";
 import { graphqlAdapter } from "./adapters/graphql";

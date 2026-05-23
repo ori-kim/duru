@@ -1,7 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-const manifestFileNames = ["clip.plugin.toml", "clip.plugin.yml", "clip.plugin.yaml"] as const;
+const manifestFileNames = ["duru.plugin.toml", "duru.plugin.yml", "duru.plugin.yaml"] as const;
 
 export type InstallVirtualPluginsOptions = {
   home?: string;
@@ -37,7 +37,7 @@ export async function discoverVirtualPluginManifests(
 
 function resolvePluginsDir(options: InstallVirtualPluginsOptions): string | undefined {
   if (options.pluginsDir) return resolve(options.pluginsDir);
-  const home = options.home ?? process.env.CLIP_HOME;
+  const home = options.home ?? process.env.DURU_HOME;
   return home ? resolve(home, "plugins") : undefined;
 }
 

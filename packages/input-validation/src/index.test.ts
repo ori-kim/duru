@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { input } from "@clip/input-validation";
-import { createCli, formatHelp, help, isHelpDocument, isValidationError, meta, renderer } from "@clip/kit";
-import { adaptResult } from "@clip/kit";
-import type { Renderer } from "@clip/kit";
+import { createCli, formatHelp, help, isHelpDocument, isValidationError, meta, renderer } from "@duru/cli-kit";
+import { adaptResult } from "@duru/cli-kit";
+import type { Renderer } from "@duru/cli-kit";
+import { input } from "@duru/input-validation";
 import { z } from "zod";
 
-describe("@clip/input-validation", () => {
+describe("@duru/input-validation", () => {
   test("supports zod schemas without owning the zod dependency", async () => {
-    const cli = createCli({ name: "clip" });
+    const cli = createCli({ name: "duru" });
 
     cli
       .command(
@@ -23,7 +23,7 @@ describe("@clip/input-validation", () => {
         }),
         meta({
           description: "Run a typed command input demo",
-          examples: ["clip call 7 --timeout-ms 1500 --dry-run"],
+          examples: ["duru call 7 --timeout-ms 1500 --dry-run"],
           group: "Examples",
         }),
       )
@@ -44,7 +44,7 @@ describe("@clip/input-validation", () => {
   });
 
   test("supports explicit field maps for standard schema libraries without object introspection", async () => {
-    const cli = createCli({ name: "clip" });
+    const cli = createCli({ name: "duru" });
 
     cli
       .command(
@@ -68,7 +68,7 @@ describe("@clip/input-validation", () => {
 
   test("maps standard schema failures to stable core validation issues", async () => {
     const calls: string[] = [];
-    const cli = createCli({ name: "clip" });
+    const cli = createCli({ name: "duru" });
 
     cli
       .command(
@@ -92,7 +92,7 @@ describe("@clip/input-validation", () => {
     expect(result.ok).toBe(false);
     expect(result.exitCode).toBe(2);
     expect(result.result).toMatchObject({
-      kind: "clip.validation_error",
+      kind: "duru.validation_error",
       source: "input",
       issues: [{ path: ["operation"] }, { path: ["timeoutMs"] }],
     });
@@ -100,7 +100,7 @@ describe("@clip/input-validation", () => {
   });
 
   test("contributes generated params and options to help metadata", async () => {
-    const cli = createCli({ name: "clip" }).use(helpTextAdapter()).use(renderer(testRenderer())).use(help());
+    const cli = createCli({ name: "duru" }).use(helpTextAdapter()).use(renderer(testRenderer())).use(help());
 
     cli
       .command(
@@ -118,7 +118,7 @@ describe("@clip/input-validation", () => {
 
     const result = await cli.run(["call", "--help"]);
 
-    expect(result.rendered?.stdout).toContain("Usage: clip call <operation>");
+    expect(result.rendered?.stdout).toContain("Usage: duru call <operation>");
     expect(result.rendered?.stdout).toContain("--timeout-ms");
     expect(result.rendered?.stdout).toContain("Timeout in milliseconds");
   });

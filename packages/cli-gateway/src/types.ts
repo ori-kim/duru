@@ -1,4 +1,4 @@
-import type { CliPlugin, CompletionItem as CoreCompletionItem } from "@clip/kit";
+import type { CliPlugin, CompletionItem as CoreCompletionItem } from "@duru/cli-kit";
 
 export type CliGatewayOptions = {
   store: GatewayStore;

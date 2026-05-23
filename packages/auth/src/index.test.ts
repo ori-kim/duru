@@ -17,7 +17,7 @@ const provider: OAuthProviderConfig & { clientId: string } = {
   redirectUri: "http://127.0.0.1:53682/oauth/callback",
 };
 
-describe("@clip/auth", () => {
+describe("@duru/auth", () => {
   test("creates PKCE authorization URLs and rejects reserved extra params", async () => {
     const codeChallenge = await pkceChallenge("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ");
     const url = createOAuthAuthorizationUrl(provider, {
@@ -168,7 +168,7 @@ describe("@clip/auth", () => {
       {
         input: "https://auth.example.com/oauth/register",
         body: JSON.stringify({
-          client_name: "clip",
+          client_name: "duru",
           redirect_uris: ["http://127.0.0.1:53682/oauth/callback"],
           grant_types: ["authorization_code", "refresh_token"],
           response_types: ["code"],

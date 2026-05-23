@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { env } from "@clip/env";
-import { input } from "@clip/input-validation";
-import { createCli } from "@clip/kit";
+import { createCli } from "@duru/cli-kit";
+import { env } from "@duru/env";
+import { input } from "@duru/input-validation";
 import * as z from "zod";
 
-describe("@clip/env", () => {
+describe("@duru/env", () => {
   test("fills declared options from auto environment fallbacks by default", async () => {
-    const cli = createCli({ name: "clip" }).use(env({ source: { NAME: "example" } }));
+    const cli = createCli({ name: "duru" }).use(env({ source: { NAME: "example" } }));
 
     cli
       .command(
@@ -26,7 +26,7 @@ describe("@clip/env", () => {
   });
 
   test("keeps explicit cli options ahead of environment fallbacks", async () => {
-    const cli = createCli({ name: "clip" }).use(env({ source: { NAME: "from-env" } }));
+    const cli = createCli({ name: "duru" }).use(env({ source: { NAME: "from-env" } }));
 
     cli
       .command(
@@ -46,7 +46,7 @@ describe("@clip/env", () => {
   });
 
   test("derives upper snake case environment names from camel case options", async () => {
-    const cli = createCli({ name: "clip" }).use(env({ source: { TIMEOUT_MS: "2500" } }));
+    const cli = createCli({ name: "duru" }).use(env({ source: { TIMEOUT_MS: "2500" } }));
 
     cli
       .command(
@@ -66,7 +66,7 @@ describe("@clip/env", () => {
   });
 
   test("can disable automatic environment fallbacks", async () => {
-    const cli = createCli({ name: "clip" }).use(env({ auto: false, source: { NAME: "example" } }));
+    const cli = createCli({ name: "duru" }).use(env({ auto: false, source: { NAME: "example" } }));
 
     cli
       .command(
@@ -86,7 +86,7 @@ describe("@clip/env", () => {
   });
 
   test("supports explicit env names and zod coercion", async () => {
-    const cli = createCli({ name: "clip" }).use(
+    const cli = createCli({ name: "duru" }).use(
       env({
         source: { TEST_SERVICE_TIMEOUT_MS: "2500" },
         vars: {
@@ -107,7 +107,7 @@ describe("@clip/env", () => {
   });
 
   test("does not duck type safeParse-only parser objects", async () => {
-    const cli = createCli({ name: "clip" }).use(
+    const cli = createCli({ name: "duru" }).use(
       env({
         source: { TIMEOUT_MS: "2500" },
         vars: {
@@ -134,7 +134,7 @@ describe("@clip/env", () => {
   });
 
   test("reports parser validation failures before actions run", async () => {
-    const cli = createCli({ name: "clip" }).use(
+    const cli = createCli({ name: "duru" }).use(
       env({
         source: { TEST_SERVICE_TIMEOUT_MS: "0" },
         vars: {
@@ -159,7 +159,7 @@ describe("@clip/env", () => {
   });
 
   test("keeps matched raw params available when parser validation fails", async () => {
-    const cli = createCli({ name: "clip" }).use(
+    const cli = createCli({ name: "duru" }).use(
       env({
         source: { TEST_SERVICE_TIMEOUT_MS: "0" },
         vars: {

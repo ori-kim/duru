@@ -3,15 +3,15 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createCli } from "@clip/kit";
+import { createCli } from "@duru/cli-kit";
 import {
   discoverVirtualPluginManifests,
   installVirtualPlugins,
   isVirtualPlugin,
   virtualPlugin,
-} from "@clip/virtual-plugins";
+} from "@duru/virtual-plugins";
 
-describe("@clip/virtual-plugins", () => {
+describe("@duru/virtual-plugins", () => {
   test("creates identifiable virtual plugin installers", async () => {
     const calls: string[] = [];
     const plugin = virtualPlugin(async (cli) => {
@@ -34,7 +34,7 @@ describe("@clip/virtual-plugins", () => {
     await writePluginManifest(
       pluginsDir,
       "beta",
-      "clip.plugin.toml",
+      "duru.plugin.toml",
       `
         # beta plugin
         name = "beta"
@@ -46,7 +46,7 @@ describe("@clip/virtual-plugins", () => {
     await writePluginManifest(
       pluginsDir,
       "alpha",
-      "clip.plugin.yml",
+      "duru.plugin.yml",
       `
         # alpha plugin
         name: alpha
@@ -58,7 +58,7 @@ describe("@clip/virtual-plugins", () => {
     await writePluginManifest(
       pluginsDir,
       "skip",
-      "clip.plugin.yaml",
+      "duru.plugin.yaml",
       `
         name: skip
         entry: ./skip.ts
@@ -71,12 +71,12 @@ describe("@clip/virtual-plugins", () => {
 
     expect(manifests.map((item) => item.name)).toEqual(["alpha", "beta"]);
     expect(manifests.map((item) => item.order)).toEqual([100, 200]);
-    expect(manifests[0]?.manifestPath).toBe(join(pluginsDir, "alpha", "clip.plugin.yml"));
+    expect(manifests[0]?.manifestPath).toBe(join(pluginsDir, "alpha", "duru.plugin.yml"));
     expect(manifests[0]?.entryPath).toBe(join(pluginsDir, "alpha", "alpha.ts"));
   });
 
   test("returns an empty manifest list when the plugin directory is missing", async () => {
-    const home = await mkdtemp(join(tmpdir(), "clip-home-"));
+    const home = await mkdtemp(join(tmpdir(), "duru-home-"));
 
     const manifests = await discoverVirtualPluginManifests({ home });
 
@@ -88,14 +88,14 @@ describe("@clip/virtual-plugins", () => {
     const pluginDir = await writePluginManifest(
       pluginsDir,
       "example",
-      "clip.plugin.toml",
+      "duru.plugin.toml",
       `
         name = "example"
         entry = "./plugin.ts"
       `,
     );
     await writeFile(
-      join(pluginDir, "clip.plugin.yml"),
+      join(pluginDir, "duru.plugin.yml"),
       `
         name: example
         entry: ./plugin.ts
@@ -112,7 +112,7 @@ describe("@clip/virtual-plugins", () => {
     await writePluginManifest(
       pluginsDir,
       "example",
-      "clip.plugin.toml",
+      "duru.plugin.toml",
       `
         name = "example"
         entry = "./plugin.ts"
@@ -166,7 +166,7 @@ describe("@clip/virtual-plugins", () => {
     await writePluginManifest(
       pluginsDir,
       "disabled",
-      "clip.plugin.yml",
+      "duru.plugin.yml",
       `
         name: disabled
         entry: ./plugin.ts
@@ -190,7 +190,7 @@ describe("@clip/virtual-plugins", () => {
     await writePluginManifest(
       pluginsDir,
       "invalid",
-      "clip.plugin.toml",
+      "duru.plugin.toml",
       `
         name = "invalid"
         entry = "./plugin.ts"
@@ -210,7 +210,7 @@ describe("@clip/virtual-plugins", () => {
 });
 
 async function createPluginsDir(): Promise<string> {
-  const home = await mkdtemp(join(tmpdir(), "clip-home-"));
+  const home = await mkdtemp(join(tmpdir(), "duru-home-"));
   const pluginsDir = join(home, "plugins");
   await mkdir(pluginsDir, { recursive: true });
   return pluginsDir;
@@ -229,7 +229,7 @@ async function writePluginManifest(
 }
 
 function coreModuleUrl(): string {
-  return pathToFileURL(join(process.cwd(), "core/clip-kit/src/index.ts")).href;
+  return pathToFileURL(join(process.cwd(), "core/cli/src/index.ts")).href;
 }
 
 function virtualPluginsModuleUrl(): string {

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createMemoryGatewayStore } from "../memory-store";
 import { scriptAdapter } from "./script";
 
-describe("@clip/cli-gateway script adapter", () => {
+describe("@duru/cli-gateway script adapter", () => {
   test("maps JSON object input onto configured command args", async () => {
     const adapter = scriptAdapter();
     const config = adapter.schema.parse({

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createMemoryGatewayStore } from "../../memory-store";
 import { apiAdapter } from "./index";
 
-describe("@clip/cli-gateway OpenAPI runtime", () => {
+describe("@duru/cli-gateway OpenAPI runtime", () => {
   test("accepts JSON object input through --input for operation parameters", async () => {
     const calls: RequestCall[] = [];
     const target = createApiTarget({

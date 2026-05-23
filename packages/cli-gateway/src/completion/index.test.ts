@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createCli, createPlugin } from "@clip/kit";
-import type { CliPluginApi } from "@clip/kit";
+import { createCli, createPlugin } from "@duru/cli-kit";
+import type { CliPluginApi } from "@duru/cli-kit";
 import { cliGateway, createGatewayCli, createMemoryGatewayStore, defaultGatewayAdapters } from "../index";
 import type { GatewayAdapter, GatewayResult } from "../types";
 
-describe("@clip/cli-gateway completion", () => {
+describe("@duru/cli-gateway completion", () => {
   test("contributes target, profile, binding, alias, and operation candidates without secrets", async () => {
     let complete: CliPluginApi["complete"] | undefined;
     const store = createMemoryGatewayStore({
@@ -27,7 +27,7 @@ describe("@clip/cli-gateway completion", () => {
     const capture = createPlugin((api) => {
       complete = api.complete;
     });
-    const cli = createCli({ name: "clip" })
+    const cli = createCli({ name: "duru" })
       .use(cliGateway({ store, adapters: [adapter] }))
       .route("gateway", createGatewayCli({ store, adapters: [adapter] }, { group: "Gateway" }))
       .use(capture);
@@ -96,7 +96,7 @@ describe("@clip/cli-gateway completion", () => {
     const capture = createPlugin((api) => {
       complete = api.complete;
     });
-    createCli({ name: "clip" })
+    createCli({ name: "duru" })
       .use(cliGateway(gatewayOptions, { namespace: "targets" }))
       .route("targets", createGatewayCli(gatewayOptions, { group: "Gateway" }))
       .use(capture);
@@ -134,7 +134,7 @@ describe("@clip/cli-gateway completion", () => {
     const capture = createPlugin((api) => {
       complete = api.complete;
     });
-    createCli({ name: "clip" })
+    createCli({ name: "duru" })
       .use(cliGateway({ store, adapters: [adapter] }))
       .route("gateway", createGatewayCli({ store, adapters: [adapter] }, { group: "Gateway" }))
       .use(capture);
@@ -177,7 +177,7 @@ describe("@clip/cli-gateway completion", () => {
     const capture = createPlugin((api) => {
       complete = api.complete;
     });
-    createCli({ name: "clip" })
+    createCli({ name: "duru" })
       .use(cliGateway(gatewayOptions))
       .route("gateway", createGatewayCli(gatewayOptions, { group: "Gateway" }))
       .use(capture);

@@ -1,5 +1,5 @@
 {
-  "name": "@clip/renderer-json",
+  "name": "@duru/renderer-json",
   "version": "0.0.0",
   "type": "module",
   "private": true,
@@ -7,6 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@clip/kit": "workspace:*"
+    "@duru/cli-kit": "workspace:*"
   }
 }

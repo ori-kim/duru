@@ -1,5 +1,5 @@
-import { createCli } from "@clip/kit";
-import type { CliPluginApi, CommandPattern } from "@clip/kit";
+import { createCli } from "@duru/cli-kit";
+import type { CliPluginApi, CommandPattern } from "@duru/cli-kit";
 import { unknownAdapterMessage, unknownProfileMessage, unknownTargetMessage } from "./runtime";
 import type {
   AddInput,
@@ -630,5 +630,5 @@ function parseJsonObjectOption(
 }
 
 function exit(exitCode: number, result: unknown) {
-  return { kind: "clip.exit", ok: false, exitCode, result } as const;
+  return { kind: "duru.exit", ok: false, exitCode, result } as const;
 }

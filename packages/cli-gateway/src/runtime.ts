@@ -1,4 +1,4 @@
-import type { Context } from "@clip/kit";
+import type { Context } from "@duru/cli-kit";
 import { formatGatewayTargetHelp, isGatewayTargetHelpDocument } from "./help";
 import type {
   CliGatewayOptions,
@@ -178,7 +178,7 @@ function targetTimeout(
   target: GatewayTargetRecord,
   options: CliGatewayOptions,
 ): { signal?: AbortSignal; dispose(): void } {
-  const timeoutMs = target.timeoutMs ?? parseTimeoutMs(options.env?.CLIP_TARGET_TIMEOUT_MS);
+  const timeoutMs = target.timeoutMs ?? parseTimeoutMs(options.env?.DURU_TARGET_TIMEOUT_MS);
   if (timeoutMs === undefined) return { dispose() {} };
 
   const controller = new AbortController();

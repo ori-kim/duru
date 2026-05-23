@@ -67,7 +67,7 @@ async function runScriptCommand(
   const args = scriptCommandArgs(definition, ctx.argv.slice(1));
   const argv = definition.file
     ? [definition.file, ...args]
-    : ["bash", "-c", definition.script ?? "", `clip-${name}`, ...args];
+    : ["bash", "-c", definition.script ?? "", `duru-${name}`, ...args];
   const env = { ...Bun.env, ...(config.env ?? {}), ...(definition.env ?? {}) };
 
   if (ctx.dryRun) {

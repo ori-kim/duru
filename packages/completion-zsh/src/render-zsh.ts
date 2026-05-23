@@ -2,7 +2,7 @@ import { zshSingleQuote } from "./escape";
 import type { RenderZshCompletionOptions, ZshCompletionStyle } from "./types";
 
 export function renderZshCompletion(options: RenderZshCompletionOptions = {}): string {
-  const commandName = options.commandName ?? "clip";
+  const commandName = options.commandName ?? "duru";
   const queryCommand = commandWords(options.queryCommand ?? ["completion", "query"]);
   const stylePrefix = `:completion:*:*:${commandName}:*`;
 
@@ -10,7 +10,7 @@ export function renderZshCompletion(options: RenderZshCompletionOptions = {}): s
 
 ${renderZshCompletionStyles(stylePrefix, options.styles ?? [])}
 
-_clip_completion() {
+_duru_completion() {
   emulate -L zsh
   setopt localoptions noshwordsplit
 
@@ -37,7 +37,7 @@ _clip_completion() {
   return ret
 }
 
-compdef _clip_completion ${commandName}
+compdef _duru_completion ${commandName}
 `;
 }
 
