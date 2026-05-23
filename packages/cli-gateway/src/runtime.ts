@@ -16,8 +16,22 @@ export async function runGatewayTargetInvocation(
 
   const config = parseTargetConfig(adapter, target);
   const gatewayTarget = adapter.createTarget({ manifest: target, config, context: options });
-  const result = await gatewayTarget.invoke({ argv: ctx.argv.slice(1) });
+  const result = await gatewayTarget.invoke({ argv: await targetArgv(ctx.argv.slice(1), target.name, options) });
   return gatewayExecutionResult(ctx, result);
+}
+
+async function targetArgv(
+  argv: readonly string[],
+  target: string,
+  options: CliGatewayOptions,
+): Promise<readonly string[]> {
+  const aliasName = argv[0];
+  if (!aliasName) return argv;
+
+  const alias = (await options.store.listAliases(target)).find((item) => item.name === aliasName);
+  if (!alias) return argv;
+
+  return [alias.operation, ...(alias.args ?? []), ...argv.slice(1)];
 }
 
 function parseTargetConfig<TConfig>(adapter: GatewayAdapter<TConfig>, target: GatewayTargetRecord): TConfig {

@@ -121,6 +121,25 @@ describe("clip-cli demo app", () => {
       expect(config).toContain('command = "echo"');
     });
   });
+
+  test("persists gateway aliases in CLIP_HOME and dispatches them", async () => {
+    const home = await tempDir("gateway-alias");
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+
+      const addAlias = await createAppCli().run(["alias", "add", "say", "hi", "hello"], { render: false });
+      const listAliases = await createAppCli().run(["alias", "list", "say"], { render: false });
+      const run = await createAppCli().run(["say", "hi", "example"], { render: false });
+      const config = await readFile(join(home, "target", "cli", "say", "aliases", "hi.toml"), "utf8");
+
+      expect(addAlias.result).toEqual({ target: "say", name: "hi", operation: "hello" });
+      expect(listAliases.result).toEqual({ aliases: [{ target: "say", name: "hi", operation: "hello", args: [] }] });
+      expect(run.result).toBe("hello example");
+      expect(config).toContain('name = "hi"');
+      expect(config).toContain('operation = "hello"');
+    });
+  });
 });
 
 async function tempDir(label: string): Promise<string> {

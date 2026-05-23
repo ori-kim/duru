@@ -271,6 +271,26 @@ describe("@clip/cli-gateway commands", () => {
     expect(result.exitCode).toBe(2);
     expect(result.result).toEqual({ message: 'Unknown gateway adapter type: "missing"' });
   });
+
+  test("registers alias commands backed by the injected store", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+    });
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store }));
+
+    const add = await cli.run(["alias", "add", "test-service", "cats", "listCats", "--limit", "10"], {
+      render: false,
+    });
+    const list = await cli.run(["alias", "list", "test-service"], { render: false });
+    const remove = await cli.run(["alias", "remove", "test-service", "cats"], { render: false });
+
+    expect(add.result).toEqual({ target: "test-service", name: "cats", operation: "listCats" });
+    expect(list.result).toEqual({
+      aliases: [{ target: "test-service", name: "cats", operation: "listCats", args: ["--limit", "10"] }],
+    });
+    expect(remove.result).toEqual({ removed: { target: "test-service", name: "cats" } });
+    expect(await store.listAliases("test-service")).toEqual([]);
+  });
 });
 
 describe("@clip/cli-gateway runtime", () => {
@@ -358,5 +378,38 @@ describe("@clip/cli-gateway runtime", () => {
     expect(result.ok).toBe(false);
     expect(result.exitCode).toBe(7);
     expect(result.result).toEqual({ message: "denied" });
+  });
+
+  test("expands target aliases before adapter execution", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+      aliases: [
+        {
+          target: "test-service",
+          name: "cats",
+          operation: "listCats",
+          args: ["--limit", "10"],
+        },
+      ],
+    });
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string };
+        },
+      },
+      async execute(config, ctx) {
+        return { ok: true, value: { command: config.command, argv: ctx.argv } };
+      },
+    } satisfies GatewayAdapter<{ command: string }>;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
+
+    const result = await cli.run(["test-service", "cats", "--verbose"], { render: false });
+
+    expect(result.result).toEqual({
+      command: "test-service",
+      argv: ["listCats", "--limit", "10", "--verbose"],
+    });
   });
 });
