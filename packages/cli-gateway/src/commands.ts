@@ -1,5 +1,6 @@
 import type { CliPluginApi } from "@clip/kit";
-import type { CliGatewayOptions, GatewayAdapter, GatewayStore } from "./types";
+import { unknownAdapterMessage } from "./runtime";
+import type { CliGatewayOptions, GatewayAdapter } from "./types";
 
 export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOptions): void {
   const adapters = options.adapters ?? [];
@@ -9,8 +10,9 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     .option("--type <type>", "Gateway adapter type")
     .action(async (ctx) => {
       const name = ctx.params.name;
-      const adapter = resolveAddAdapter(adapters, stringOption(ctx.options.type));
-      if (!adapter) return ctx.exit(2, { message: unknownAdapterMessage(stringOption(ctx.options.type)) });
+      const explicitType = stringOption(ctx.options.type);
+      const adapter = resolveAddAdapter(adapters, explicitType);
+      if (!adapter) return ctx.exit(2, { message: addAdapterMessage(explicitType) });
 
       const config = adapter.add
         ? await adapter.add({ name, type: adapter.type, argv: stringArrayParam(ctx.params.args) })
@@ -41,8 +43,8 @@ function resolveAddAdapter(
   return undefined;
 }
 
-function unknownAdapterMessage(type: string | undefined): string {
-  return type ? `Unknown gateway adapter type: "${type}"` : "Gateway adapter type is required";
+function addAdapterMessage(type: string | undefined): string {
+  return type ? unknownAdapterMessage(type) : "Gateway adapter type is required";
 }
 
 function stringOption(value: unknown): string | undefined {
