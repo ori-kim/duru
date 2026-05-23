@@ -95,6 +95,10 @@ export function unknownAdapterMessage(type: string): string {
   return `Unknown gateway adapter type: "${type}"`;
 }
 
+export function unknownTargetMessage(target: string): string {
+  return `Unknown gateway target: "${target}"`;
+}
+
 export function unknownProfileMessage(target: string, profile: string): string {
   return `Unknown gateway profile: "${target}@${profile}"`;
 }
