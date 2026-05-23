@@ -190,13 +190,12 @@ Gateway command는 target system을 위한 product command다.
 - `clip add/list/remove/refresh/login/logout ...`
 - `clip check`
 - `clip inspect <target>`
-- `clip profile add/list/remove ...`
+- `clip profile add/list/remove/use/unset ...`
 - `clip alias add/list/remove ...`
 
 현재 구현하지 않은 command:
 
 - `clip bind/unbind/binds`
-- `clip profile use/unset`
 - `clip auth/status`
 
 Target subcommand는 runtime이 routing한다.

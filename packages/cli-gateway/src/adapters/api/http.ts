@@ -1,5 +1,5 @@
-import type { GatewayContext, GatewayInvokeContext, GatewayResult } from "../types";
-import type { ApiAdapterConfig } from "./api-config";
+import type { GatewayContext, GatewayInvokeContext, GatewayResult } from "../../types";
+import type { ApiAdapterConfig } from "./config";
 
 type RequestArgs = {
   method: string;

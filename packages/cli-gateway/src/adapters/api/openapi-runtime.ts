@@ -1,8 +1,8 @@
-import type { GatewayContext, GatewayInvokeContext, GatewayResult } from "../types";
-import type { ApiAdapterConfig } from "./api-config";
-import { fetchSpec, hasHeader, performApiRequest } from "./api-http";
-import { parseOpenApi } from "./openapi";
-import type { OpenApiTool, ParsedOpenApi } from "./openapi";
+import type { GatewayContext, GatewayInvokeContext, GatewayResult } from "../../types";
+import type { ApiAdapterConfig } from "./config";
+import { fetchSpec, hasHeader, performApiRequest } from "./http";
+import { parseOpenApi } from "./openapi-parser";
+import type { OpenApiTool, ParsedOpenApi } from "./openapi-parser";
 
 type OperationArgs = {
   params: Record<string, unknown>;

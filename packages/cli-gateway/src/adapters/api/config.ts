@@ -1,4 +1,4 @@
-import type { AddInput } from "../types";
+import type { AddInput } from "../../types";
 
 export type ApiAdapterConfig = {
   baseUrl?: string;

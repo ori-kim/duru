@@ -16,9 +16,10 @@ export async function runGatewayTargetInvocation(
 
   const target = await options.store.getTarget(targetRef.name);
   if (!target) return undefined;
-  const profile = targetRef.profile ? await options.store.getProfile(target.name, targetRef.profile) : undefined;
-  if (targetRef.profile && !profile) {
-    return ctx.exit(2, { message: unknownProfileMessage(target.name, targetRef.profile) });
+  const profileName = targetRef.profile ?? target.defaultProfile;
+  const profile = profileName ? await options.store.getProfile(target.name, profileName) : undefined;
+  if (profileName && !profile) {
+    return ctx.exit(2, { message: unknownProfileMessage(target.name, profileName) });
   }
 
   const adapter = (options.adapters ?? []).find((item) => item.type === target.type);

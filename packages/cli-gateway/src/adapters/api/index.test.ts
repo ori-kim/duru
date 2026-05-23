@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createCli } from "@clip/kit";
-import { createMemoryGatewayStore } from "../memory-store";
-import { cliGateway, defaultGatewayAdapters } from "../plugin";
-import { apiAdapter } from "./api";
+import { createMemoryGatewayStore } from "../../memory-store";
+import { cliGateway, defaultGatewayAdapters } from "../../plugin";
+import { apiAdapter } from "./index";
 
 describe("@clip/cli-gateway api adapter", () => {
   test("discovers OpenAPI tools and executes operation ids", async () => {
