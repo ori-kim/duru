@@ -1,6 +1,6 @@
 import { createCli } from "@clip/kit";
 import type { CliPluginApi } from "@clip/kit";
-import { unknownAdapterMessage } from "./runtime";
+import { unknownAdapterMessage, unknownTargetMessage } from "./runtime";
 import type { CliGatewayOptions, GatewayAdapter } from "./types";
 
 export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOptions): void {
@@ -30,6 +30,9 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
 
   api.command("remove <name>", "Remove a gateway target").action(async (ctx) => {
     const name = ctx.params.name;
+    const target = await options.store.getTarget(name);
+    if (!target) return ctx.exit(2, { message: unknownTargetMessage(name) });
+
     await options.store.removeTarget(name);
     return { removed: name };
   });

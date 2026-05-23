@@ -122,6 +122,16 @@ describe("clip-cli demo app", () => {
     });
   });
 
+  test("reports missing gateway target removal as an error", async () => {
+    const home = await tempDir("gateway-remove-missing");
+
+    const result = await withClipHome(home, () => createAppCli().run(["remove", "missing-target"], { render: false }));
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(2);
+    expect(result.result).toEqual({ message: 'Unknown gateway target: "missing-target"' });
+  });
+
   test("persists gateway aliases in CLIP_HOME and dispatches them", async () => {
     const home = await tempDir("gateway-alias");
 

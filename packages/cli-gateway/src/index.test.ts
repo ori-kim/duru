@@ -261,6 +261,17 @@ describe("@clip/cli-gateway commands", () => {
     expect(listAfter.result).toEqual({ targets: [{ name: "notes-api", type: "openapi" }] });
   });
 
+  test("reports stable remove errors when a target does not exist", async () => {
+    const store = createMemoryGatewayStore();
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store }));
+
+    const result = await cli.run(["remove", "missing-target"], { render: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(2);
+    expect(result.result).toEqual({ message: 'Unknown gateway target: "missing-target"' });
+  });
+
   test("reports stable add errors when no adapter can handle a target type", async () => {
     const store = createMemoryGatewayStore();
     const cli = createCli({ name: "clip" }).use(cliGateway({ store }));
