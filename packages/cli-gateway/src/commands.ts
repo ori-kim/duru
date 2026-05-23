@@ -63,6 +63,10 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     return inspectCommand(ctx.params.target, options, adapters);
   });
 
+  api.command("auth <target>", "Show gateway target auth status").action(async (ctx) => {
+    return authCommand("status", ctx.params.target, options, adapters);
+  });
+
   api.command("login <target>", "Login to a gateway target").action(async (ctx) => {
     return authCommand("login", ctx.params.target, options, adapters);
   });
@@ -325,7 +329,7 @@ async function inspectCommand(
 }
 
 async function authCommand(
-  action: "login" | "logout",
+  action: "status" | "login" | "logout",
   targetValue: string,
   options: CliGatewayOptions,
   adapters: readonly GatewayAdapter[],
@@ -347,7 +351,11 @@ async function authCommand(
   const authHandler = gatewayTarget.auth?.[action];
   if (!authHandler) return exit(2, { message: unsupportedAdapterActionMessage(target.type, action) });
 
-  await authHandler(authContext(target.name, resolvedProfile.name));
+  const state = await authHandler(authContext(target.name, resolvedProfile.name));
+
+  if (action === "status") {
+    return { target: target.name, type: target.type, action, ...(state ?? { authenticated: false }) };
+  }
 
   return { target: target.name, type: target.type, action };
 }
@@ -401,7 +409,7 @@ function mergeConfig(targetConfig: unknown, profileConfig: unknown): unknown {
   return { ...targetConfig, ...profileConfig };
 }
 
-function unsupportedAdapterActionMessage(type: string, action: "login" | "logout" | "refresh"): string {
+function unsupportedAdapterActionMessage(type: string, action: "status" | "login" | "logout" | "refresh"): string {
   return `Gateway adapter "${type}" does not support ${action}`;
 }
 
