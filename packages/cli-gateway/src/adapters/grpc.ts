@@ -11,6 +11,10 @@ export function grpcAdapter(): GatewayAdapter<GrpcAdapterConfig> {
   return {
     type: "grpc",
     schema: { parse: parseGrpcConfig },
+    detect(input) {
+      const value = input.argv[0];
+      return Boolean(value && looksLikeGrpcAddress(value));
+    },
     async add(input) {
       return grpcConfigFromAddInput(input);
     },
@@ -136,6 +140,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isStringRecord(value: unknown): value is Record<string, string> {
   return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
+}
+
+function looksLikeGrpcAddress(value: string): boolean {
+  return /^[a-zA-Z0-9.-]+:\d+$/.test(value);
 }
 
 function errorMessage(error: unknown): string {

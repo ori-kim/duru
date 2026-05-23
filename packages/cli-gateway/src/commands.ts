@@ -24,16 +24,17 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     .action(async (ctx) => {
       const name = ctx.params.name;
       const explicitType = stringOption(ctx.options.type);
-      const adapter = resolveAddAdapter(adapters, explicitType);
-      if (!adapter) return ctx.exit(2, { message: addAdapterMessage(explicitType) });
+      const argv = stringArrayParam(ctx.params.args);
+      const adapter = await resolveAddAdapter(adapters, { name, type: explicitType, argv });
+      if (adapter.kind === "error") return ctx.exit(2, { message: adapter.message });
 
-      const config = adapter.add
-        ? await adapter.add({ name, type: adapter.type, argv: stringArrayParam(ctx.params.args) })
-        : adapter.schema.parse({});
+      const config = adapter.value.add
+        ? await adapter.value.add({ name, type: adapter.value.type, argv })
+        : adapter.value.schema.parse({});
 
-      await options.store.saveTarget({ name, type: adapter.type, config });
+      await options.store.saveTarget({ name, type: adapter.value.type, config });
 
-      return { name, type: adapter.type };
+      return { name, type: adapter.value.type };
     });
 
   api.command("list", "List gateway targets").action(async () => ({
@@ -130,17 +131,29 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
   api.route("profile", profiles);
 }
 
-function resolveAddAdapter(
+async function resolveAddAdapter(
   adapters: readonly GatewayAdapter[],
-  explicitType: string | undefined,
-): GatewayAdapter | undefined {
-  if (explicitType) return adapters.find((adapter) => adapter.type === explicitType);
-  if (adapters.length === 1) return adapters[0];
-  return undefined;
+  input: { name: string; type?: string; argv: readonly string[] },
+): Promise<{ kind: "ok"; value: GatewayAdapter } | { kind: "error"; message: string }> {
+  if (input.type) {
+    const adapter = adapters.find((item) => item.type === input.type);
+    return adapter ? { kind: "ok", value: adapter } : { kind: "error", message: unknownAdapterMessage(input.type) };
+  }
+
+  const detected = [];
+  for (const adapter of adapters) {
+    if (adapter.detect && (await adapter.detect(input))) detected.push(adapter);
+  }
+
+  if (detected.length === 1) return { kind: "ok", value: detected[0] as GatewayAdapter };
+  if (detected.length > 1) return { kind: "error", message: ambiguousAdapterMessage(detected) };
+
+  const fallback = adapters.length === 1 ? adapters[0] : adapters.find((adapter) => adapter.type === "cli");
+  return fallback ? { kind: "ok", value: fallback } : { kind: "error", message: "Gateway adapter type is required" };
 }
 
-function addAdapterMessage(type: string | undefined): string {
-  return type ? unknownAdapterMessage(type) : "Gateway adapter type is required";
+function ambiguousAdapterMessage(adapters: readonly GatewayAdapter[]): string {
+  return `Gateway target type is ambiguous: ${adapters.map((adapter) => adapter.type).join(", ")}`;
 }
 
 async function refreshCommand(targetName: string, options: CliGatewayOptions, adapters: readonly GatewayAdapter[]) {
