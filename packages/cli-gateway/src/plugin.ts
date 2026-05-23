@@ -1,5 +1,6 @@
 import { createPlugin } from "@clip/kit";
 import type { CliEventContext } from "@clip/kit";
+import { apiAdapter } from "./adapters/api";
 import { cliAdapter } from "./adapters/cli";
 import { scriptAdapter } from "./adapters/script";
 import { installGatewayCommands } from "./commands";
@@ -14,5 +15,5 @@ export function cliGateway(options: CliGatewayOptions): CliGatewayPlugin {
 }
 
 export function defaultGatewayAdapters(): readonly GatewayAdapter[] {
-  return [cliAdapter(), scriptAdapter()];
+  return [cliAdapter(), scriptAdapter(), apiAdapter()];
 }

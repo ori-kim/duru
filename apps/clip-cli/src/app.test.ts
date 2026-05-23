@@ -137,6 +137,28 @@ describe("clip-cli demo app", () => {
     });
   });
 
+  test("persists api gateway targets in CLIP_HOME", async () => {
+    const home = await tempDir("gateway-api");
+
+    await withClipHome(home, async () => {
+      const add = await createAppCli().run(["add", "notes-api", "https://api.example.com", "--type", "api"], {
+        render: false,
+      });
+      const check = await createAppCli().run(["check"], { render: false });
+      const config = await readFile(join(home, "target", "api", "notes-api", "config.toml"), "utf8");
+
+      expect(add.result).toEqual({ name: "notes-api", type: "api" });
+      expect(check.result).toEqual({
+        ok: true,
+        scope: "gateway",
+        adapters: ["cli", "script", "api"],
+        targets: [{ name: "notes-api", type: "api", ok: true, diagnostics: [] }],
+        diagnostics: [],
+      });
+      expect(config).toContain('baseUrl = "https://api.example.com"');
+    });
+  });
+
   test("reports missing gateway target removal as an error", async () => {
     const home = await tempDir("gateway-remove-missing");
 
@@ -210,7 +232,7 @@ describe("clip-cli demo app", () => {
       expect(result.result).toEqual({
         ok: true,
         scope: "gateway",
-        adapters: ["cli", "script"],
+        adapters: ["cli", "script", "api"],
         targets: [{ name: "say", type: "cli", ok: true, diagnostics: [] }],
         diagnostics: [],
       });

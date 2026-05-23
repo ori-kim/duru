@@ -16,7 +16,7 @@ describe("@clip/cli-gateway contract", () => {
 
     const result = await cli.run(["missing"], { render: false });
 
-    expect(defaultGatewayAdapters().map((adapter) => adapter.type)).toEqual(["cli", "script"]);
+    expect(defaultGatewayAdapters().map((adapter) => adapter.type)).toEqual(["cli", "script", "api"]);
     expect(result.ok).toBe(false);
   });
 
@@ -54,6 +54,70 @@ describe("@clip/cli-gateway contract", () => {
     const result = await target?.invoke({ argv: ["example"] });
 
     expect(result).toEqual({ ok: true, value: "hello example", exitCode: 0 });
+  });
+
+  test("provides a default api adapter that executes HTTP requests", async () => {
+    const store = createMemoryGatewayStore();
+    const calls: unknown[] = [];
+    const adapter = defaultGatewayAdapters().find((item) => item.type === "api");
+    const config = adapter?.schema.parse({
+      baseUrl: "https://api.example.com",
+      headers: { "X-Custom-Header": "custom-from-config" },
+    });
+    const target =
+      adapter && config
+        ? adapter.createTarget({
+            manifest: { name: "notes-api", type: "api", config },
+            config,
+            context: {
+              store,
+              services: {
+                async fetch(input: string | URL | Request, init?: RequestInit) {
+                  calls.push({ input: String(input), init });
+                  return new Response(JSON.stringify({ ok: true }), {
+                    status: 200,
+                    statusText: "OK",
+                    headers: { "content-type": "application/json" },
+                  });
+                },
+              },
+            },
+          })
+        : undefined;
+
+    const result = await target?.invoke({
+      argv: [
+        "POST",
+        "/v1/items",
+        "--tag",
+        "test-service",
+        "--header",
+        "X-Request-Id: example",
+        "--body",
+        '{"name":"example"}',
+      ],
+    });
+
+    expect(calls).toEqual([
+      {
+        input: "https://api.example.com/v1/items?tag=test-service",
+        init: {
+          method: "POST",
+          signal: undefined,
+          headers: {
+            "X-Custom-Header": "custom-from-config",
+            "X-Request-Id": "example",
+            "content-type": "application/json",
+          },
+          body: '{"name":"example"}',
+        },
+      },
+    ]);
+    expect(result).toEqual({
+      ok: true,
+      value: { status: 200, statusText: "OK", body: { ok: true } },
+      exitCode: 0,
+    });
   });
 
   test("stores target records in memory without exposing mutable references", async () => {
