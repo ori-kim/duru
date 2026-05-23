@@ -1,7 +1,7 @@
 # @clip/cli-gateway 설계
 
 날짜: 2026-05-22
-상태: 검토용 초안
+상태: 구현 진행 중
 
 ## 목적
 
@@ -14,10 +14,10 @@ Gateway는 persistence 구현을 직접 소유하지 않는다. file-backed stor
 ## 목표
 
 - `@clip/core`의 CLI framework에 설치할 수 있는 `cliGateway()` plugin을 제공한다.
-- target gateway command를 소유한다: add, list, remove, refresh, login, logout, profile, alias, bind, unbind, binds.
+- target gateway command를 소유한다: add, list, remove, check, inspect, refresh, login, logout, profile, alias.
 - target invocation routing을 소유한다: `clip <target> <subcommand> [...args]`.
 - 저장된 target manifest를 adapter별 `GatewayTarget` 객체로 통합한다.
-- CLI, MCP, OpenAPI REST, GraphQL, gRPC, script target을 위한 기본 adapter를 포함한다.
+- CLI, script, API REST, GraphQL, MCP, gRPC target을 위한 기본 adapter를 포함한다.
 - persistence 구현을 직접 import하지 않고 `GatewayStore` interface만 사용한다.
 - 테스트와 개발을 위한 in-memory `GatewayStore` 구현을 제공할 수 있다.
 - 나중에 외부 adapter를 붙일 수 있도록 안정적인 adapter interface를 제공한다.
@@ -37,8 +37,8 @@ Gateway는 persistence 구현을 직접 소유하지 않는다. file-backed stor
 ```text
 packages/cli-gateway/
   src/{index,plugin,types}.ts
-  src/{runtime,store,commands,output}/
-  src/adapters/{cli,mcp,openapi,graphql,grpc,script}/
+  src/{runtime,commands,memory-store}.ts
+  src/adapters/{cli,script,api,graphql,mcp,grpc}.ts
 ```
 
 기본 public surface:
@@ -62,7 +62,7 @@ createCli({ name: "clip" }).use(
 const files = createClipFileHome({ env: process.env });
 const store: GatewayStore = createAppGatewayStore({
   files: files.store("target"),
-  format: "yaml",
+  format: "toml",
 });
 
 createCli({ name: "clip" }).use(cliGateway({ store, adapters }));
@@ -105,7 +105,7 @@ $CLIP_HOME/target/<type>/<name>/config.yml
 $CLIP_HOME/target/<type>/<name>/.env
 ```
 
-이 layout은 gateway contract가 아니라 app store 구현 세부사항이다.
+현재 app 구현의 기본 쓰기 format은 TOML이고, 읽기는 TOML/YAML/JSON을 허용한다. 이 layout과 format 선택은 gateway contract가 아니라 app store 구현 세부사항이다.
 
 ## Gateway Context
 
@@ -138,6 +138,7 @@ type GatewayTarget<TConfig = unknown> = {
   auth?: GatewayTargetAuth;
   listRow?(): GatewayListRow | Promise<GatewayListRow>;
   complete?(ctx: GatewayCompletionContext): Promise<readonly CompletionItem[]>;
+  check?(ctx: GatewayTargetCheckContext): Promise<GatewayTargetCheckResult | undefined>;
 };
 ```
 
@@ -174,11 +175,11 @@ type GatewayAdapter<TConfig = unknown> = {
 
 기본 adapter:
 - `cli`: local CLI execution과 passthrough.
-- `mcp`: HTTP, SSE, stdio MCP server.
-- `openapi`: OpenAPI REST operation discovery와 execution.
-- `graphql`: introspection, query, mutation execution.
-- `grpc`: protobuf 또는 reflection 기반 service call.
-- `script`: target으로 저장된 named script.
+- `script`: cwd/env/dry-run을 가진 local process execution.
+- `api`: baseUrl/header 기반 HTTP request.
+- `graphql`: GraphQL endpoint POST execution.
+- `mcp`: HTTP JSON-RPC MCP request. SSE/stdin session support는 후속 확장이다.
+- `grpc`: `grpcurl` compatible process execution.
 
 ## Commands
 
@@ -187,9 +188,16 @@ Gateway command는 target system을 위한 product command다.
 포함:
 
 - `clip add/list/remove/refresh/login/logout ...`
-- `clip profile add/use/list/remove/unset ...`
+- `clip check`
+- `clip inspect <target>`
+- `clip profile add/list/remove ...`
 - `clip alias add/list/remove ...`
-- `clip bind/unbind/binds ...`
+
+현재 구현하지 않은 command:
+
+- `clip bind/unbind/binds`
+- `clip profile use/unset`
+- `clip auth/status`
 
 Target subcommand는 runtime이 routing한다.
 
@@ -236,6 +244,8 @@ export type {
   AddInput,
   GatewayInvokeContext,
   GatewayAuthContext,
+  GatewayCheckReport,
+  GatewayInspectReport,
 };
 ```
 
@@ -256,10 +266,11 @@ argv
   -> gateway fallback receives unmatched argv
   -> gateway parser identifies target token and profile
   -> GatewayStore returns target record
-  -> gateway expands aliases
   -> gateway merges active and explicit profile records
-  -> gateway checks ACL/policy/auth requirements
   -> adapter validates config and creates GatewayTarget
+  -> gateway expands aliases and strips gateway-only options
+  -> gateway checks ACL/policy requirements
+  -> gateway applies timeout/dry-run context
   -> gateway calls GatewayTarget.invoke()
   -> output renderer writes result
 ```
@@ -320,10 +331,11 @@ Integration test:
 3. `apps/clip`에서 `@clip/file-store` 기반 file-backed `GatewayStore` 구현을 작성한다.
 4. CLI target support를 먼저 port한다.
 5. add/list/remove/profile/alias command를 추가한다.
-6. MCP adapter를 port한다.
-7. OpenAPI, GraphQL, gRPC, script adapter를 port한다.
+6. check/inspect command를 추가한다.
+7. script/API/GraphQL/MCP/gRPC adapter를 port한다.
 8. auth와 adapter refresh contract가 안정되면 login/logout과 refresh를 추가한다.
-9. `clip` app을 `@clip/core`, renderer, app-owned `GatewayStore`, `@clip/cli-gateway` 조합으로 다시 연결한다.
+9. ACL, timeout, dry-run 같은 공통 target policy를 runtime에 연결한다.
+10. `clip` app을 `@clip/core`, renderer, app-owned `GatewayStore`, `@clip/cli-gateway` 조합으로 다시 연결한다.
 
 ## 검토 메모
 
