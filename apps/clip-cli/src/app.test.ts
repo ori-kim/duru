@@ -151,7 +151,7 @@ describe("clip-cli demo app", () => {
       expect(check.result).toEqual({
         ok: true,
         scope: "gateway",
-        adapters: ["cli", "script", "api", "graphql"],
+        adapters: ["cli", "script", "api", "graphql", "mcp"],
         targets: [{ name: "notes-api", type: "api", ok: true, diagnostics: [] }],
         diagnostics: [],
       });
@@ -174,11 +174,34 @@ describe("clip-cli demo app", () => {
       expect(check.result).toEqual({
         ok: true,
         scope: "gateway",
-        adapters: ["cli", "script", "api", "graphql"],
+        adapters: ["cli", "script", "api", "graphql", "mcp"],
         targets: [{ name: "search-api", type: "graphql", ok: true, diagnostics: [] }],
         diagnostics: [],
       });
       expect(config).toContain('endpoint = "https://api.example.com/graphql"');
+    });
+  });
+
+  test("persists mcp gateway targets in CLIP_HOME", async () => {
+    const home = await tempDir("gateway-mcp");
+
+    await withClipHome(home, async () => {
+      const add = await createAppCli().run(
+        ["add", "catservice", "https://catservice.example.com/mcp", "--type", "mcp"],
+        { render: false },
+      );
+      const check = await createAppCli().run(["check"], { render: false });
+      const config = await readFile(join(home, "target", "mcp", "catservice", "config.toml"), "utf8");
+
+      expect(add.result).toEqual({ name: "catservice", type: "mcp" });
+      expect(check.result).toEqual({
+        ok: true,
+        scope: "gateway",
+        adapters: ["cli", "script", "api", "graphql", "mcp"],
+        targets: [{ name: "catservice", type: "mcp", ok: true, diagnostics: [] }],
+        diagnostics: [],
+      });
+      expect(config).toContain('url = "https://catservice.example.com/mcp"');
     });
   });
 
@@ -255,7 +278,7 @@ describe("clip-cli demo app", () => {
       expect(result.result).toEqual({
         ok: true,
         scope: "gateway",
-        adapters: ["cli", "script", "api", "graphql"],
+        adapters: ["cli", "script", "api", "graphql", "mcp"],
         targets: [{ name: "say", type: "cli", ok: true, diagnostics: [] }],
         diagnostics: [],
       });

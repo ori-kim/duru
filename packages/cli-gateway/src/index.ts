@@ -1,12 +1,14 @@
 export { apiAdapter } from "./adapters/api";
 export { cliAdapter } from "./adapters/cli";
 export { graphqlAdapter } from "./adapters/graphql";
+export { mcpAdapter } from "./adapters/mcp";
 export { scriptAdapter } from "./adapters/script";
 export { createMemoryGatewayStore } from "./memory-store";
 export { cliGateway, defaultGatewayAdapters } from "./plugin";
 export type { ApiAdapterConfig } from "./adapters/api";
 export type { CliAdapterConfig } from "./adapters/cli";
 export type { GraphqlAdapterConfig } from "./adapters/graphql";
+export type { McpAdapterConfig } from "./adapters/mcp";
 export type { ScriptAdapterConfig } from "./adapters/script";
 export type {
   AclTree,
