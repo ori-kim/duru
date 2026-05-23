@@ -5,7 +5,7 @@
 
 ## 목적
 
-`@clip/cli-gateway`는 Clip의 target gateway 기능을 소유하는 패키지다. runtime, protocol adapter, target-facing command를 하나의 installable CLI plugin으로 묶는다.
+`@clip/cli-gateway`는 Clip의 target gateway 기능을 소유하는 패키지다. target manifest 평가, protocol adapter, target-facing command를 하나의 installable CLI plugin으로 묶는다.
 
 이 패키지가 필요한 이유는 target system이 generic CLI framework 관심사가 아니기 때문이다. target system은 외부 tool/protocol을 등록하고, policy를 적용하고, invocation을 routing하고, `add`, `list`, `remove`, `login`, `logout`, `profile` 같은 관리 command를 노출하는 제품 기능이다.
 
@@ -16,6 +16,7 @@ Gateway는 persistence 구현을 직접 소유하지 않는다. file-backed stor
 - `@clip/core`의 CLI framework에 설치할 수 있는 `cliGateway()` plugin을 제공한다.
 - target gateway command를 소유한다: add, list, remove, refresh, login, logout, profile, alias, bind, unbind, binds.
 - target invocation routing을 소유한다: `clip <target> <subcommand> [...args]`.
+- 저장된 target manifest를 adapter별 `GatewayTarget` 객체로 통합한다.
 - CLI, MCP, OpenAPI REST, GraphQL, gRPC, script target을 위한 기본 adapter를 포함한다.
 - persistence 구현을 직접 import하지 않고 `GatewayStore` interface만 사용한다.
 - 테스트와 개발을 위한 in-memory `GatewayStore` 구현을 제공할 수 있다.
@@ -106,9 +107,39 @@ $CLIP_HOME/target/<type>/<name>/.env
 
 이 layout은 gateway contract가 아니라 app store 구현 세부사항이다.
 
-## Runtime
+## Gateway Context
 
-Runtime은 invocation execution을 소유한다.
+`GatewayContext`는 gateway 인스턴스가 공유하는 실행 환경이다. target 실행 객체가 무엇을 할 수 있는지를 뜻하지 않고, target을 만들고 실행할 때 사용할 공통 서비스와 정책을 뜻한다.
+
+```ts
+type GatewayContext = {
+  store: GatewayStore;
+  env?: Readonly<Record<string, string | undefined>>;
+  services?: GatewayServices;
+  output?: GatewayOutputOptions;
+};
+```
+
+첫 버전의 `services`는 credential store, keychain wrapper, logger, network/process host adapter 같은 app-level 의존성을 주입하기 위한 확장 지점이다. `@clip/cli-gateway`는 credential 저장 방식이나 host 구현을 직접 소유하지 않는다.
+
+## Gateway Target
+
+`GatewayTarget`은 gateway가 CLI/runtime에 연결할 수 있는 실행 가능한 target 객체다. 이 객체는 store에 저장된 원본이 아니라, manifest와 profile을 resolve하고 adapter가 config를 검증한 뒤 만든 결과다.
+
+```ts
+type GatewayTarget<TConfig = unknown> = {
+  name: string;
+  type: string;
+  config: TConfig;
+  profile?: string;
+  invoke(ctx: GatewayInvokeContext): Promise<GatewayResult>;
+  catalog?(ctx: GatewayCatalogContext): Promise<readonly GatewayTool[] | null>;
+  refresh?(ctx: GatewayRefreshContext): Promise<GatewayTargetRefreshResult<TConfig> | undefined>;
+  auth?: GatewayTargetAuth;
+  listRow?(): GatewayListRow | Promise<GatewayListRow>;
+  complete?(ctx: GatewayCompletionContext): Promise<readonly CompletionItem[]>;
+};
+```
 
 책임:
 
@@ -116,17 +147,17 @@ Runtime은 invocation execution을 소유한다.
 - target과 optional profile resolve.
 - target alias expansion.
 - ACL과 command policy 적용.
-- lifecycle hook 실행.
-- 선택된 adapter 호출.
+- manifest를 `GatewayTarget`으로 변환.
+- `GatewayTarget` method 실행.
 - timeout과 abort signal 적용.
 - `GatewayResult` 반환.
 - output을 render하거나 configured renderer에 넘김.
 
-Runtime은 파일을 직접 읽거나 쓰지 않는다. `GatewayStore` interface를 사용한다.
+Gateway는 파일을 직접 읽거나 쓰지 않는다. `GatewayStore` interface를 사용한다.
 
 ## Adapters
 
-Adapter는 target type별 동작을 구현한다.
+Adapter는 target type별 manifest 해석과 `GatewayTarget` 생성을 구현한다.
 
 ```ts
 type GatewayAdapter<TConfig = unknown> = {
@@ -135,15 +166,11 @@ type GatewayAdapter<TConfig = unknown> = {
   detect?(input: AddInput): boolean | Promise<boolean>;
   add?(input: AddInput): Promise<TConfig>;
   normalize?(config: TConfig, ctx: NormalizeContext): TConfig | Promise<TConfig>;
-  execute(config: TConfig, ctx: ExecuteContext): Promise<GatewayResult>;
-  describeTools?(config: TConfig, ctx: DescribeContext): Promise<readonly GatewayTool[] | null>;
-  refresh?(config: TConfig, ctx: RefreshContext): Promise<TConfig | void>;
-  login?(config: TConfig, ctx: AuthContext): Promise<void>;
-  logout?(config: TConfig, ctx: AuthContext): Promise<void>;
-  listRow?(config: TConfig, ctx: ListContext): Promise<GatewayListRow>;
-  complete?(config: TConfig, ctx: GatewayCompletionContext): Promise<readonly CompletionItem[]>;
+  createTarget(input: GatewayTargetCreateInput<TConfig>): GatewayTarget<TConfig>;
 };
 ```
+
+`execute`, `refresh`, `login`, `logout`, `complete` 같은 동작은 adapter 자체의 method가 아니라 adapter가 만든 `GatewayTarget`의 method다. 이렇게 나누면 gateway는 공통 resolve/auth/policy/timeout/store 처리를 유지하면서, target type별 실행 의미만 adapter에 위임할 수 있다.
 
 기본 adapter:
 - `cli`: local CLI execution과 passthrough.
@@ -183,6 +210,8 @@ Target subcommand는 runtime이 routing한다.
 type CliGatewayOptions = {
   store: GatewayStore;
   adapters?: readonly GatewayAdapter[];
+  env?: Readonly<Record<string, string | undefined>>;
+  services?: GatewayServices;
   output?: GatewayOutputOptions;
 };
 
@@ -196,6 +225,8 @@ Adapter authoring type은 공개한다.
 ```ts
 export type {
   GatewayAdapter,
+  GatewayContext,
+  GatewayTarget,
   GatewayResult,
   GatewayTool,
   GatewayStore,
@@ -203,8 +234,8 @@ export type {
   GatewayProfileRecord,
   GatewayAliasRecord,
   AddInput,
-  ExecuteContext,
-  AuthContext,
+  GatewayInvokeContext,
+  GatewayAuthContext,
 };
 ```
 
@@ -225,12 +256,11 @@ argv
   -> gateway fallback receives unmatched argv
   -> gateway parser identifies target token and profile
   -> GatewayStore returns target record
-  -> runtime merges active and explicit profile records
-  -> runtime expands aliases
-  -> runtime checks ACL
-  -> runtime runs subcommand-start hooks
-  -> adapter executes operation
-  -> runtime runs subcommand-end or error hooks
+  -> gateway expands aliases
+  -> gateway merges active and explicit profile records
+  -> gateway checks ACL/policy/auth requirements
+  -> adapter validates config and creates GatewayTarget
+  -> gateway calls GatewayTarget.invoke()
   -> output renderer writes result
 ```
 
