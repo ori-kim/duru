@@ -1,3 +1,4 @@
+import { createGatewayTargetAuth } from "../../auth";
 import type { GatewayAdapter, GatewayContext, GatewayInvokeContext, GatewayResult } from "../../types";
 import { apiConfigFromAddInput, detectApiInput, parseApiConfig } from "./config";
 import type { ApiAdapterConfig } from "./config";
@@ -16,13 +17,14 @@ export function apiAdapter(): GatewayAdapter<ApiAdapterConfig> {
     async add(input) {
       return apiConfigFromAddInput(input);
     },
-    createTarget({ manifest, config, context }) {
+    createTarget({ manifest, config, context, profile }) {
       return {
         name: manifest.name,
         type: manifest.type,
         config,
+        profile: profile?.name,
         async invoke(ctx) {
-          return executeApiTarget(config, ctx, context);
+          return executeApiTarget(config, ctx, context, manifest.name, profile?.name);
         },
         async catalog(ctx) {
           const spec = await loadParsedSpec(config, context, ctx.signal);
@@ -36,6 +38,7 @@ export function apiAdapter(): GatewayAdapter<ApiAdapterConfig> {
         listRow() {
           return { name: manifest.name, type: "api", summary: config.baseUrl ?? config.openapiUrl };
         },
+        auth: createGatewayTargetAuth({ manifest, auth: config.auth, context }),
         async check() {
           return { diagnostics: [] };
         },
@@ -48,9 +51,11 @@ async function executeApiTarget(
   config: ApiAdapterConfig,
   ctx: GatewayInvokeContext,
   gatewayContext: GatewayContext,
+  target: string,
+  profile: string | undefined,
 ): Promise<GatewayResult> {
   try {
-    return await executeApiTargetUnsafe(config, ctx, gatewayContext);
+    return await executeApiTargetUnsafe(config, ctx, gatewayContext, target, profile);
   } catch (error) {
     return { ok: false, error: { message: errorMessage(error) }, exitCode: 1 };
   }
@@ -60,6 +65,8 @@ async function executeApiTargetUnsafe(
   config: ApiAdapterConfig,
   ctx: GatewayInvokeContext,
   gatewayContext: GatewayContext,
+  target: string,
+  profile: string | undefined,
 ): Promise<GatewayResult> {
   const firstArg = ctx.argv[0];
 
@@ -86,11 +93,11 @@ async function executeApiTargetUnsafe(
   if (firstArg && !isRawRequestStart(firstArg)) {
     const spec = await loadParsedSpec(config, gatewayContext, ctx.signal);
     const tool = spec?.tools.find((item) => item.name === firstArg);
-    if (tool && spec) return executeOpenApiOperation(config, spec, tool, ctx, gatewayContext);
+    if (tool && spec) return executeOpenApiOperation(config, spec, tool, ctx, gatewayContext, target, profile);
     if (spec) return { ok: false, error: { message: `Unknown API operation: "${firstArg}"` }, exitCode: 2 };
   }
 
-  return executeRawApiTarget(config, ctx, gatewayContext);
+  return executeRawApiTarget(config, ctx, gatewayContext, target, profile);
 }
 
 function errorMessage(error: unknown): string {

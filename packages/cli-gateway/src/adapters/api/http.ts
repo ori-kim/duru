@@ -1,3 +1,4 @@
+import { oauthAuthorizationHeader } from "../../auth";
 import type { GatewayContext, GatewayInvokeContext, GatewayResult } from "../../types";
 import type { ApiAdapterConfig } from "./config";
 
@@ -17,6 +18,8 @@ export async function executeRawApiTarget(
   config: ApiAdapterConfig,
   ctx: GatewayInvokeContext,
   gatewayContext: GatewayContext,
+  target: string,
+  profile: string | undefined,
 ): Promise<GatewayResult> {
   let request: RequestArgs;
 
@@ -34,12 +37,24 @@ export async function executeRawApiTarget(
     return { ok: false, error: { message: errorMessage(error) }, exitCode: 2 };
   }
 
-  const headers = {
+  const baseHeaders = {
     ...(config.headers ?? {}),
     ...request.headers,
     ...(request.body && !hasHeader({ ...(config.headers ?? {}), ...request.headers }, "content-type")
       ? { "content-type": "application/json" }
       : {}),
+  };
+  const headers = {
+    ...baseHeaders,
+    ...(await oauthAuthorizationHeader({
+      context: gatewayContext,
+      target,
+      profile,
+      auth: config.auth,
+      headers: baseHeaders,
+      signal: ctx.signal,
+      dryRun: ctx.dryRun,
+    })),
   };
 
   return performApiRequest(
@@ -63,11 +78,26 @@ export async function performApiRequest(
   },
   ctx: GatewayInvokeContext,
   gatewayContext: GatewayContext,
+  auth?: { target: string; profile?: string; config: ApiAdapterConfig },
 ): Promise<GatewayResult> {
+  const headers = {
+    ...request.headers,
+    ...(auth
+      ? await oauthAuthorizationHeader({
+          context: gatewayContext,
+          target: auth.target,
+          profile: auth.profile,
+          auth: auth.config.auth,
+          headers: request.headers,
+          signal: ctx.signal,
+          dryRun: ctx.dryRun,
+        })
+      : {}),
+  };
   const init: RequestInit = {
     method: request.method,
     signal: ctx.signal,
-    ...(Object.keys(request.headers).length > 0 ? { headers: request.headers } : {}),
+    ...(Object.keys(headers).length > 0 ? { headers } : {}),
     ...(request.body ? { body: request.body } : {}),
   };
 

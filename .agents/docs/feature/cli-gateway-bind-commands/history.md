@@ -5,7 +5,7 @@
 - Added `GatewayBindingRecord` and binding methods to `GatewayStore`.
 - Added `clip bind <name> <target> [...args]`, `clip binds`, and `clip unbind <name>`.
 - Runtime resolves binding names before falling back to host not-found handling, while target names still take precedence over binding names.
-- App file store persists bindings under `$CLIP_HOME/target/_bindings` and writes shell shims under `$CLIP_HOME/bin`.
+- App file store persists bindings under `$CLIP_HOME/gateway/_bindings` and writes shell shims under `$CLIP_HOME/bin`.
 - Removing a target also removes bindings that point at that target.
 - Verification:
   - `bun run check`

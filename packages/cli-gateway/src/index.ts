@@ -6,6 +6,7 @@ export { mcpAdapter } from "./adapters/mcp";
 export { scriptAdapter } from "./adapters/script";
 export { createMemoryGatewayStore } from "./memory-store";
 export { cliGateway, defaultGatewayAdapters } from "./plugin";
+export type { GatewayOAuthProviderConfig, GatewayOAuthService, GatewayOAuthServiceInput } from "./auth";
 export type { ApiAdapterConfig } from "./adapters/api";
 export type { CliAdapterConfig } from "./adapters/cli";
 export type { GraphqlAdapterConfig } from "./adapters/graphql";

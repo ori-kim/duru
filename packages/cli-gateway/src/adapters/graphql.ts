@@ -1,8 +1,11 @@
+import { createGatewayTargetAuth, oauthAuthorizationHeader, parseOptionalOAuthProviderConfig } from "../auth";
+import type { GatewayOAuthProviderConfig } from "../auth";
 import type { AddInput, GatewayAdapter, GatewayContext, GatewayInvokeContext, GatewayResult } from "../types";
 
 export type GraphqlAdapterConfig = {
   endpoint: string;
   headers?: Record<string, string>;
+  auth?: GatewayOAuthProviderConfig;
 };
 
 type GraphqlRequestArgs = {
@@ -25,13 +28,14 @@ export function graphqlAdapter(): GatewayAdapter<GraphqlAdapterConfig> {
     async add(input) {
       return graphqlConfigFromAddInput(input);
     },
-    createTarget({ manifest, config, context }) {
+    createTarget({ manifest, config, context, profile }) {
       return {
         name: manifest.name,
         type: manifest.type,
         config,
+        profile: profile?.name,
         async invoke(ctx) {
-          return executeGraphqlTarget(config, ctx, context);
+          return executeGraphqlTarget(config, ctx, context, manifest.name, profile?.name);
         },
         async catalog() {
           return [];
@@ -39,6 +43,7 @@ export function graphqlAdapter(): GatewayAdapter<GraphqlAdapterConfig> {
         listRow() {
           return { name: manifest.name, type: "graphql", summary: config.endpoint };
         },
+        auth: createGatewayTargetAuth({ manifest, auth: config.auth, context }),
         async check() {
           return { diagnostics: [] };
         },
@@ -69,6 +74,7 @@ function parseGraphqlConfig(value: unknown): GraphqlAdapterConfig {
   return {
     endpoint: value.endpoint,
     ...(value.headers ? { headers: value.headers } : {}),
+    ...(value.auth ? { auth: parseOptionalOAuthProviderConfig(value.auth) } : {}),
   };
 }
 
@@ -76,6 +82,8 @@ async function executeGraphqlTarget(
   config: GraphqlAdapterConfig,
   ctx: GatewayInvokeContext,
   gatewayContext: GatewayContext,
+  target: string,
+  profile: string | undefined,
 ): Promise<GatewayResult> {
   let request: GraphqlRequestArgs;
   try {
@@ -89,12 +97,24 @@ async function executeGraphqlTarget(
     ...(request.variables ? { variables: request.variables } : {}),
     ...(request.operationName ? { operationName: request.operationName } : {}),
   });
-  const headers = {
+  const baseHeaders = {
     ...(config.headers ?? {}),
     ...request.headers,
     ...(!hasHeader({ ...(config.headers ?? {}), ...request.headers }, "content-type")
       ? { "content-type": "application/json" }
       : {}),
+  };
+  const headers = {
+    ...baseHeaders,
+    ...(await oauthAuthorizationHeader({
+      context: gatewayContext,
+      target,
+      profile,
+      auth: config.auth,
+      headers: baseHeaders,
+      signal: ctx.signal,
+      dryRun: ctx.dryRun,
+    })),
   };
   const init: RequestInit = {
     method: "POST",

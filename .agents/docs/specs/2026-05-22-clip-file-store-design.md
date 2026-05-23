@@ -45,7 +45,7 @@ type ClipFileHome = {
 };
 ```
 
-`scope(name)`은 `root/name` 아래 namespaced store를 만든다. `store(path)`는 root 아래의 안전한 상대 경로에 store를 만든다. 이 구조 덕분에 app은 `target/cli/test-service` 같은 기존 호환 layout도, `plugins/example/manifest.toml` 같은 새 layout도 직접 선택할 수 있다.
+`scope(name)`은 `root/name` 아래 namespaced store를 만든다. `store(path)`는 root 아래의 안전한 상대 경로에 store를 만든다. 이 구조 덕분에 app은 `gateway/cli/test-service` 같은 gateway layout도, `plugins/example/manifest.toml` 같은 새 layout도 직접 선택할 수 있다.
 
 ### FileStore
 
@@ -134,16 +134,16 @@ class ClipFileStoreCodecError extends Error {}
 
 권장 ownership:
 
-- `target/`: `apps/clip`의 file-backed `GatewayStore` 구현이 소유할 수 있다.
+- `gateway/`: `apps/clip`의 file-backed `GatewayStore` 구현이 소유할 수 있다.
 - `plugins/` 또는 `extensions/`: app plugin manager package가 소유한다.
 - `cache/`: 각 패키지가 scoped cache subdirectory를 만들 수 있다.
 - `state/`: 각 패키지가 scoped state subdirectory를 만들 수 있다.
 
-현재 제품과의 호환을 위해 `apps/clip`은 기존 target path를 유지할 수 있다.
+현재 gateway 설정은 `apps/clip`이 `$CLIP_HOME/gateway` 아래에 저장한다.
 
 ```text
-$CLIP_HOME/target/<type>/<name>/config.yml
-$CLIP_HOME/target/<type>/<name>/.env
+$CLIP_HOME/gateway/<type>/<name>/config.yml
+$CLIP_HOME/gateway/<type>/<name>/.env
 ```
 
 이 호환성 결정은 `@clip/file-store`나 `@clip/cli-gateway`가 아니라 `apps/clip`의 file-backed gateway store 구현 책임이다.
@@ -158,14 +158,14 @@ const home = createClipFileHome({
   codecs: [jsonCodec(), yamlCodec(), tomlCodec()],
 });
 
-const targetFiles = home.store("target");
+const gatewayFiles = home.store("gateway");
 
-await targetFiles.write("cli/test-service/config.yml", {
+await gatewayFiles.write("cli/test-service/config.yml", {
   command: "test-service",
   timeoutMs: 30000,
 });
 
-const target = await targetFiles.read("cli/test-service/config.yml");
+const target = await gatewayFiles.read("cli/test-service/config.yml");
 ```
 
 ## 오류 처리

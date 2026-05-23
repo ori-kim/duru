@@ -7,6 +7,7 @@
     "clip": "./src/main.ts"
   },
   "dependencies": {
+    "@clip/auth": "workspace:*",
     "@clip/cli-gateway": "workspace:*",
     "@clip/env": "workspace:*",
     "@clip/file-store": "workspace:*",

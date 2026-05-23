@@ -1,9 +1,12 @@
+import { createGatewayTargetAuth, oauthAuthorizationHeader, parseOptionalOAuthProviderConfig } from "../auth";
+import type { GatewayOAuthProviderConfig } from "../auth";
 import type { AddInput, GatewayAdapter, GatewayContext, GatewayInvokeContext, GatewayResult } from "../types";
 
 export type McpAdapterConfig = {
   url: string;
   headers?: Record<string, string>;
   protocolVersion?: string;
+  auth?: GatewayOAuthProviderConfig;
 };
 
 type McpRequestArgs = {
@@ -26,13 +29,14 @@ export function mcpAdapter(): GatewayAdapter<McpAdapterConfig> {
     async add(input) {
       return mcpConfigFromAddInput(input);
     },
-    createTarget({ manifest, config, context }) {
+    createTarget({ manifest, config, context, profile }) {
       return {
         name: manifest.name,
         type: manifest.type,
         config,
+        profile: profile?.name,
         async invoke(ctx) {
-          return executeMcpTarget(config, ctx, context);
+          return executeMcpTarget(config, ctx, context, manifest.name, profile?.name);
         },
         async catalog() {
           return [];
@@ -40,6 +44,7 @@ export function mcpAdapter(): GatewayAdapter<McpAdapterConfig> {
         listRow() {
           return { name: manifest.name, type: "mcp", summary: config.url };
         },
+        auth: createGatewayTargetAuth({ manifest, auth: config.auth, context }),
         async check() {
           return { diagnostics: [] };
         },
@@ -75,6 +80,7 @@ function parseMcpConfig(value: unknown): McpAdapterConfig {
     url: value.url,
     ...(value.headers ? { headers: value.headers } : {}),
     ...(value.protocolVersion ? { protocolVersion: value.protocolVersion } : {}),
+    ...(value.auth ? { auth: parseOptionalOAuthProviderConfig(value.auth) } : {}),
   };
 }
 
@@ -82,6 +88,8 @@ async function executeMcpTarget(
   config: McpAdapterConfig,
   ctx: GatewayInvokeContext,
   gatewayContext: GatewayContext,
+  target: string,
+  profile: string | undefined,
 ): Promise<GatewayResult> {
   let request: McpRequestArgs;
   try {
@@ -96,7 +104,7 @@ async function executeMcpTarget(
     method: request.method,
     ...("params" in request ? { params: request.params } : {}),
   });
-  const headers = {
+  const baseHeaders = {
     ...(config.headers ?? {}),
     ...request.headers,
     ...(!hasHeader({ ...(config.headers ?? {}), ...request.headers }, "content-type")
@@ -108,6 +116,18 @@ async function executeMcpTarget(
     ...(config.protocolVersion && !hasHeader({ ...(config.headers ?? {}), ...request.headers }, "MCP-Protocol-Version")
       ? { "MCP-Protocol-Version": config.protocolVersion }
       : {}),
+  };
+  const headers = {
+    ...baseHeaders,
+    ...(await oauthAuthorizationHeader({
+      context: gatewayContext,
+      target,
+      profile,
+      auth: config.auth,
+      headers: baseHeaders,
+      signal: ctx.signal,
+      dryRun: ctx.dryRun,
+    })),
   };
   const init: RequestInit = {
     method: "POST",
