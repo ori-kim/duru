@@ -64,6 +64,35 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
   });
 
   api.route("alias", aliases);
+
+  const profiles = createCli();
+
+  profiles.command("add <target> <name> [...args]", "Add a gateway target profile").action(async (ctx) => {
+    const target = ctx.params.target;
+    const name = ctx.params.name;
+    const args = stringArrayParam(ctx.params.args);
+
+    await options.store.saveProfile(target, { target, name, config: { args } });
+
+    return { target, name };
+  });
+
+  profiles.command("list <target>", "List gateway target profiles").action(async (ctx) => ({
+    profiles: (await options.store.listProfiles(ctx.params.target)).map((profile) => ({
+      target: profile.target,
+      name: profile.name,
+      config: profile.config,
+    })),
+  }));
+
+  profiles.command("remove <target> <name>", "Remove a gateway target profile").action(async (ctx) => {
+    const target = ctx.params.target;
+    const name = ctx.params.name;
+    await options.store.removeProfile(target, name);
+    return { removed: { target, name } };
+  });
+
+  api.route("profile", profiles);
 }
 
 function resolveAddAdapter(

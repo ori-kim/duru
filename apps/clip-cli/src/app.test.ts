@@ -140,6 +140,26 @@ describe("clip-cli demo app", () => {
       expect(config).toContain('operation = "hello"');
     });
   });
+
+  test("persists gateway profiles in CLIP_HOME and dispatches them", async () => {
+    const home = await tempDir("gateway-profile");
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+
+      const addProfile = await createAppCli().run(["profile", "add", "say", "dev", "hello"], { render: false });
+      const listProfiles = await createAppCli().run(["profile", "list", "say"], { render: false });
+      const run = await createAppCli().run(["say@dev", "example"], { render: false });
+      const config = await readFile(join(home, "target", "cli", "say", "profiles", "dev.toml"), "utf8");
+
+      expect(addProfile.result).toEqual({ target: "say", name: "dev" });
+      expect(listProfiles.result).toEqual({ profiles: [{ target: "say", name: "dev", config: { args: ["hello"] } }] });
+      expect(run.result).toBe("hello example");
+      expect(config).toContain('name = "dev"');
+      expect(config).toContain("[config]");
+      expect(config).toContain('args = ["hello"]');
+    });
+  });
 });
 
 async function tempDir(label: string): Promise<string> {
