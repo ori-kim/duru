@@ -16,7 +16,7 @@ describe("@clip/cli-gateway contract", () => {
 
     const result = await cli.run(["missing"], { render: false });
 
-    expect(defaultGatewayAdapters().map((adapter) => adapter.type)).toEqual(["cli", "script", "api", "graphql"]);
+    expect(defaultGatewayAdapters().map((adapter) => adapter.type)).toEqual(["cli", "script", "api", "graphql", "mcp"]);
     expect(result.ok).toBe(false);
   });
 
@@ -178,6 +178,64 @@ describe("@clip/cli-gateway contract", () => {
     expect(result).toEqual({
       ok: true,
       value: { status: 200, statusText: "OK", body: { data: { search: [] } } },
+      exitCode: 0,
+    });
+  });
+
+  test("provides a default mcp adapter that executes JSON-RPC requests", async () => {
+    const store = createMemoryGatewayStore();
+    const calls: unknown[] = [];
+    const adapter = defaultGatewayAdapters().find((item) => item.type === "mcp");
+    const config = adapter?.schema.parse({
+      url: "https://catservice.example.com/mcp",
+      protocolVersion: "2025-06-18",
+    });
+    const target =
+      adapter && config
+        ? adapter.createTarget({
+            manifest: { name: "catservice", type: "mcp", config },
+            config,
+            context: {
+              store,
+              services: {
+                async fetch(input: string | URL | Request, init?: RequestInit) {
+                  calls.push({ input: String(input), init });
+                  return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { tools: [] } }), {
+                    status: 200,
+                    statusText: "OK",
+                    headers: { "content-type": "application/json" },
+                  });
+                },
+              },
+            },
+          })
+        : undefined;
+
+    const result = await target?.invoke({ argv: ["tools/list", "--params", '{"cursor":"first"}'] });
+
+    expect(calls).toEqual([
+      {
+        input: "https://catservice.example.com/mcp",
+        init: {
+          method: "POST",
+          signal: undefined,
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            "MCP-Protocol-Version": "2025-06-18",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/list",
+            params: { cursor: "first" },
+          }),
+        },
+      },
+    ]);
+    expect(result).toEqual({
+      ok: true,
+      value: { status: 200, statusText: "OK", body: { jsonrpc: "2.0", id: 1, result: { tools: [] } } },
       exitCode: 0,
     });
   });
