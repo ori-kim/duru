@@ -477,6 +477,9 @@ describe("@clip/cli-gateway commands", () => {
             },
             async login() {},
           },
+          async check() {
+            return { diagnostics: [] };
+          },
           listRow() {
             return { name: manifest.name, type: manifest.type, summary: config.url };
           },
@@ -502,6 +505,7 @@ describe("@clip/cli-gateway commands", () => {
           refresh: true,
           auth: { status: true, login: true, logout: false },
           complete: false,
+          check: true,
         },
         operations: [{ name: "listItems", description: "List items" }],
       },
@@ -524,7 +528,7 @@ describe("@clip/cli-gateway commands", () => {
         type: "api",
         config: { redacted: true },
         registered: false,
-        capabilities: { invoke: false, catalog: false, refresh: false, complete: false },
+        capabilities: { invoke: false, catalog: false, refresh: false, complete: false, check: false },
         operations: [],
       },
       diagnostics: [
@@ -533,6 +537,103 @@ describe("@clip/cli-gateway commands", () => {
           code: "target.type.unregistered",
           message: 'Unknown gateway adapter type: "api"',
           path: ["type"],
+        },
+      ],
+    });
+  });
+
+  test("registers check command that validates stored gateway targets", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [
+        { name: "notes-api", type: "api", config: { url: "https://api.example.com" } },
+        { name: "search-api", type: "api", config: {} },
+        { name: "test-service", type: "mcp", config: { url: "https://api.example.com" } },
+      ],
+    });
+    const adapter = {
+      type: "api",
+      schema: {
+        parse(value: unknown) {
+          if (!isRecord(value) || typeof value.url !== "string") {
+            throw new Error("url is required");
+          }
+          return value as { url: string };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke() {
+            return { ok: true, value: config };
+          },
+          async check() {
+            return {
+              diagnostics:
+                manifest.name === "notes-api"
+                  ? [{ severity: "info" as const, code: "api.config.ok", message: "API target config is valid" }]
+                  : [],
+            };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ url: string }>;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
+
+    const result = await cli.run(["check"], { render: false });
+
+    expect(result.result).toEqual({
+      ok: false,
+      scope: "gateway",
+      adapters: ["api"],
+      targets: [
+        {
+          name: "notes-api",
+          type: "api",
+          ok: true,
+          diagnostics: [{ severity: "info", code: "api.config.ok", message: "API target config is valid" }],
+        },
+        {
+          name: "search-api",
+          type: "api",
+          ok: false,
+          diagnostics: [
+            {
+              severity: "error",
+              code: "target.config.invalid",
+              message: "url is required",
+              path: ["targets", "search-api", "config"],
+            },
+          ],
+        },
+        {
+          name: "test-service",
+          type: "mcp",
+          ok: false,
+          diagnostics: [
+            {
+              severity: "error",
+              code: "target.type.unregistered",
+              message: 'Unknown gateway adapter type: "mcp"',
+              path: ["targets", "test-service", "type"],
+            },
+          ],
+        },
+      ],
+      diagnostics: [
+        { severity: "info", code: "api.config.ok", message: "API target config is valid" },
+        {
+          severity: "error",
+          code: "target.config.invalid",
+          message: "url is required",
+          path: ["targets", "search-api", "config"],
+        },
+        {
+          severity: "error",
+          code: "target.type.unregistered",
+          message: 'Unknown gateway adapter type: "mcp"',
+          path: ["targets", "test-service", "type"],
         },
       ],
     });
@@ -736,3 +837,7 @@ describe("@clip/cli-gateway runtime", () => {
     expect(result.result).toEqual({ message: 'Unknown gateway profile: "test-service@missing"' });
   });
 });
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

@@ -5,9 +5,13 @@ import type {
   AuthContext,
   CliGatewayOptions,
   GatewayAdapter,
+  GatewayCheckReport,
+  GatewayDiagnostic,
   GatewayInspectReport,
   GatewayTarget,
   GatewayTargetCapabilities,
+  GatewayTargetCheck,
+  GatewayTargetRecord,
   GatewayTool,
 } from "./types";
 
@@ -35,6 +39,10 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
   api.command("list", "List gateway targets").action(async () => ({
     targets: (await options.store.listTargets()).map((target) => ({ name: target.name, type: target.type })),
   }));
+
+  api.command("check", "Check gateway targets").action(async () => {
+    return checkCommand(options, adapters);
+  });
 
   api.command("remove <name>", "Remove a gateway target").action(async (ctx) => {
     const name = ctx.params.name;
@@ -154,6 +162,71 @@ async function refreshCommand(targetName: string, options: CliGatewayOptions, ad
   await options.store.saveTarget({ ...target, config: adapter.schema.parse(refreshed.config) });
 
   return { target: target.name, type: target.type, refreshed: true, updated: true };
+}
+
+async function checkCommand(
+  options: CliGatewayOptions,
+  adapters: readonly GatewayAdapter[],
+): Promise<GatewayCheckReport> {
+  const reports: GatewayTargetCheck[] = [];
+  const diagnostics: GatewayDiagnostic[] = [];
+
+  for (const target of await options.store.listTargets()) {
+    const report = await checkTarget(target, options, adapters);
+    reports.push(report);
+    diagnostics.push(...report.diagnostics);
+  }
+
+  return {
+    ok: diagnostics.every((item) => item.severity !== "error"),
+    scope: "gateway",
+    adapters: adapters.map((adapter) => adapter.type),
+    targets: reports,
+    diagnostics,
+  };
+}
+
+async function checkTarget(
+  target: GatewayTargetRecord,
+  options: CliGatewayOptions,
+  adapters: readonly GatewayAdapter[],
+): Promise<GatewayTargetCheck> {
+  const adapter = adapters.find((item) => item.type === target.type);
+  const diagnostics: GatewayDiagnostic[] = [];
+
+  if (!adapter) {
+    diagnostics.push({
+      severity: "error",
+      code: "target.type.unregistered",
+      message: unknownAdapterMessage(target.type),
+      path: ["targets", target.name, "type"],
+    });
+    return targetCheck(target, diagnostics);
+  }
+
+  try {
+    const config = adapter.schema.parse(target.config);
+    const gatewayTarget = adapter.createTarget({ manifest: target, config, context: options });
+    diagnostics.push(...((await gatewayTarget.check?.({ target: target.name }))?.diagnostics ?? []));
+  } catch (error) {
+    diagnostics.push({
+      severity: "error",
+      code: "target.config.invalid",
+      message: errorMessage(error),
+      path: ["targets", target.name, "config"],
+    });
+  }
+
+  return targetCheck(target, diagnostics);
+}
+
+function targetCheck(target: GatewayTargetRecord, diagnostics: readonly GatewayDiagnostic[]): GatewayTargetCheck {
+  return {
+    name: target.name,
+    type: target.type,
+    ok: diagnostics.every((item) => item.severity !== "error"),
+    diagnostics,
+  };
 }
 
 async function inspectCommand(
@@ -287,11 +360,16 @@ function targetCapabilities(target: GatewayTarget): GatewayTargetCapabilities {
         }
       : {}),
     complete: Boolean(target.complete),
+    check: Boolean(target.check),
   };
 }
 
 function emptyCapabilities(): GatewayTargetCapabilities {
-  return { invoke: false, catalog: false, refresh: false, complete: false };
+  return { invoke: false, catalog: false, refresh: false, complete: false, check: false };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

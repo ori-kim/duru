@@ -105,6 +105,31 @@ export type GatewayTarget<TConfig = unknown> = {
   auth?: GatewayTargetAuth;
   listRow?(): GatewayListRow | Promise<GatewayListRow>;
   complete?(ctx: GatewayCompletionContext): Promise<readonly CompletionItem[]>;
+  check?(ctx: GatewayTargetCheckContext): Promise<GatewayTargetCheckResult | undefined>;
+};
+
+export type GatewayCheckReport = {
+  ok: boolean;
+  scope: "gateway";
+  adapters: readonly string[];
+  targets: readonly GatewayTargetCheck[];
+  diagnostics: readonly GatewayDiagnostic[];
+};
+
+export type GatewayTargetCheck = {
+  name: string;
+  type: string;
+  ok: boolean;
+  diagnostics: readonly GatewayDiagnostic[];
+};
+
+export type GatewayTargetCheckContext = {
+  target: string;
+  signal?: AbortSignal;
+};
+
+export type GatewayTargetCheckResult = {
+  diagnostics?: readonly GatewayDiagnostic[];
 };
 
 export type GatewayInspectReport = {
@@ -134,6 +159,7 @@ export type GatewayTargetCapabilities = {
     logout: boolean;
   };
   complete: boolean;
+  check: boolean;
 };
 
 export type GatewayDiagnostic = {
