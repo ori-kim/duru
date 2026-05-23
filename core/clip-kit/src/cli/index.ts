@@ -145,6 +145,8 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
 
   function pluginApi(): CliPluginApi {
     return {
+      command: cli.command as CliPluginApi["command"],
+      route: cli.route as CliPluginApi["route"],
       option(definition: OptionDefinition) {
         validateOptionDefinition(definition);
         globalOptions.push(definition);

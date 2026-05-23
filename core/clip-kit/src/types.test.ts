@@ -493,6 +493,29 @@ describe("public type inference", () => {
       });
   });
 
+  test("allows plugins to contribute commands and explicit routes", () => {
+    const ext = createCli().option("--url <url>");
+    ext.command("install <name>").action((ctx) => {
+      const typedName: string = ctx.params.name;
+      const typedUrl: string | undefined = ctx.options.url;
+      return { typedName, typedUrl };
+    });
+
+    createPlugin((api) => {
+      api.command("inspect <name>").action((ctx) => {
+        const typedName: string = ctx.params.name;
+        return { typedName };
+      });
+
+      api.route("ext", ext);
+
+      void (() => {
+        // @ts-expect-error route requires an explicit literal path.
+        api.route(ext);
+      });
+    });
+  });
+
   test("infers action return values in command render handlers", () => {
     createCli()
       .command("build <entry>")
