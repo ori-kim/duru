@@ -1,13 +1,7 @@
 import { createCli } from "@clip/kit";
 import type { CliPluginApi } from "@clip/kit";
 import { unknownAdapterMessage, unknownProfileMessage, unknownTargetMessage } from "./runtime";
-import type {
-  AuthContext,
-  CliGatewayOptions,
-  GatewayAdapter,
-  GatewayProfileRecord,
-  GatewayTargetRecord,
-} from "./types";
+import type { AuthContext, CliGatewayOptions, GatewayAdapter } from "./types";
 
 export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOptions): void {
   const adapters = options.adapters ?? [];
@@ -41,6 +35,10 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
 
     await options.store.removeTarget(name);
     return { removed: name };
+  });
+
+  api.command("refresh <target>", "Refresh a gateway target").action(async (ctx) => {
+    return refreshCommand(ctx.params.target, options, adapters);
   });
 
   api.command("login <target>", "Login to a gateway target").action(async (ctx) => {
@@ -125,6 +123,27 @@ function addAdapterMessage(type: string | undefined): string {
   return type ? unknownAdapterMessage(type) : "Gateway adapter type is required";
 }
 
+async function refreshCommand(targetName: string, options: CliGatewayOptions, adapters: readonly GatewayAdapter[]) {
+  const target = await options.store.getTarget(targetName);
+  if (!target) return exit(2, { message: unknownTargetMessage(targetName) });
+
+  const adapter = adapters.find((item) => item.type === target.type);
+  if (!adapter) return exit(2, { message: unknownAdapterMessage(target.type) });
+
+  const config = adapter.schema.parse(target.config);
+  const gatewayTarget = adapter.createTarget({ manifest: target, config, context: options });
+  if (!gatewayTarget.refresh) return exit(2, { message: unsupportedAdapterActionMessage(target.type, "refresh") });
+
+  const refreshed = await gatewayTarget.refresh({ target: target.name });
+  if (refreshed?.config === undefined) {
+    return { target: target.name, type: target.type, refreshed: true, updated: false };
+  }
+
+  await options.store.saveTarget({ ...target, config: adapter.schema.parse(refreshed.config) });
+
+  return { target: target.name, type: target.type, refreshed: true, updated: true };
+}
+
 async function authCommand(
   action: "login" | "logout",
   targetValue: string,
@@ -147,7 +166,7 @@ async function authCommand(
   const config = adapter.schema.parse(manifest.config);
   const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
   const authHandler = gatewayTarget.auth?.[action];
-  if (!authHandler) return exit(2, { message: unsupportedAuthMessage(target.type, action) });
+  if (!authHandler) return exit(2, { message: unsupportedAdapterActionMessage(target.type, action) });
 
   await authHandler(authContext(target.name, targetRef.profile));
 
@@ -172,7 +191,7 @@ function mergeConfig(targetConfig: unknown, profileConfig: unknown): unknown {
   return { ...targetConfig, ...profileConfig };
 }
 
-function unsupportedAuthMessage(type: string, action: "login" | "logout"): string {
+function unsupportedAdapterActionMessage(type: string, action: "login" | "logout" | "refresh"): string {
   return `Gateway adapter "${type}" does not support ${action}`;
 }
 

@@ -146,6 +146,20 @@ describe("clip-cli demo app", () => {
     });
   });
 
+  test("reports unsupported gateway refresh as an error", async () => {
+    const home = await tempDir("gateway-refresh-unsupported");
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+
+      const result = await createAppCli().run(["refresh", "say"], { render: false });
+
+      expect(result.ok).toBe(false);
+      expect(result.exitCode).toBe(2);
+      expect(result.result).toEqual({ message: 'Gateway adapter "cli" does not support refresh' });
+    });
+  });
+
   test("persists gateway aliases in CLIP_HOME and dispatches them", async () => {
     const home = await tempDir("gateway-alias");
 

@@ -379,6 +379,64 @@ describe("@clip/cli-gateway commands", () => {
     expect(result.exitCode).toBe(2);
     expect(result.result).toEqual({ message: 'Gateway adapter "cli" does not support login' });
   });
+
+  test("registers refresh command that persists adapter-updated config", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [
+        {
+          name: "notes-api",
+          type: "api",
+          config: { url: "https://api.example.com", version: 1 },
+          timeoutMs: 30000,
+        },
+      ],
+    });
+    const adapter = {
+      type: "api",
+      schema: {
+        parse(value: unknown) {
+          return value as { url: string; version: number };
+        },
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke() {
+            return { ok: true };
+          },
+          async refresh(ctx) {
+            return { config: { ...config, refreshedTarget: ctx.target, version: config.version + 1 } };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ url: string; version: number }>;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
+
+    const result = await cli.run(["refresh", "notes-api"], { render: false });
+
+    expect(result.result).toEqual({ target: "notes-api", type: "api", refreshed: true, updated: true });
+    expect(await store.getTarget("notes-api")).toEqual({
+      name: "notes-api",
+      type: "api",
+      config: { url: "https://api.example.com", refreshedTarget: "notes-api", version: 2 },
+      timeoutMs: 30000,
+    });
+  });
+
+  test("reports stable refresh command errors for unsupported adapters", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "test-service", type: "cli", config: { command: "test-service" } }],
+    });
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: defaultGatewayAdapters() }));
+
+    const result = await cli.run(["refresh", "test-service"], { render: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(2);
+    expect(result.result).toEqual({ message: 'Gateway adapter "cli" does not support refresh' });
+  });
 });
 
 describe("@clip/cli-gateway runtime", () => {
