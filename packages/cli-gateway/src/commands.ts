@@ -1,3 +1,4 @@
+import { createCli } from "@clip/kit";
 import type { CliPluginApi } from "@clip/kit";
 import { unknownAdapterMessage } from "./runtime";
 import type { CliGatewayOptions, GatewayAdapter } from "./types";
@@ -32,6 +33,37 @@ export function installGatewayCommands(api: CliPluginApi, options: CliGatewayOpt
     await options.store.removeTarget(name);
     return { removed: name };
   });
+
+  const aliases = createCli();
+
+  aliases.command("add <target> <name> <operation> [...args]", "Add a gateway target alias").action(async (ctx) => {
+    const target = ctx.params.target;
+    const name = ctx.params.name;
+    const operation = ctx.params.operation;
+    const args = stringArrayParam(ctx.params.args);
+
+    await options.store.saveAlias(target, { target, name, operation, args });
+
+    return { target, name, operation };
+  });
+
+  aliases.command("list <target>", "List gateway target aliases").action(async (ctx) => ({
+    aliases: (await options.store.listAliases(ctx.params.target)).map((alias) => ({
+      target: alias.target,
+      name: alias.name,
+      operation: alias.operation,
+      args: alias.args ?? [],
+    })),
+  }));
+
+  aliases.command("remove <target> <name>", "Remove a gateway target alias").action(async (ctx) => {
+    const target = ctx.params.target;
+    const name = ctx.params.name;
+    await options.store.removeAlias(target, name);
+    return { removed: { target, name } };
+  });
+
+  api.route("alias", aliases);
 }
 
 function resolveAddAdapter(
