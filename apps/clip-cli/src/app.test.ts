@@ -122,6 +122,21 @@ describe("clip-cli demo app", () => {
     });
   });
 
+  test("persists script gateway targets in CLIP_HOME and dispatches them", async () => {
+    const home = await tempDir("gateway-script");
+
+    await withClipHome(home, async () => {
+      const add = await createAppCli().run(["add", "say", "echo", "hello", "--type", "script"], { render: false });
+      const run = await createAppCli().run(["say", "example"], { render: false });
+      const config = await readFile(join(home, "target", "script", "say", "config.toml"), "utf8");
+
+      expect(add.result).toEqual({ name: "say", type: "script" });
+      expect(run.result).toBe("hello example");
+      expect(config).toContain('command = "echo"');
+      expect(config).toContain("[config]");
+    });
+  });
+
   test("reports missing gateway target removal as an error", async () => {
     const home = await tempDir("gateway-remove-missing");
 
@@ -195,7 +210,7 @@ describe("clip-cli demo app", () => {
       expect(result.result).toEqual({
         ok: true,
         scope: "gateway",
-        adapters: ["cli"],
+        adapters: ["cli", "script"],
         targets: [{ name: "say", type: "cli", ok: true, diagnostics: [] }],
         diagnostics: [],
       });

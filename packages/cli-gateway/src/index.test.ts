@@ -16,7 +16,7 @@ describe("@clip/cli-gateway contract", () => {
 
     const result = await cli.run(["missing"], { render: false });
 
-    expect(defaultGatewayAdapters().map((adapter) => adapter.type)).toEqual(["cli"]);
+    expect(defaultGatewayAdapters().map((adapter) => adapter.type)).toEqual(["cli", "script"]);
     expect(result.ok).toBe(false);
   });
 
@@ -34,6 +34,24 @@ describe("@clip/cli-gateway contract", () => {
         : undefined;
 
     const result = await target?.invoke({ argv: ["hello", "example"] });
+
+    expect(result).toEqual({ ok: true, value: "hello example", exitCode: 0 });
+  });
+
+  test("provides a default script adapter with cwd and env aware config", async () => {
+    const store = createMemoryGatewayStore();
+    const adapter = defaultGatewayAdapters().find((item) => item.type === "script");
+    const config = adapter?.schema.parse({ command: "echo", args: ["hello"] });
+    const target =
+      adapter && config
+        ? adapter.createTarget({
+            manifest: { name: "say", type: "script", config },
+            config,
+            context: { store },
+          })
+        : undefined;
+
+    const result = await target?.invoke({ argv: ["example"] });
 
     expect(result).toEqual({ ok: true, value: "hello example", exitCode: 0 });
   });

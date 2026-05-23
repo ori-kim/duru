@@ -1,7 +1,9 @@
 export { cliAdapter } from "./adapters/cli";
+export { scriptAdapter } from "./adapters/script";
 export { createMemoryGatewayStore } from "./memory-store";
 export { cliGateway, defaultGatewayAdapters } from "./plugin";
 export type { CliAdapterConfig } from "./adapters/cli";
+export type { ScriptAdapterConfig } from "./adapters/script";
 export type {
   AclTree,
   AddInput,
