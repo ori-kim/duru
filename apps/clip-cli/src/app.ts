@@ -10,7 +10,7 @@ import { createAppGatewayStore } from "./gateway-store.ts";
 
 export function createAppCli() {
   const fileHome = createClipFileHome({ env: process.env });
-  const gatewayStore = createAppGatewayStore({ files: fileHome.store("target") });
+  const gatewayStore = createAppGatewayStore({ files: fileHome.store("target"), shims: fileHome.store("bin") });
   const cli = createCli({
     name: "clip",
   })

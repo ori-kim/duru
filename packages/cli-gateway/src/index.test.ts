@@ -548,6 +548,24 @@ describe("@clip/cli-gateway commands", () => {
     expect(listAfter.result).toEqual({ targets: [{ name: "notes-api", type: "openapi" }] });
   });
 
+  test("registers bind commands and dispatches bindings through the gateway runtime", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "say", type: "cli", config: { command: "echo" } }],
+    });
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: defaultGatewayAdapters() }));
+
+    const bind = await cli.run(["bind", "hi", "say", "hello"], { render: false });
+    const list = await cli.run(["binds"], { render: false });
+    const run = await cli.run(["hi", "example"], { render: false });
+    const unbind = await cli.run(["unbind", "hi"], { render: false });
+
+    expect(bind.result).toEqual({ name: "hi", target: "say", args: ["hello"] });
+    expect(list.result).toEqual({ bindings: [{ name: "hi", target: "say", args: ["hello"] }] });
+    expect(run.result).toBe("hello example");
+    expect(unbind.result).toEqual({ removed: "hi" });
+    expect(await store.listBindings()).toEqual([]);
+  });
+
   test("reports stable remove errors when a target does not exist", async () => {
     const store = createMemoryGatewayStore();
     const cli = createCli({ name: "clip" }).use(cliGateway({ store }));

@@ -1,21 +1,31 @@
-import type { GatewayAliasRecord, GatewayProfileRecord, GatewayStore, GatewayTargetRecord } from "@clip/cli-gateway";
+import { chmod } from "node:fs/promises";
+import type {
+  GatewayAliasRecord,
+  GatewayBindingRecord,
+  GatewayProfileRecord,
+  GatewayStore,
+  GatewayTargetRecord,
+} from "@clip/cli-gateway";
 import type { FileStore } from "@clip/file-store";
 
 export type AppGatewayStoreFormat = "json" | "yaml" | "toml";
 
 export type CreateAppGatewayStoreOptions = {
   files: FileStore;
+  shims?: FileStore;
   format?: AppGatewayStoreFormat;
 };
 
 type TargetFileRecord = Omit<GatewayTargetRecord, "source">;
 type ProfileFileRecord = Omit<GatewayProfileRecord, "source">;
+type BindingFileRecord = Omit<GatewayBindingRecord, "source">;
 type AliasFileRecord = Omit<GatewayAliasRecord, "source">;
 
 const readableExtensions = ["toml", "yml", "yaml", "json"] as const;
 
 export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): GatewayStore {
   const files = options.files;
+  const shims = options.shims;
   const format = options.format ?? "toml";
   const extension = formatExtension(format);
   const readExtensions = uniqueExtensions([extension, ...readableExtensions]);
@@ -56,6 +66,9 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
     for (const typeEntry of await files.list()) {
       if (!typeEntry.isDirectory) continue;
       await files.remove(`${typeEntry.name}/${targetName}`, { recursive: true });
+    }
+    for (const binding of await listBindings()) {
+      if (binding.target === targetName) await removeBinding(binding.name);
     }
   }
 
@@ -105,6 +118,36 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
     }
   }
 
+  async function listBindings(): Promise<readonly GatewayBindingRecord[]> {
+    const records: GatewayBindingRecord[] = [];
+    for (const entry of await files.list(bindingDir())) {
+      const entryExtension = structuredExtensionFromName(entry.name);
+      if (!entry.isFile || !entryExtension) continue;
+      const name = entry.name.slice(0, -entryExtension.length - 1);
+      const binding = await readBindingPathAt(name, entryExtension);
+      if (binding) records.push(binding);
+    }
+    return records.sort(compareNamedRecords);
+  }
+
+  async function getBinding(name: string): Promise<GatewayBindingRecord | undefined> {
+    return readBindingAt(assertStoreSegment(name, "binding name"));
+  }
+
+  async function saveBinding(record: GatewayBindingRecord): Promise<void> {
+    const name = assertStoreSegment(record.name, "binding name");
+    await files.write(bindingPath(name, extension), bindingPayload(record));
+    await writeShim(record);
+  }
+
+  async function removeBinding(name: string): Promise<void> {
+    const bindingName = assertStoreSegment(name, "binding name");
+    for (const readExtension of readExtensions) {
+      await files.remove(bindingPath(bindingName, readExtension));
+    }
+    await shims?.remove(bindingName);
+  }
+
   async function listAliases(target: string): Promise<readonly GatewayAliasRecord[]> {
     const targetRecord = await getTarget(target);
     if (!targetRecord) return [];
@@ -135,6 +178,13 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
     }
   }
 
+  async function writeShim(record: GatewayBindingRecord): Promise<void> {
+    if (!shims) return;
+    const name = assertStoreSegment(record.name, "binding name");
+    await shims.writeText(name, `#!/usr/bin/env sh\nexec clip ${shellQuote(name)} "$@"\n`);
+    await chmod(shims.resolve(name), 0o755);
+  }
+
   async function readTargetAt(type: string, name: string): Promise<GatewayTargetRecord | undefined> {
     for (const readExtension of readExtensions) {
       const path = targetConfigPath(type, name, readExtension);
@@ -150,6 +200,20 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
       if (record) return record;
     }
     return undefined;
+  }
+
+  async function readBindingAt(name: string): Promise<GatewayBindingRecord | undefined> {
+    for (const readExtension of readExtensions) {
+      const record = await readBindingPathAt(name, readExtension);
+      if (record) return record;
+    }
+    return undefined;
+  }
+
+  async function readBindingPathAt(name: string, readExtension: string): Promise<GatewayBindingRecord | undefined> {
+    const path = bindingPath(name, readExtension);
+    const record = await files.read<BindingFileRecord>(path);
+    return record ? { ...record, source: source(path, readExtension) } : undefined;
   }
 
   async function readProfilePathAt(
@@ -201,6 +265,10 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
     getProfile,
     saveProfile,
     removeProfile,
+    listBindings,
+    getBinding,
+    saveBinding,
+    removeBinding,
     listAliases,
     saveAlias,
     removeAlias,
@@ -217,6 +285,14 @@ function profileDir(type: string, target: string): string {
 
 function profilePath(type: string, target: string, name: string, extension: string): string {
   return `${profileDir(type, target)}/${assertStoreSegment(name, "profile name")}.${extension}`;
+}
+
+function bindingDir(): string {
+  return "_bindings";
+}
+
+function bindingPath(name: string, extension: string): string {
+  return `${bindingDir()}/${assertStoreSegment(name, "binding name")}.${extension}`;
 }
 
 function aliasDir(type: string, target: string): string {
@@ -237,6 +313,11 @@ function profilePayload(target: string, record: GatewayProfileRecord): ProfileFi
   return { ...payload, target };
 }
 
+function bindingPayload(record: GatewayBindingRecord): BindingFileRecord {
+  const { source: _source, ...payload } = record;
+  return withoutUndefined(payload);
+}
+
 function aliasPayload(target: string, record: GatewayAliasRecord): AliasFileRecord {
   const { source: _source, ...payload } = record;
   return { ...payload, target };
@@ -244,6 +325,10 @@ function aliasPayload(target: string, record: GatewayAliasRecord): AliasFileReco
 
 function withoutUndefined<T extends object>(record: T): T {
   return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined)) as T;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 function targetFromFile(

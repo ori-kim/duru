@@ -326,6 +326,28 @@ describe("clip-cli demo app", () => {
     });
   });
 
+  test("persists gateway bindings in CLIP_HOME and writes shims", async () => {
+    const home = await tempDir("gateway-bind");
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+
+      const bind = await createAppCli().run(["bind", "hi", "say", "hello"], { render: false });
+      const list = await createAppCli().run(["binds"], { render: false });
+      const run = await createAppCli().run(["hi", "example"], { render: false });
+      const config = await readFile(join(home, "target", "_bindings", "hi.toml"), "utf8");
+      const shim = await readFile(join(home, "bin", "hi"), "utf8");
+
+      expect(bind.result).toEqual({ name: "hi", target: "say", args: ["hello"] });
+      expect(list.result).toEqual({ bindings: [{ name: "hi", target: "say", args: ["hello"] }] });
+      expect(run.result).toBe("hello example");
+      expect(config).toContain('name = "hi"');
+      expect(config).toContain('target = "say"');
+      expect(config).toContain('args = ["hello"]');
+      expect(shim).toContain("exec clip 'hi'");
+    });
+  });
+
   test("persists gateway profiles in CLIP_HOME and dispatches them", async () => {
     const home = await tempDir("gateway-profile");
 
