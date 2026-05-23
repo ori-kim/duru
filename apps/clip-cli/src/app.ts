@@ -1,5 +1,5 @@
-import { adaptResult, context, createCli, formatHelp, help, isHelpDocument, isValidationError, meta } from "@clip/kit";
 import { input } from "@clip/input-validation";
+import { adaptResult, context, createCli, formatHelp, help, isHelpDocument, isValidationError, meta } from "@clip/kit";
 import { jsonRendererPlugin } from "@clip/renderer-json";
 import { textRendererPlugin } from "@clip/renderer-text";
 import { z } from "zod";
