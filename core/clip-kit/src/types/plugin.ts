@@ -1,3 +1,4 @@
+import type { Cli } from "./cli.ts";
 import type { EmptyObject } from "./common.ts";
 import type { Context } from "./context.ts";
 import type { CliEventHandler } from "./event.ts";
@@ -18,6 +19,8 @@ export type CliPlugin<TOptions extends Options = EmptyObject, TValues extends ob
 };
 
 export type CliPluginApi = {
+  command: Cli["command"];
+  route: Cli["route"];
   option(definition: OptionDefinition): void;
   options(): readonly OptionDefinition[];
   optionFallback(provider: OptionFallbackProvider): void;

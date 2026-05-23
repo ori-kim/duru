@@ -620,6 +620,39 @@ describe("createCli", () => {
     expect(result.result).toBe("synced");
   });
 
+  test("allows plugins to register commands through the plugin api", async () => {
+    const plugin = createPlugin((api) => {
+      api.command("inspect <name>").action((ctx) => ({ inspected: ctx.params.name }));
+    });
+    const cli = createCli().use(plugin);
+
+    const result = await cli.run(["inspect", "test-service"], { render: false });
+
+    expect(result.result).toEqual({ inspected: "test-service" });
+  });
+
+  test("allows externally composed child clis to be routed from plugins", async () => {
+    const ext = createCli();
+    ext.command("install <name>").action((ctx) => ({ installed: ctx.params.name }));
+    ext.command("list").action(() => ({ items: ["test-service"] }));
+
+    const plugin = createPlugin((api) => {
+      api.route("ext", ext);
+    });
+    const cli = createCli({ name: "clip" }).use(plugin).use(help());
+
+    const install = await cli.run(["ext", "install", "test-service"], { render: false });
+    const list = await cli.run(["ext", "list"], { render: false });
+    const helpResult = await cli.run(["--help"], { render: false });
+
+    expect(install.result).toEqual({ installed: "test-service" });
+    expect(list.result).toEqual({ items: ["test-service"] });
+    expect(helpResult.result).toMatchObject({
+      name: "clip",
+      routes: [{ pattern: "ext install <name>" }, { pattern: "ext list" }],
+    });
+  });
+
   test("combines usage output from routed child apps", async () => {
     const registry = createCli();
     registry.command("add <name>", "Add registry").action(() => undefined);
