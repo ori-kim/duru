@@ -182,3 +182,75 @@ describe("@clip/cli-gateway contract", () => {
     expect(calls).toEqual(["login:notes-api:dev", "logout:notes-api:default"]);
   });
 });
+
+describe("@clip/cli-gateway commands", () => {
+  test("registers add command that saves adapter-created target records", async () => {
+    const store = createMemoryGatewayStore();
+    const adapter = {
+      type: "cli",
+      schema: {
+        parse(value: unknown) {
+          return value as { command: string; args: readonly string[] };
+        },
+      },
+      async add(input) {
+        return { command: input.argv[0] ?? input.name, args: input.argv.slice(1) };
+      },
+      createTarget({ manifest, config }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          async invoke(ctx) {
+            return { ok: true, value: { command: config.command, argv: ctx.argv } };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ command: string; args: readonly string[] }>;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
+
+    const result = await cli.run(["add", "test-service", "run", "cats", "--type", "cli"], { render: false });
+
+    expect(result.ok).toBe(true);
+    expect(result.result).toEqual({ name: "test-service", type: "cli" });
+    expect(await store.getTarget("test-service")).toEqual({
+      name: "test-service",
+      type: "cli",
+      config: { command: "run", args: ["cats"] },
+    });
+  });
+
+  test("registers list and remove commands backed by the injected store", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [
+        { name: "test-service", type: "cli", config: { command: "test-service" } },
+        { name: "notes-api", type: "openapi", config: { url: "https://api.example.com" } },
+      ],
+    });
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store }));
+
+    const listBefore = await cli.run(["list"], { render: false });
+    const remove = await cli.run(["remove", "test-service"], { render: false });
+    const listAfter = await cli.run(["list"], { render: false });
+
+    expect(listBefore.result).toEqual({
+      targets: [
+        { name: "notes-api", type: "openapi" },
+        { name: "test-service", type: "cli" },
+      ],
+    });
+    expect(remove.result).toEqual({ removed: "test-service" });
+    expect(listAfter.result).toEqual({ targets: [{ name: "notes-api", type: "openapi" }] });
+  });
+
+  test("reports stable add errors when no adapter can handle a target type", async () => {
+    const store = createMemoryGatewayStore();
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store }));
+
+    const result = await cli.run(["add", "test-service", "--type", "missing"], { render: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(2);
+    expect(result.result).toEqual({ message: 'Unknown gateway adapter type: "missing"' });
+  });
+});
