@@ -480,6 +480,7 @@ describe("@clip/cli-gateway commands", () => {
 
     await cli.run(["add", "say", "echo"], { render: false });
     await cli.run(["add", "notes-api", "https://api.example.com"], { render: false });
+    await cli.run(["add", "openapi-spec", "https://api.example.com/openapi.json"], { render: false });
     await cli.run(["add", "search-api", "https://api.example.com/graphql"], { render: false });
     await cli.run(["add", "catservice", "https://catservice.example.com/mcp"], { render: false });
     await cli.run(["add", "grpc-api", "localhost:50051"], { render: false });
@@ -488,6 +489,7 @@ describe("@clip/cli-gateway commands", () => {
       { name: "catservice", type: "mcp", config: { url: "https://catservice.example.com/mcp" } },
       { name: "grpc-api", type: "grpc", config: { address: "localhost:50051" } },
       { name: "notes-api", type: "api", config: { baseUrl: "https://api.example.com" } },
+      { name: "openapi-spec", type: "api", config: { openapiUrl: "https://api.example.com/openapi.json" } },
       { name: "say", type: "cli", config: { command: "echo", args: [] } },
       { name: "search-api", type: "graphql", config: { endpoint: "https://api.example.com/graphql" } },
     ]);
