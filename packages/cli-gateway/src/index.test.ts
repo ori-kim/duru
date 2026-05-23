@@ -437,6 +437,106 @@ describe("@clip/cli-gateway commands", () => {
     expect(result.exitCode).toBe(2);
     expect(result.result).toEqual({ message: 'Gateway adapter "cli" does not support refresh' });
   });
+
+  test("registers inspect command that reports gateway target capabilities", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "notes-api", type: "api", config: { url: "https://api.example.com" } }],
+      profiles: [
+        {
+          target: "notes-api",
+          name: "dev",
+          config: { headers: { "X-Custom-Header": "custom-from-config" } },
+        },
+      ],
+    });
+    const adapter = {
+      type: "api",
+      schema: {
+        parse(value: unknown) {
+          return value as { url: string; headers?: Record<string, string> };
+        },
+      },
+      createTarget({ manifest, config, profile }) {
+        return {
+          name: manifest.name,
+          type: manifest.type,
+          config,
+          profile: profile?.name,
+          async invoke() {
+            return { ok: true, value: config };
+          },
+          async catalog() {
+            return [{ name: "listItems", description: "List items" }];
+          },
+          async refresh() {
+            return { config };
+          },
+          auth: {
+            async status() {
+              return { authenticated: true };
+            },
+            async login() {},
+          },
+          listRow() {
+            return { name: manifest.name, type: manifest.type, summary: config.url };
+          },
+        };
+      },
+    } satisfies GatewayAdapter<{ url: string; headers?: Record<string, string> }>;
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [adapter] }));
+
+    const result = await cli.run(["inspect", "notes-api@dev"], { render: false });
+
+    expect(result.result).toEqual({
+      ok: true,
+      target: {
+        name: "notes-api",
+        type: "api",
+        profile: "dev",
+        config: { redacted: true },
+        registered: true,
+        summary: "https://api.example.com",
+        capabilities: {
+          invoke: true,
+          catalog: true,
+          refresh: true,
+          auth: { status: true, login: true, logout: false },
+          complete: false,
+        },
+        operations: [{ name: "listItems", description: "List items" }],
+      },
+      diagnostics: [],
+    });
+  });
+
+  test("reports unregistered gateway target types during inspect", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [{ name: "notes-api", type: "api", config: { url: "https://api.example.com" } }],
+    });
+    const cli = createCli({ name: "clip" }).use(cliGateway({ store, adapters: [] }));
+
+    const result = await cli.run(["inspect", "notes-api"], { render: false });
+
+    expect(result.result).toEqual({
+      ok: false,
+      target: {
+        name: "notes-api",
+        type: "api",
+        config: { redacted: true },
+        registered: false,
+        capabilities: { invoke: false, catalog: false, refresh: false, complete: false },
+        operations: [],
+      },
+      diagnostics: [
+        {
+          severity: "error",
+          code: "target.type.unregistered",
+          message: 'Unknown gateway adapter type: "api"',
+          path: ["type"],
+        },
+      ],
+    });
+  });
 });
 
 describe("@clip/cli-gateway runtime", () => {

@@ -160,6 +160,30 @@ describe("clip-cli demo app", () => {
     });
   });
 
+  test("inspects persisted gateway targets", async () => {
+    const home = await tempDir("gateway-inspect");
+
+    await withClipHome(home, async () => {
+      await createAppCli().run(["add", "say", "echo", "--type", "cli"], { render: false });
+
+      const result = await createAppCli().run(["inspect", "say"], { render: false });
+
+      expect(result.result).toEqual({
+        ok: true,
+        target: {
+          name: "say",
+          type: "cli",
+          config: { redacted: true },
+          registered: true,
+          summary: "echo",
+          capabilities: { invoke: true, catalog: false, refresh: false, complete: false },
+          operations: [],
+        },
+        diagnostics: [],
+      });
+    });
+  });
+
   test("persists gateway aliases in CLIP_HOME and dispatches them", async () => {
     const home = await tempDir("gateway-alias");
 
