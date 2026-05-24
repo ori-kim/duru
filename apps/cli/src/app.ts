@@ -1,4 +1,4 @@
-import { adaptResult, createCli, formatHelp, help, isHelpDocument, isValidationError, withRenderHint } from "@duru/cli-kit";
+import { adaptResult, createCli, formatHelp, help, isHelpDocument, isValidationError } from "@duru/cli-kit";
 import { env } from "@duru/env";
 import { createDuruFileHome } from "@duru/file-store";
 import { pluginManageCli } from "@duru/plugin-manage";
@@ -8,7 +8,7 @@ import { virtualPlugins } from "@duru/virtual-plugins";
 import { createAppCompletionPlugin } from "./completion/index.ts";
 import { createAppGateway } from "./gateway/index.ts";
 import { updateCli } from "./routes/update/index.ts";
-import { DURU_VERSION } from "./version.ts";
+import { version } from "./version.ts";
 
 export function createAppCli() {
   return {
@@ -29,12 +29,7 @@ async function createAppCliRuntime(argv?: string[]) {
     .use(adaptResult({ when: (ctx) => !ctx.options.json, match: isHelpDocument, adapt: formatHelp }))
     .use(textRendererPlugin())
     .use(jsonRendererPlugin())
-    .option("-v, --version", "Show duru version")
-    .use(async (ctx, next) => {
-      if (!(ctx.options as { version?: boolean }).version) return next();
-      if ((ctx.options as { json?: boolean }).json) return ctx.exit(0, { version: DURU_VERSION });
-      return ctx.exit(0, withRenderHint({ text: `duru ${DURU_VERSION}` }, "text"));
-    })
+    .use(version())
     .use(env())
     .use(gateway.plugin)
     .subCommand(gateway.routeName, gateway.cli)
