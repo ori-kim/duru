@@ -7,6 +7,7 @@ import { textRendererPlugin } from "@duru/renderer-text";
 import { virtualPlugins } from "@duru/virtual-plugins";
 import { createAppCompletionPlugin } from "./completion/index.ts";
 import { createAppGateway } from "./gateway/index.ts";
+import { outputFilter } from "./output-filter.ts";
 import { updateCli } from "./routes/update/index.ts";
 import { version } from "./version.ts";
 
@@ -29,6 +30,7 @@ async function createAppCliRuntime(argv?: string[]) {
     .use(adaptResult({ when: (ctx) => !ctx.options.json, match: isHelpDocument, adapt: formatHelp }))
     .use(textRendererPlugin())
     .use(jsonRendererPlugin())
+    .use(outputFilter())
     .use(version())
     .use(env())
     .use(gateway.plugin)
