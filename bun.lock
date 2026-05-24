@@ -8,20 +8,6 @@
         "@types/bun": "latest",
       },
     },
-    "apps/clack-demo": {
-      "name": "clack-demo",
-      "version": "0.0.0",
-      "bin": {
-        "clack-demo": "./src/main.ts",
-      },
-      "dependencies": {
-        "@duru/clack": "workspace:*",
-        "@duru/cli-kit": "workspace:*",
-        "@duru/renderer-json": "workspace:*",
-        "@duru/renderer-text": "workspace:*",
-        "zod": "^4.0.0",
-      },
-    },
     "apps/cli": {
       "name": "duru",
       "version": "0.2619.129",
@@ -337,8 +323,6 @@
     "chownr": ["chownr@1.1.4", "", {}, "sha512-jJ0bqzaylmJtVnNgzTeSOs8DPavpbYgEr/b0YL8/2GO3xJEhInFmhKMUnEJQjZumK7KXGFhUy89PrsJWlakBVg=="],
 
     "ci-info": ["ci-info@4.4.0", "", {}, "sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg=="],
-
-    "clack-demo": ["clack-demo@workspace:apps/clack-demo"],
 
     "cli-cursor": ["cli-cursor@5.0.0", "", { "dependencies": { "restore-cursor": "^5.0.0" } }, "sha512-aCj4O5wKyszjMmDT4tZj93kxyydN/K5zPWSCe6/0AV/AA1pqe5ZBIw0a2ZfPQV7lL5/yb5HsUreJ6UFAF1tEQw=="],
 
