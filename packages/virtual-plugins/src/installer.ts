@@ -38,7 +38,10 @@ function shouldInit(plugin: ResolvedPlugin, argv: string[] | undefined): boolean
   if (!argv) return true;
   if (plugin.contributes.eager) return true;
   const verb = extractVerb(argv);
-  if (!verb) return false;
+  // verb 없이 --help/-h 플래그만 있거나 argv가 비어 있으면 전체 도움말용으로 모두 로드
+  if (!verb) {
+    return argv.length === 0 || argv.includes("--help") || argv.includes("-h");
+  }
   if (METADATA_VERBS.has(verb)) return true;
   return (plugin.contributes.commands ?? []).includes(verb);
 }
