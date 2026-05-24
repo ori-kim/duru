@@ -21,10 +21,11 @@ export type CliPlugin<TOptions extends Options = EmptyObject, TValues extends ob
   readonly [pluginTag]: true;
   readonly [pluginOptionsTag]?: (options: TOptions) => TOptions;
   readonly [pluginContextTag]?: (values: TValues) => TValues;
-  install(api: CliPluginApi): void;
+  install(api: CliPluginApi): void | Promise<void>;
 };
 
 export type CliPluginApi = {
+  cli: Cli;
   command: Cli["command"];
   subCommand: Cli["subCommand"];
   option(definition: OptionDefinition): void;

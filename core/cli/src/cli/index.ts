@@ -73,6 +73,7 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
 ): Cli<TGlobalOptions, TValues> {
   const globalOptions: OptionDefinition[] = [];
   const middleware: Middleware[] = [];
+  const pendingInits: Promise<void>[] = [];
   const renderers = new Map<string, Renderer>();
   const rendererSelectors: Array<(ctx: Context) => string | undefined> = [];
   const eventHandlers = new Map<string, CliEventHandler[]>();
@@ -103,7 +104,8 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
         return cli as never;
       }
       if (isCliPlugin(item)) {
-        item.install(pluginApi());
+        const result = item.install(pluginApi());
+        if (result instanceof Promise) pendingInits.push(result);
         return cli as never;
       }
       middleware.push(item as Middleware);
@@ -147,7 +149,8 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
     ) {
       return defaultRouter.command(pattern as never, descriptionOrFeature as never, maybeDescription);
     },
-    run(argv = [], runOptions = {}) {
+    async run(argv = [], runOptions = {}) {
+      if (pendingInits.length) await Promise.all(pendingInits.splice(0));
       return runCli(argv, runOptions);
     },
   } as Cli<TGlobalOptions, TValues>;
@@ -162,6 +165,7 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
 
   function pluginApi(): CliPluginApi {
     return {
+      cli: cli as unknown as Cli,
       command: cli.command as CliPluginApi["command"],
       subCommand: cli.subCommand as CliPluginApi["subCommand"],
       option(definition: OptionDefinition) {

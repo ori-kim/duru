@@ -21,11 +21,6 @@ async function tryEmbed(qmd: QmdClient, store: SkillsStore): Promise<void> {
   } catch {}
 }
 
-/**
- * skills 플러그인 — DURU_HOME/skills에서 독립적으로 의존성을 구성한다.
- *
- * contributes: { commands: [skills] }
- */
 export default virtualPlugin(async (cli) => {
   const home = createDuruFileHome({ env: process.env });
   const store = createSkillsStore(home.scope("skills"));
