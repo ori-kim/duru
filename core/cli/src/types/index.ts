@@ -55,7 +55,7 @@ export type {
   CommandComposer,
   CommandDraft,
 } from "./plugin.ts";
-export type { Renderer, RendererContext } from "./renderer.ts";
+export type { Renderer, RendererContext, RendererIO } from "./renderer.ts";
 export type { Request } from "./request.ts";
 export type { ExitResult, ValidationErrorResult, ValidationErrorSource, ValidationIssue } from "./result.ts";
 export type {
@@ -65,5 +65,6 @@ export type {
   RouteErrorHandler,
   RoutePresenter,
   RouteRender,
+  RouteStreamActionForParams,
 } from "./route.ts";
 export type { CommandBuilder, CommandConfig, CommandPattern, MiddlewarePath, Router, RouterOptions } from "./router.ts";

@@ -20,6 +20,7 @@ export type Context<
   var: Partial<TValues>;
   emit<TName extends CliEventName>(name: TName, payload?: CliEventPayload<TName>): Promise<ActionResult>;
   events(): readonly CliEventRecord[];
+  stream(value: unknown): Promise<void>;
   get<TKey extends keyof TValues & string>(key: TKey): TValues[TKey] | undefined;
   set<TKey extends keyof TValues & string>(key: TKey, value: TValues[TKey]): void;
   exit<TValue>(exitCode: number, result: TValue, ok?: boolean): ExitResult<TValue>;

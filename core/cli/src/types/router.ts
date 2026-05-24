@@ -13,7 +13,13 @@ import type {
 import type { ActionResult } from "./output.ts";
 import type { Params, PatternParams } from "./pattern.ts";
 import type { CliPlugin, CommandComposer } from "./plugin.ts";
-import type { RouteActionForParams, RouteErrorHandler, RoutePresenter, RouteRender } from "./route.ts";
+import type {
+  RouteActionForParams,
+  RouteErrorHandler,
+  RoutePresenter,
+  RouteRender,
+  RouteStreamActionForParams,
+} from "./route.ts";
 
 export type CommandBuilder<
   TPattern extends string = string,
@@ -69,6 +75,9 @@ export type CommandBuilder<
   ): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, TResult, TValues, TParams>;
   action<TResultNext extends ActionResult>(
     handler: RouteActionForParams<TParams, MergeOptions<TRouterOptions, TLocalOptions>, TResultNext, TValues>,
+  ): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, Awaited<TResultNext>, TValues, TParams>;
+  stream<TResultNext extends ActionResult>(
+    handler: RouteStreamActionForParams<TParams, MergeOptions<TRouterOptions, TLocalOptions>, TResultNext, TValues>,
   ): CommandBuilder<TPattern, TRouterOptions, TLocalOptions, Awaited<TResultNext>, TValues, TParams>;
   text(
     handler: RoutePresenter<TResult, MergeOptions<TRouterOptions, TLocalOptions>, TParams, TValues>,
