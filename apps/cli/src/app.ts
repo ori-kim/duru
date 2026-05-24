@@ -41,7 +41,7 @@ async function createAppCliRuntime() {
     .use(jsonRendererPlugin())
     .use(env())
     .use(async (ctx, next) => {
-      const cmd = ctx.request.argv[0];
+      const cmd = ctx.request.positionals[0];
       const isContextCmd = cmd === "context" || cmd === "ctx";
       if (isContextCmd) return next();
 
@@ -54,7 +54,12 @@ async function createAppCliRuntime() {
       const at = new Date().toISOString();
       try {
         const result = await next();
-        await contextStore.append({ at, argv: ctx.request.argv, status: "ok" });
+        await contextStore.append({
+          at,
+          argv: ctx.request.argv,
+          status: "ok",
+          text: serializeResult(result),
+        });
         return result;
       } catch (err) {
         await contextStore.append({
@@ -92,4 +97,21 @@ async function createAppCliRuntime() {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function serializeResult(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  const seen = new WeakSet<object>();
+  try {
+    return JSON.stringify(value, (_key, item: unknown) => {
+      if (typeof item === "bigint") return `${item.toString()}n`;
+      if (typeof item === "object" && item !== null) {
+        if (seen.has(item)) return "[Circular]";
+        seen.add(item);
+      }
+      return item;
+    });
+  } catch {
+    return String(value);
+  }
 }
