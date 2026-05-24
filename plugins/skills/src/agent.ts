@@ -46,13 +46,11 @@ export async function importFromAgent(
     if (skillName !== undefined && name !== skillName) continue;
     const agentSkillDir = join(agentDir, name);
     try {
-      await stat(join(agentSkillDir, "SKILL.md"));
+      await store.add(agentSkillDir);
+      imported.push(name);
     } catch {
       skipped.push(name);
-      continue;
     }
-    await cp(agentSkillDir, join(store.skillsDir, name), { recursive: true });
-    imported.push(name);
   }
 
   return { imported, skipped };
@@ -76,9 +74,13 @@ export async function exportToAgent(
 
   for (const record of records) {
     const destSkillDir = join(agentDir, record.meta.name);
-    await mkdir(destSkillDir, { recursive: true });
-    await cp(record.dir, destSkillDir, { recursive: true });
-    exported.push(record.meta.name);
+    try {
+      await mkdir(destSkillDir, { recursive: true });
+      await cp(record.dir, destSkillDir, { recursive: true });
+      exported.push(record.meta.name);
+    } catch {
+      skipped.push(record.meta.name);
+    }
   }
 
   return { exported, skipped };

@@ -12,6 +12,14 @@ import type { QmdClient } from "./qmd.ts";
 export { createSkillsStore };
 export type { SkillMeta, SkillRecord, SkillsStore, QmdClient };
 
+async function tryEmbed(qmd: QmdClient, store: SkillsStore): Promise<void> {
+  try {
+    if (!(await qmd.isAvailable())) return;
+    await qmd.ensureCollection(COLLECTION, store.skillsDir);
+    await qmd.embed(COLLECTION);
+  } catch {}
+}
+
 export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
   return virtualPlugin(async (cli) => {
     const skills = createRouter();
@@ -66,6 +74,7 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
         const srcPath = (ctx.params as { path: string }).path;
         const record = await store.add(srcPath);
         process.stdout.write(`Installed skill: ${record.meta.name}\n`);
+        await tryEmbed(qmd, store);
         return ctx.exit(0, record);
       });
 
@@ -77,6 +86,7 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
         const name = (ctx.params as { name: string }).name;
         await store.delete(name);
         process.stdout.write(`Deleted skill: ${name}\n`);
+        await tryEmbed(qmd, store);
         return ctx.exit(0, { name });
       });
 
@@ -100,6 +110,7 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
           });
           child.on("error", reject);
         });
+        await tryEmbed(qmd, store);
         return ctx.exit(0, record);
       });
 
@@ -119,6 +130,7 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
           results.push({ agent, ...result });
           process.stdout.write(`[${agent}] imported ${result.imported.length}, skipped ${result.skipped.length}\n`);
         }
+        await tryEmbed(qmd, store);
         return ctx.exit(0, results);
       });
 
@@ -158,15 +170,26 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
     skills
       .command("search <query>")
       .group("Skills")
-      .meta({ description: "Search skills using qmd semantic search" })
+      .meta({ description: "Search skills using qmd (lex/vec/query)" })
       .option("--tag <tag>", "Filter results by tag")
+      .option("--mode <mode>", "Search mode: lex (BM25), vec (vector), query (hybrid+LLM). Default: query")
       .action(async (ctx) => {
         if (!(await qmd.isAvailable())) {
           return ctx.exit(1, { error: { message: QMD_INSTALL_MSG } });
         }
-        const query = (ctx.params as { query: string }).query;
-        const tag = (ctx.options as { tag?: string }).tag;
-        let results = await qmd.search(query, COLLECTION);
+        const queryStr = (ctx.params as { query: string }).query;
+        const tag = (ctx.options as { tag?: string; mode?: string }).tag;
+        const mode = (ctx.options as { mode?: string }).mode ?? "query";
+
+        let results;
+        if (mode === "lex") {
+          results = await qmd.lex(queryStr, COLLECTION);
+        } else if (mode === "vec") {
+          results = await qmd.vsearch(queryStr, COLLECTION);
+        } else {
+          results = await qmd.query(queryStr, COLLECTION);
+        }
+
         if (tag) {
           const taggedNames = new Set(
             (await store.list())
@@ -186,8 +209,8 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
         if (!(await qmd.isAvailable())) {
           return ctx.exit(1, { error: { message: QMD_INSTALL_MSG } });
         }
-        const raw = await qmd.status();
-        process.stdout.write(raw + "\n");
+        const available = await qmd.isAvailable();
+        process.stdout.write(`qmd: ${available ? "available" : "not found"}\n`);
         return ctx.exit(0, null);
       });
 
