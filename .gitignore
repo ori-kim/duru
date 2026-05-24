@@ -14,4 +14,4 @@ bin/
 !.duru/extension-index.yaml
 .claude/
 apps/cli/src/core-type-bundle.generated.ts
-.agents
+.agents*.tgz
