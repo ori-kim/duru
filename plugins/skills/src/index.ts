@@ -6,6 +6,13 @@ import type { SkillsStore } from "./store.ts";
 import type { SkillMeta, SkillRecord } from "./types.ts";
 import { detectAgents, importFromAgent, exportToAgent } from "./agent.ts";
 import type { AgentName } from "./agent.ts";
+import {
+  isQmdAvailable,
+  embed,
+  search,
+  status,
+  QMD_INSTALL_MSG,
+} from "./qmd.ts";
 
 export { createSkillsStore };
 export type { SkillMeta, SkillRecord, SkillsStore };
@@ -159,6 +166,64 @@ export function skillsPlugin(store: SkillsStore) {
         }
 
         return ctx.exit(0, results);
+      });
+
+    // duru skills embed
+    cli
+      .command("skills embed")
+      .group("Skills")
+      .meta({ description: "Re-index skills into qmd collection" })
+      .action(async (ctx) => {
+        if (!(await isQmdAvailable())) {
+          return ctx.exit(1, { error: { message: QMD_INSTALL_MSG } });
+        }
+        await embed(store.skillsDir);
+        process.stdout.write("인덱싱 완료\n");
+        return ctx.exit(0, { message: "인덱싱 완료" });
+      });
+
+    // duru skills search <query> [--tag <tag>]
+    cli
+      .command("skills search <query>")
+      .group("Skills")
+      .meta({ description: "Search skills using qmd semantic search" })
+      .option("--tag <tag>", "Filter results by tag")
+      .action(async (ctx) => {
+        if (!(await isQmdAvailable())) {
+          return ctx.exit(1, { error: { message: QMD_INSTALL_MSG } });
+        }
+        const query = (ctx.params as { query: string }).query;
+        const tag = (ctx.options as { tag?: string }).tag;
+
+        let results = await search(query, { tag });
+
+        // 태그 필터: store에서 태그 정보 가져와 클라이언트 사이드 필터링
+        if (tag) {
+          const taggedNames = new Set<string>();
+          const records = await store.list();
+          for (const record of records) {
+            if (record.meta.tags.includes(tag)) {
+              taggedNames.add(record.meta.name);
+            }
+          }
+          results = results.filter((r) => taggedNames.has(r.name));
+        }
+
+        return ctx.exit(0, { results }, true);
+      });
+
+    // duru skills status
+    cli
+      .command("skills status")
+      .group("Skills")
+      .meta({ description: "Show qmd indexing status" })
+      .action(async (ctx) => {
+        if (!(await isQmdAvailable())) {
+          return ctx.exit(1, { error: { message: QMD_INSTALL_MSG } });
+        }
+        const raw = await status();
+        process.stdout.write(raw + "\n");
+        return ctx.exit(0);
       });
   });
 }
