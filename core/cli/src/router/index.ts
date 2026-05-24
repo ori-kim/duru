@@ -162,7 +162,7 @@ export function createRouter<TRouterOptions extends Options = EmptyObject, TValu
       state.middleware.push({ kind: "middleware", middleware: item as Middleware });
       return router as never;
     },
-    route(
+    subCommand(
       path: string,
       child: Router<Options, object>,
       middleware?: readonly Middleware[],

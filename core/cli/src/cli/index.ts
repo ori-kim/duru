@@ -99,13 +99,13 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
       routeMiddleware.push(item as Middleware);
       return cli;
     },
-    route<TAddedOptions extends Options, TAddedValues extends object>(
+    subCommand<TAddedOptions extends Options, TAddedValues extends object>(
       path: string,
       app: Cli<TAddedOptions, TAddedValues>,
     ) {
       const router = app as unknown as Router<Options, object>;
       const runtime = routeRuntimeByCli.get(app as object);
-      defaultRouter.route(path, router, runtime?.middleware, runtime?.errorHandlers, runtime?.optionFallbacks);
+      defaultRouter.subCommand(path, router, runtime?.middleware, runtime?.errorHandlers, runtime?.optionFallbacks);
       globalOptions.push(...getRouterOptionDefinitions(router));
       return cli as never;
     },
@@ -152,7 +152,7 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
   function pluginApi(): CliPluginApi {
     return {
       command: cli.command as CliPluginApi["command"],
-      route: cli.route as CliPluginApi["route"],
+      subCommand: cli.subCommand as CliPluginApi["subCommand"],
       option(definition: OptionDefinition) {
         validateOptionDefinition(definition);
         globalOptions.push(definition);

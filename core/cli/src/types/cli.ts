@@ -23,7 +23,7 @@ export type Cli<TGlobalOptions extends Options = EmptyObject, TValues extends ob
   use<TAddedOptions extends Options, TAddedValues extends object>(
     plugin: CliPlugin<TAddedOptions, TAddedValues>,
   ): Cli<MergeOptions<TGlobalOptions, TAddedOptions>, MergeContext<TValues, TAddedValues>>;
-  route<TPath extends string, TAddedOptions extends Options, TAddedValues extends object>(
+  subCommand<TPath extends string, TAddedOptions extends Options, TAddedValues extends object>(
     path: MiddlewarePath<TPath>,
     app: Cli<TAddedOptions, TAddedValues>,
   ): Cli<MergeOptions<TGlobalOptions, TAddedOptions>, MergeContext<TValues, TAddedValues>>;

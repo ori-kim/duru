@@ -106,7 +106,7 @@ export type Router<TRouterOptions extends Options = EmptyObject, TValues extends
   use<TChildOptions extends Options, TChildValues extends object>(
     router: Router<TChildOptions, TChildValues>,
   ): Router<MergeOptions<TRouterOptions, TChildOptions>, MergeContext<TValues, TChildValues>>;
-  route<TPath extends string, TChildOptions extends Options, TChildValues extends object>(
+  subCommand<TPath extends string, TChildOptions extends Options, TChildValues extends object>(
     path: MiddlewarePath<TPath>,
     router: Router<TChildOptions, TChildValues>,
     middleware?: readonly Middleware[],

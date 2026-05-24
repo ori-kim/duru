@@ -76,7 +76,7 @@ export function createAppCompletionPlugin(options: AppCompletionPluginOptions = 
         }
       });
 
-    api.route(routeName, completion);
+    api.subCommand(routeName, completion);
   });
 }
 

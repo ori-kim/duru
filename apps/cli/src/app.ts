@@ -33,8 +33,8 @@ async function createAppCliRuntime() {
     .use(jsonRendererPlugin())
     .use(env())
     .use(gateway.plugin)
-    .route(gateway.routeName, gateway.cli)
-    .route("update", updateCli)
+    .subCommand(gateway.routeName, gateway.cli)
+    .subCommand("update", updateCli)
     .use(createAppCompletionPlugin())
     .use(help());
 

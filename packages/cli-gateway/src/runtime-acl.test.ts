@@ -62,7 +62,7 @@ describe("@duru/cli-gateway runtime ACL", () => {
 function createGatewayTestCli(options: CliGatewayOptions) {
   return createCli({ name: "duru" })
     .use(cliGateway(options))
-    .route("gateway", createGatewayCli(options, { group: "Gateway" }));
+    .subCommand("gateway", createGatewayCli(options, { group: "Gateway" }));
 }
 
 function recordingAdapter(): GatewayAdapter<{ command: string }> {

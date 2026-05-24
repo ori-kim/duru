@@ -29,7 +29,7 @@ describe("@duru/cli-gateway completion", () => {
     });
     const cli = createCli({ name: "duru" })
       .use(cliGateway({ store, adapters: [adapter] }))
-      .route("gateway", createGatewayCli({ store, adapters: [adapter] }, { group: "Gateway" }))
+      .subCommand("gateway", createGatewayCli({ store, adapters: [adapter] }, { group: "Gateway" }))
       .use(capture);
 
     cli.command("noop", "Noop").action(() => undefined);
@@ -98,7 +98,7 @@ describe("@duru/cli-gateway completion", () => {
     });
     createCli({ name: "duru" })
       .use(cliGateway(gatewayOptions, { namespace: "targets" }))
-      .route("targets", createGatewayCli(gatewayOptions, { group: "Gateway" }))
+      .subCommand("targets", createGatewayCli(gatewayOptions, { group: "Gateway" }))
       .use(capture);
 
     const target = await complete?.(completionContext(["targets", ""]));
@@ -136,7 +136,7 @@ describe("@duru/cli-gateway completion", () => {
     });
     createCli({ name: "duru" })
       .use(cliGateway({ store, adapters: [adapter] }))
-      .route("gateway", createGatewayCli({ store, adapters: [adapter] }, { group: "Gateway" }))
+      .subCommand("gateway", createGatewayCli({ store, adapters: [adapter] }, { group: "Gateway" }))
       .use(capture);
 
     const result = await complete?.(completionContext(["notes-api", ""]));
@@ -179,7 +179,7 @@ describe("@duru/cli-gateway completion", () => {
     });
     createCli({ name: "duru" })
       .use(cliGateway(gatewayOptions))
-      .route("gateway", createGatewayCli(gatewayOptions, { group: "Gateway" }))
+      .subCommand("gateway", createGatewayCli(gatewayOptions, { group: "Gateway" }))
       .use(capture);
 
     const result = await complete?.(completionContext(["gateway", "catservice", ""]));

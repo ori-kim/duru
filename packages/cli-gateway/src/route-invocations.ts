@@ -3,7 +3,7 @@ import type { CliPluginApi, Context } from "@duru/cli-kit";
 import { runGatewayTargetInvocation } from "./runtime";
 import type { CliGatewayOptions, GatewayBindingRecord, GatewaySnapshot, GatewayTool } from "./types";
 
-type InvocationRouteHost = Pick<CliPluginApi, "command" | "route">;
+type InvocationRouteHost = Pick<CliPluginApi, "command" | "subCommand">;
 
 type InvocationCommandHost = {
   command(pattern: string, description?: string): InvocationCommandBuilder;
@@ -69,7 +69,7 @@ export function installTargetRoutes(
       includeDefault: !gatewayManagementCommands.has(binding.name),
     });
   }
-  api.route(pluginOptions.namespace, namespaceCli);
+  api.subCommand(pluginOptions.namespace, namespaceCli);
 }
 
 export function routeSnapshot(options: CliGatewayOptions): GatewaySnapshot | undefined {
@@ -190,7 +190,7 @@ function installOperationRoutes(
       addOperationCommand(operationCli, patternRoot, invocationRoot, operation, options, seen, scope) ||
       hasOperationRoute;
   }
-  if (hasOperationRoute) host.route(patternRoot, operationCli);
+  if (hasOperationRoute) host.subCommand(patternRoot, operationCli);
   return hasOperationRoute;
 }
 
