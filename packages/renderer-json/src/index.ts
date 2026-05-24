@@ -12,6 +12,9 @@ export function jsonRenderer(): Renderer {
         exitCode: 0,
       };
     },
+    stream(value, ctx) {
+      ctx.io.stdout.write(`${JSON.stringify(value ?? null)}\n`);
+    },
   };
 }
 

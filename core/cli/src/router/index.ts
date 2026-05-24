@@ -294,6 +294,10 @@ export function createRouter<TRouterOptions extends Options = EmptyObject, TValu
         route.action = handler as unknown as Action;
         return builder as never;
       },
+      stream(handler: Action) {
+        route.action = handler as unknown as Action;
+        return builder as never;
+      },
       text(handler: RouteRenderer) {
         route.presenters.set("text", handler as unknown as RouteRenderer);
         return builder as never;

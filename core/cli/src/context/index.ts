@@ -2,6 +2,13 @@ import { exit } from "../result/index.ts";
 import type { ActionResult, Awaitable, CliEventName, CliEventRecord, Context, RawOptions } from "../types/index.ts";
 
 export type ContextEventSink = (ctx: Context, event: CliEventRecord) => Awaitable<ActionResult>;
+export type ContextStreamSink = (ctx: Context, value: unknown) => Awaitable<void>;
+
+export const STREAM_SINK_KEY = "duru.streamSink";
+
+export function setContextStreamSink(ctx: Context, sink: ContextStreamSink): void {
+  ctx.setService(STREAM_SINK_KEY, sink);
+}
 
 export function createContext(
   argv: readonly string[],
@@ -46,6 +53,10 @@ function createBaseContext(
     },
     events() {
       return [...events];
+    },
+    async stream(value) {
+      const sink = services.get(STREAM_SINK_KEY) as ContextStreamSink | undefined;
+      if (sink) await sink(ctx, value);
     },
     get(key) {
       return values[key] as never;

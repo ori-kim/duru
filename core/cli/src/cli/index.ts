@@ -4,7 +4,7 @@ import {
   createCompletionRegistry,
 } from "../completion/index.ts";
 import { commandAliasesComposer } from "../compose/index.ts";
-import { createContext, createEmptyContext } from "../context/index.ts";
+import { createContext, createEmptyContext, setContextStreamSink } from "../context/index.ts";
 import { helpPath, usageHelpRoutes } from "../help/index.ts";
 import { runPipeline } from "../middleware/pipeline.ts";
 import { parseOptions, validateOptionDefinition } from "../options/index.ts";
@@ -35,6 +35,8 @@ import type {
   Options,
   Params,
   Renderer,
+  RendererContext,
+  RendererIO,
   RouteErrorHandler,
   Router,
 } from "../types/index.ts";
@@ -56,6 +58,15 @@ type CliRouteRuntime = {
 };
 
 const routeRuntimeByCli = new WeakMap<object, CliRouteRuntime>();
+
+function createRendererIO(): RendererIO {
+  return {
+    stdout: process.stdout,
+    stderr: process.stderr,
+    stdin: process.stdin,
+    isTTY: Boolean(process.stdout.isTTY),
+  };
+}
 
 export function createCli<TGlobalOptions extends Options = EmptyObject, TValues extends object = EmptyObject>(
   options: CliOptions = {},
@@ -220,6 +231,13 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
   async function runCli(argv: readonly string[], runOptions: CliRunOptions): Promise<CliRunResult> {
     const parsed = parseOptions(argv, globalOptions);
     const ctx = createContext(argv, parsed.options, parsed.positionals, services, eventSink);
+    setContextStreamSink(ctx, async (streamCtx, value) => {
+      const id = runOptions.renderer ?? selectRenderer(streamCtx) ?? defaultRenderer;
+      if (!id) return;
+      const renderer = renderers.get(id);
+      if (!renderer?.stream) return;
+      await renderer.stream(value, toRendererContext(streamCtx));
+    });
     let pipelineResult: unknown;
 
     try {
@@ -275,8 +293,17 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
     const renderer = renderers.get(rendererId);
     if (!renderer) return base;
 
-    const rendered = await renderer.render(renderInput(rendererId, execution.result, value, events), ctx);
+    const rendered = await renderer.render(renderInput(rendererId, execution.result, value, events), toRendererContext(ctx));
     return { ...base, rendered: { ...rendered, exitCode: execution.exitCode } };
+  }
+
+  function toRendererContext(ctx: Context): RendererContext {
+    return {
+      request: ctx.request,
+      params: ctx.params,
+      options: ctx.options,
+      io: createRendererIO(),
+    };
   }
 
   function helpDocument(argv: readonly string[]): HelpDocument {
