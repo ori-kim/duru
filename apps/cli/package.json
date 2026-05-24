@@ -17,6 +17,9 @@
     "@duru/renderer-json": "workspace:*",
     "@duru/renderer-text": "workspace:*",
     "@duru/plugin-manage": "workspace:*",
-    "@duru/virtual-plugins": "workspace:*"
+    "@duru/virtual-plugins": "workspace:*",
+    "ai": "^6.0.190",
+    "ai-sdk-ollama": "^3.8.4",
+    "edge-pi": "^0.4.2"
   }
 }
