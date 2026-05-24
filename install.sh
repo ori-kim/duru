@@ -94,28 +94,19 @@ case "$SETUP_ZSH" in
     ;;
 esac
 
-# Built-in skills (via duru skills add)
-SKILLS="duru-gateway"
+# Agent skills via vercel-labs/skills ecosystem (Claude Code, Cursor, Copilot, etc.)
 echo ""
-printf "Install built-in skills (%s)? (y/N) " "$SKILLS"
+printf "Install duru skills for your AI agent (Claude Code, Cursor, etc.)? (y/N) "
 read INSTALL_SKILLS </dev/tty || INSTALL_SKILLS="n"
 case "$INSTALL_SKILLS" in
   [yY]|[yY][eE][sS])
-    SKILLS_RAW="https://raw.githubusercontent.com/$REPO/main/skills"
-    TMP_SKILLS="$(mktemp -d)"
-    for skill in $SKILLS; do
-      echo "Installing skill: $skill"
-      mkdir -p "$TMP_SKILLS/$skill"
-      if curl -fsSL "$SKILLS_RAW/$skill/SKILL.md" -o "$TMP_SKILLS/$skill/SKILL.md"; then
-        "$INSTALL_DIR/duru" skills add "$TMP_SKILLS/$skill"
-      else
-        echo "warn: failed to fetch $skill, skipped" >&2
-      fi
-    done
-    rm -rf "$TMP_SKILLS"
+    if command -v npx >/dev/null 2>&1; then
+      npx skills add "$REPO" </dev/tty
+    else
+      echo "warn: npx not found. Install Node.js, then run: npx skills add $REPO" >&2
+    fi
     ;;
   *)
-    echo "Skipped. Run later:"
-    echo "  curl -fsSL https://raw.githubusercontent.com/$REPO/main/skills/skills.sh | bash"
+    echo "Skipped. Run later: npx skills add $REPO"
     ;;
 esac
