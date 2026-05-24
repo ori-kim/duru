@@ -1,3 +1,0 @@
-name: context-mode
-description: Capture and search command invocation history
-entry: src/index.ts

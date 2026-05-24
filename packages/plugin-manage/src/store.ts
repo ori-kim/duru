@@ -1,6 +1,7 @@
-import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { findManifestFile, readManifestInfo, setPluginEnabled } from "./manifest.ts";
+import type { DiscoveredPlugin } from "./scan.ts";
 
 export type InstalledPlugin = {
   name: string;
@@ -46,9 +47,29 @@ export async function pluginExists(pluginsDir: string, name: string): Promise<bo
   }
 }
 
-export async function copyPlugin(sourceDir: string, pluginsDir: string, dirName: string): Promise<void> {
+// Copy a discovered plugin to DURU_HOME/plugins/<dirName>/.
+// If the plugin was declared via duru.config (has `entry`) and the source dir
+// contains no duru.plugin.yml, one is auto-generated in the destination so that
+// installVirtualPlugins can find and load the plugin.
+export async function copyPlugin(plugin: DiscoveredPlugin, pluginsDir: string, dirName: string): Promise<void> {
   await mkdir(pluginsDir, { recursive: true });
-  await cp(sourceDir, join(pluginsDir, dirName), { recursive: true });
+  const destDir = join(pluginsDir, dirName);
+  await cp(plugin.sourceDir, destDir, { recursive: true });
+
+  if (plugin.entry) {
+    // Only generate if the copied dir still has no manifest
+    const existing = await findManifestFile(destDir);
+    if (!existing) {
+      await writeGeneratedManifest(destDir, plugin);
+    }
+  }
+}
+
+async function writeGeneratedManifest(destDir: string, plugin: DiscoveredPlugin): Promise<void> {
+  const lines: string[] = [`name: ${plugin.name}`];
+  if (plugin.description) lines.push(`description: ${plugin.description}`);
+  lines.push(`entry: ${plugin.entry}`);
+  await writeFile(join(destDir, "duru.plugin.yml"), `${lines.join("\n")}\n`, "utf8");
 }
 
 export async function removePlugin(pluginsDir: string, name: string): Promise<void> {

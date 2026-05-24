@@ -9,6 +9,10 @@ export type RepoConfigEntry = {
   path: string;
   name?: string;
   description?: string;
+  // Entry point relative to the plugin dir.
+  // When set, no duru.plugin.yml is needed in the plugin source directory —
+  // the installer will generate one at the destination automatically.
+  entry?: string;
 };
 
 export type DuruRepoConfig = {
@@ -53,7 +57,11 @@ export async function resolveConfigPlugins(repoRoot: string, config: DuruRepoCon
     const name = entry.name ?? manifestInfo?.name ?? pluginDir.split("/").at(-1) ?? "unknown";
     const description = entry.description ?? manifestInfo?.description;
 
-    discovered.push({ name, description, sourceDir: pluginDir });
+    // `entry` from config signals that the plugin dir has no duru.plugin.yml.
+    // The installer will auto-generate one using this value.
+    const pluginEntry = entry.entry;
+
+    discovered.push({ name, description, sourceDir: pluginDir, ...(pluginEntry ? { entry: pluginEntry } : {}) });
   }
 
   return discovered;
@@ -184,6 +192,7 @@ function validateRepoConfig(data: unknown, fileName: string): DuruRepoConfig {
       path: item.path.trim(),
       ...(typeof item.name === "string" ? { name: item.name.trim() } : {}),
       ...(typeof item.description === "string" ? { description: item.description.trim() } : {}),
+      ...(typeof item.entry === "string" ? { entry: item.entry.trim() } : {}),
     });
   }
 

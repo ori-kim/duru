@@ -7,6 +7,9 @@ export type DiscoveredPlugin = {
   name: string;
   description?: string;
   sourceDir: string; // absolute path to the plugin directory
+  // Present when discovered via duru.config — used to generate duru.plugin.yml
+  // in the installed destination if the source dir has no manifest of its own.
+  entry?: string;
 };
 
 // Scan `dir` for plugins using the following priority:

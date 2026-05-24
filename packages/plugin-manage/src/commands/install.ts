@@ -115,7 +115,7 @@ export function registerInstallCommand(cli: Cli): void {
           await rm(join(pluginsDir, name), { recursive: true, force: true });
         }
 
-        await copyPlugin(plugin.sourceDir, pluginsDir, name);
+        await copyPlugin(plugin, pluginsDir, name);
         installed.push(name);
       }
 
