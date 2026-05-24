@@ -90,6 +90,15 @@
         "@tobilu/qmd": "*",
       },
     },
+    "packages/renderer-clack": {
+      "name": "@duru/renderer-clack",
+      "version": "0.0.0",
+      "dependencies": {
+        "@clack/prompts": "^1.4.0",
+        "@duru/cli-kit": "workspace:*",
+        "picocolors": "^1.1.1",
+      },
+    },
     "packages/renderer-json": {
       "name": "@duru/renderer-json",
       "version": "0.0.0",
@@ -175,6 +184,8 @@
     "@duru/plugin-skills": ["@duru/plugin-skills@workspace:plugins/skills"],
 
     "@duru/qmd": ["@duru/qmd@workspace:packages/qmd"],
+
+    "@duru/renderer-clack": ["@duru/renderer-clack@workspace:packages/renderer-clack"],
 
     "@duru/renderer-json": ["@duru/renderer-json@workspace:packages/renderer-json"],
 
@@ -543,6 +554,8 @@
     "path-key": ["path-key@3.1.1", "https://npm-registry-proxy.kr.wekarrot.net/path-key/-/path-key-3.1.1.tgz", {}, "sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q=="],
 
     "path-to-regexp": ["path-to-regexp@8.4.2", "https://npm-registry-proxy.kr.wekarrot.net/path-to-regexp/-/path-to-regexp-8.4.2.tgz", {}, "sha512-qRcuIdP69NPm4qbACK+aDogI5CBDMi1jKe0ry5rSQJz8JVLsC7jV8XpiJjGRLLol3N+R5ihGYcrPLTno6pAdBA=="],
+
+    "picocolors": ["picocolors@1.1.1", "https://npm-registry-proxy.kr.wekarrot.net/picocolors/-/picocolors-1.1.1.tgz", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 
     "picomatch": ["picomatch@4.0.4", "https://npm-registry-proxy.kr.wekarrot.net/picomatch/-/picomatch-4.0.4.tgz", {}, "sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A=="],
 

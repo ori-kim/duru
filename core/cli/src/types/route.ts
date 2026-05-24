@@ -18,6 +18,13 @@ export type RouteActionForParams<
   TValues extends object = EmptyObject,
 > = (ctx: Context<TOptions, TParams, TValues>) => Awaitable<TResult>;
 
+export type RouteStreamActionForParams<
+  TParams extends object,
+  TOptions extends object = Options,
+  TResult extends ActionResult = ActionResult,
+  TValues extends object = EmptyObject,
+> = (ctx: Context<TOptions, TParams, TValues>) => Awaitable<TResult>;
+
 export type RouteErrorContext<
   TOptions extends object = Record<string, unknown>,
   TParams extends object = Record<string, unknown>,
