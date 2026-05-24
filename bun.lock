@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "duru",
@@ -59,13 +58,6 @@
         "zod": "^4.0.0",
       },
     },
-    "packages/file-route": {
-      "name": "@duru/file-route",
-      "version": "0.0.0",
-      "dependencies": {
-        "@duru/cli-kit": "workspace:*",
-      },
-    },
     "packages/file-store": {
       "name": "@duru/file-store",
       "version": "0.0.0",
@@ -101,6 +93,15 @@
         "@duru/cli-kit": "workspace:*",
       },
     },
+    "plugins/context-mode": {
+      "name": "@duru/plugin-context-mode",
+      "version": "0.0.0",
+      "dependencies": {
+        "@duru/cli-kit": "workspace:*",
+        "@duru/file-store": "workspace:*",
+        "@duru/virtual-plugins": "workspace:*",
+      },
+    },
   },
   "packages": {
     "@biomejs/biome": ["@biomejs/biome@1.9.4", "", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "1.9.4", "@biomejs/cli-darwin-x64": "1.9.4", "@biomejs/cli-linux-arm64": "1.9.4", "@biomejs/cli-linux-arm64-musl": "1.9.4", "@biomejs/cli-linux-x64": "1.9.4", "@biomejs/cli-linux-x64-musl": "1.9.4", "@biomejs/cli-win32-arm64": "1.9.4", "@biomejs/cli-win32-x64": "1.9.4" }, "bin": { "biome": "bin/biome" } }, "sha512-1rkd7G70+o9KkTn5KLmDYXihGoTaIGO9PIIN2ZB7UJxFrWw04CZHPYiMRjYsaDvVV7hP1dYNRLxSANLaBFGpog=="],
@@ -131,11 +132,11 @@
 
     "@duru/env": ["@duru/env@workspace:packages/env"],
 
-    "@duru/file-route": ["@duru/file-route@workspace:packages/file-route"],
-
     "@duru/file-store": ["@duru/file-store@workspace:packages/file-store"],
 
     "@duru/input-validation": ["@duru/input-validation@workspace:packages/input-validation"],
+
+    "@duru/plugin-context-mode": ["@duru/plugin-context-mode@workspace:plugins/context-mode"],
 
     "@duru/renderer-json": ["@duru/renderer-json@workspace:packages/renderer-json"],
 
