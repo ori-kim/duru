@@ -66,7 +66,7 @@ export const defaultDeps: UpdateDeps = {
   execPath: process.execPath,
   platform: process.platform,
   arch: process.arch,
-  currentVersion: process.env["DURU_VERSION"] ?? "dev",
+  currentVersion: process.env.DURU_VERSION ?? "dev",
   stdout: process.stdout,
   stderr: process.stderr,
   confirm: defaultConfirm,
@@ -81,8 +81,8 @@ export function compareVersions(a: string, b: string): number {
   const right = b.replace(/^v/, "").split(".").map(Number);
   const max = Math.max(left.length, right.length);
   for (let i = 0; i < max; i++) {
-    const l = Number.isFinite(left[i] ?? NaN) ? (left[i] as number) : 0;
-    const r = Number.isFinite(right[i] ?? NaN) ? (right[i] as number) : 0;
+    const l = Number.isFinite(left[i] ?? Number.NaN) ? (left[i] as number) : 0;
+    const r = Number.isFinite(right[i] ?? Number.NaN) ? (right[i] as number) : 0;
     if (l !== r) return l > r ? 1 : -1;
   }
   return 0;
@@ -211,13 +211,13 @@ export async function runUpdate(options: UpdateOptions, deps: UpdateDeps = defau
 
   if (options.dryRun) {
     deps.stdout.write(
-      [
+      `${[
         `current: ${currentTag}`,
         `target:  ${release.tag_name}`,
         `asset:   ${asset.name}`,
         `path:    ${currentPath}`,
         "action:  replace local duru binary",
-      ].join("\n") + "\n",
+      ].join("\n")}\n`,
     );
     return;
   }

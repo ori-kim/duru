@@ -2,10 +2,11 @@ import { adaptResult, createCli, formatHelp, help, isHelpDocument, isValidationE
 import { env } from "@duru/env";
 import { createDuruFileHome } from "@duru/file-store";
 import { contextModePlugin, createContextStore } from "@duru/plugin-context-mode";
+import { pluginManageCli } from "@duru/plugin-manage";
 import { jsonRendererPlugin } from "@duru/renderer-json";
 import { textRendererPlugin } from "@duru/renderer-text";
-import { readAppConfig } from "./config.ts";
 import { createAppCompletionPlugin } from "./completion/index.ts";
+import { readAppConfig } from "./config.ts";
 import { createAppGateway } from "./gateway/index.ts";
 import { updateCli } from "./routes/update/index.ts";
 
@@ -46,8 +47,7 @@ async function createAppCliRuntime() {
       if (isContextCmd) return next();
 
       const enabled =
-        Boolean(ctx.options.contextMode) ||
-        (appConfig.contextMode?.commands?.includes(cmd ?? "") ?? false);
+        Boolean(ctx.options.contextMode) || (appConfig.contextMode?.commands?.includes(cmd ?? "") ?? false);
 
       if (!enabled) return next();
 
@@ -74,6 +74,7 @@ async function createAppCliRuntime() {
     .use(gateway.plugin)
     .subCommand(gateway.routeName, gateway.cli)
     .subCommand("update", updateCli)
+    .subCommand("plugin", pluginManageCli)
     .use(createAppCompletionPlugin())
     .use(help());
 

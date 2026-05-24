@@ -21,6 +21,7 @@
         "@duru/completion-zsh": "workspace:*",
         "@duru/env": "workspace:*",
         "@duru/file-store": "workspace:*",
+        "@duru/plugin-manage": "workspace:*",
         "@duru/renderer-json": "workspace:*",
         "@duru/renderer-text": "workspace:*",
       },
@@ -70,6 +71,14 @@
       },
       "devDependencies": {
         "zod": "^4.0.0",
+      },
+    },
+    "packages/plugin-manage": {
+      "name": "@duru/plugin-manage",
+      "version": "0.0.0",
+      "dependencies": {
+        "@clack/prompts": "^1.4.0",
+        "@duru/cli-kit": "workspace:*",
       },
     },
     "packages/renderer-json": {
@@ -122,6 +131,10 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@1.9.4", "", { "os": "win32", "cpu": "x64" }, "sha512-8Y5wMhVIPaWe6jw2H+KlEm4wP/f7EW3810ZLmDlrEEy5KvBsb9ECEfu/kMWD484ijfQ8+nIi0giMgu9g1UAuuA=="],
 
+    "@clack/core": ["@clack/core@1.3.1", "https://npm-registry-proxy.kr.wekarrot.net/@clack/core/-/core-1.3.1.tgz", { "dependencies": { "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-fT1qHVGAag4IEkrupZ6lRRbNCs1vS9P01KB/sG8zKgvUztbYtFBtQpjSITNwooDZ83tpsPzP0mRNs1/KVszCRA=="],
+
+    "@clack/prompts": ["@clack/prompts@1.4.0", "https://npm-registry-proxy.kr.wekarrot.net/@clack/prompts/-/prompts-1.4.0.tgz", { "dependencies": { "@clack/core": "1.3.1", "fast-string-width": "^3.0.2", "fast-wrap-ansi": "^0.2.0", "sisteransi": "^1.0.5" } }, "sha512-S0My7XPGIgpRWMDG8uRqalbgT+a6FmCUdOW+HaIOVVpUPHOb7RrpvjTjiODadKp06fsrVDJZlIzc6yCTp4AnxA=="],
+
     "@duru/auth": ["@duru/auth@workspace:packages/auth"],
 
     "@duru/cli-gateway": ["@duru/cli-gateway@workspace:packages/cli-gateway"],
@@ -138,6 +151,8 @@
 
     "@duru/plugin-context-mode": ["@duru/plugin-context-mode@workspace:plugins/context-mode"],
 
+    "@duru/plugin-manage": ["@duru/plugin-manage@workspace:packages/plugin-manage"],
+
     "@duru/renderer-json": ["@duru/renderer-json@workspace:packages/renderer-json"],
 
     "@duru/renderer-text": ["@duru/renderer-text@workspace:packages/renderer-text"],
@@ -151,6 +166,14 @@
     "bun-types": ["bun-types@1.3.12", "", { "dependencies": { "@types/node": "*" } }, "sha512-HqOLj5PoFajAQciOMRiIZGNoKxDJSr6qigAttOX40vJuSp6DN/CxWp9s3C1Xwm4oH7ybueITwiaOcWXoYVoRkA=="],
 
     "duru": ["duru@workspace:apps/cli"],
+
+    "fast-string-truncated-width": ["fast-string-truncated-width@3.0.3", "https://npm-registry-proxy.kr.wekarrot.net/fast-string-truncated-width/-/fast-string-truncated-width-3.0.3.tgz", {}, "sha512-0jjjIEL6+0jag3l2XWWizO64/aZVtpiGE3t0Zgqxv0DPuxiMjvB3M24fCyhZUO4KomJQPj3LTSUnDP3GpdwC0g=="],
+
+    "fast-string-width": ["fast-string-width@3.0.2", "https://npm-registry-proxy.kr.wekarrot.net/fast-string-width/-/fast-string-width-3.0.2.tgz", { "dependencies": { "fast-string-truncated-width": "^3.0.2" } }, "sha512-gX8LrtNEI5hq8DVUfRQMbr5lpaS4nMIWV+7XEbXk2b8kiQIizgnlr12B4dA3ZEx3308ze0O4Q1R+cHts8kyUJg=="],
+
+    "fast-wrap-ansi": ["fast-wrap-ansi@0.2.2", "https://npm-registry-proxy.kr.wekarrot.net/fast-wrap-ansi/-/fast-wrap-ansi-0.2.2.tgz", { "dependencies": { "fast-string-width": "^3.0.2" } }, "sha512-7F2Fl+TjRSenLqlU3UjSH0iyqopqoZIu7eZVpEirP2g1GtWa2G/ecEmBdgz31+Mxr+ELclgg6sokpSFIQiZ02Q=="],
+
+    "sisteransi": ["sisteransi@1.0.5", "https://npm-registry-proxy.kr.wekarrot.net/sisteransi/-/sisteransi-1.0.5.tgz", {}, "sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg=="],
 
     "undici-types": ["undici-types@7.19.2", "", {}, "sha512-qYVnV5OEm2AW8cJMCpdV20CDyaN3g0AjDlOGf1OW4iaDEx8MwdtChUp4zu4H0VP3nDRF/8RKWH+IPp9uW0YGZg=="],
 

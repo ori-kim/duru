@@ -34,8 +34,7 @@ export function createContextStore(files: FileStore): ContextStore {
     if (!normalized) return captures;
     return captures.filter(
       (c) =>
-        c.argv.join(" ").toLowerCase().includes(normalized) ||
-        (c.text?.toLowerCase().includes(normalized) ?? false),
+        c.argv.join(" ").toLowerCase().includes(normalized) || (c.text?.toLowerCase().includes(normalized) ?? false),
     );
   }
 

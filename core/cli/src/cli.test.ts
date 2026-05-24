@@ -809,7 +809,9 @@ describe("createCli", () => {
     // @ts-expect-error invalid literal route path
     expect(() => createCli().subCommand("", app)).toThrow("Route path cannot be empty");
     // @ts-expect-error invalid literal route path
-    expect(() => createCli().subCommand("<tenant>", app)).toThrow("Route path must contain only literal tokens: <tenant>");
+    expect(() => createCli().subCommand("<tenant>", app)).toThrow(
+      "Route path must contain only literal tokens: <tenant>",
+    );
     // @ts-expect-error invalid literal route path
     expect(() => createCli().subCommand("target [scope]", app)).toThrow(
       "Route path must contain only literal tokens: [scope]",
