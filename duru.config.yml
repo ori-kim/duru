@@ -1,0 +1,3 @@
+# duru plugin install https://github.com/ori-kim/cli-proxy 로 설치 가능
+plugins:
+  - path: plugins/context-mode

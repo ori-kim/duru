@@ -1,6 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { findManifestFile, readManifestInfo } from "./manifest.ts";
+import { readRepoConfig, resolveConfigPlugins } from "./repo-config.ts";
 
 export type DiscoveredPlugin = {
   name: string;
@@ -8,17 +9,30 @@ export type DiscoveredPlugin = {
   sourceDir: string; // absolute path to the plugin directory
 };
 
-// Scan `dir` for immediate subdirectories that contain a duru.plugin manifest.
-// If `dir` itself has a manifest, treat it as a single plugin root.
+// Scan `dir` for plugins using the following priority:
+//
+//   1. dir itself has duru.plugin.{yml,toml} → single plugin (leaf)
+//   2. dir root has duru.config.{yml,toml,json} → declared plugin paths
+//   3. Fallback: immediate subdirectories that contain a duru.plugin manifest
+//
+// This means a repository can organize plugins anywhere and just declare them
+// in a duru.config.yml at the root — no fixed "plugins/" folder required.
 export async function discoverPluginsInDir(dir: string): Promise<DiscoveredPlugin[]> {
-  // First check: is `dir` itself a single plugin?
+  // ── 1. dir itself is a plugin ──────────────────────────────────────────────
   const selfManifest = await findManifestFile(dir);
   if (selfManifest) {
     const info = await readManifestInfo(selfManifest);
     return [{ name: info.name, description: info.description, sourceDir: dir }];
   }
 
-  // Otherwise scan immediate subdirectories
+  // ── 2. duru.config at root ─────────────────────────────────────────────────
+  const repoConfig = await readRepoConfig(dir);
+  if (repoConfig) {
+    const plugins = await resolveConfigPlugins(dir, repoConfig);
+    return plugins.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // ── 3. Fallback: scan immediate subdirectories ─────────────────────────────
   let names: string[];
   try {
     names = await readdir(dir);
