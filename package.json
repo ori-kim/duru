@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "type": "module",
   "private": true,
-  "workspaces": ["apps/*", "core/*", "packages/*"],
+  "workspaces": ["apps/*", "core/*", "packages/*", "plugins/*"],
   "scripts": {
     "build": "bun build apps/cli/src/main.ts --target bun --outfile dist/duru --packages bundle",
     "dev": "DURU_HOME=.duru-test bun apps/cli/src/main.ts",
