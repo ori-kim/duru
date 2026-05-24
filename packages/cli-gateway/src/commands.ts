@@ -78,9 +78,9 @@ export function installGatewayCommands(
       return { name, type: adapter.value.type };
     });
 
-  command("list", "List gateway targets").action(async () => ({
-    targets: (await options.store.listTargets()).map((target) => ({ name: target.name, type: target.type })),
-  }));
+  command("list", "List gateway targets").action(async () =>
+    (await options.store.listTargets()).map((target) => ({ name: target.name, type: target.type })),
+  );
 
   command("check", "Check gateway targets").action(async () => {
     return checkCommand(options, adapters);
@@ -99,9 +99,9 @@ export function installGatewayCommands(
     return bindCommand(ctx.params.name, ctx.params.target, stringArrayParam(ctx.params.args), ctx, options);
   });
 
-  command("binds", "List gateway target bindings").action(async () => ({
-    bindings: (await options.store.listBindings()).map(bindingRow),
-  }));
+  command("binds", "List gateway target bindings").action(async () =>
+    (await options.store.listBindings()).map(bindingRow),
+  );
 
   command("unbind <name>", "Remove a gateway target binding").action(async (ctx) => {
     const name = ctx.params.name;
@@ -158,15 +158,15 @@ export function installGatewayCommands(
       return { target, name, operation };
     });
 
-  aliasCommand("list <target>", "List gateway target aliases").action(async (ctx) => ({
-    aliases: (await options.store.listAliases(ctx.params.target)).map((alias) => ({
+  aliasCommand("list <target>", "List gateway target aliases").action(async (ctx) =>
+    (await options.store.listAliases(ctx.params.target)).map((alias) => ({
       target: alias.target,
       name: alias.name,
       operation: alias.operation,
       ...(alias.input ? { input: alias.input } : {}),
       args: alias.args ?? [],
     })),
-  }));
+  );
 
   aliasCommand("remove <target> <name>", "Remove a gateway target alias").action(async (ctx) => {
     const target = ctx.params.target;
@@ -192,9 +192,9 @@ export function installGatewayCommands(
     return { target, name };
   });
 
-  profileCommand("list <target>", "List gateway target profiles").action(async (ctx) => ({
-    profiles: await profileList(options, ctx.params.target),
-  }));
+  profileCommand("list <target>", "List gateway target profiles").action(async (ctx) =>
+    profileList(options, ctx.params.target),
+  );
 
   profileCommand("remove <target> <name>", "Remove a gateway target profile").action(async (ctx) => {
     const target = ctx.params.target;
