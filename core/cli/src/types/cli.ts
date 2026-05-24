@@ -42,6 +42,7 @@ export type Cli<TGlobalOptions extends Options = EmptyObject, TValues extends ob
   ): Cli<TGlobalOptions, TValues>;
   notFound(handler: CliEventHandler<"notFound", TGlobalOptions, TValues>): Cli<TGlobalOptions, TValues>;
   emit<TName extends CliEventName>(name: TName, payload?: CliEventPayload<TName>): Promise<void>;
+  command(): CommandBuilder<"", TGlobalOptions, EmptyObject, undefined, TValues>;
   command<TPattern extends string>(
     pattern: CommandPattern<TPattern>,
     description?: string,

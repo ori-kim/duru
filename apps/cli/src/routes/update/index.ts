@@ -1,10 +1,10 @@
-import { createRouter } from "@duru/cli-kit";
+import { createCli } from "@duru/cli-kit";
 import { type UpdateOptions, defaultDeps, runUpdate } from "./update.ts";
 
-export const updateCommand = createRouter();
+export const updateCli = createCli();
 
-updateCommand
-  .command("update")
+updateCli
+  .command()
   .meta({ description: "Update duru to the latest release" })
   .group("Built-in")
   .option("--check", "Show latest version without updating")

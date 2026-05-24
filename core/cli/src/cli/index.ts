@@ -130,11 +130,11 @@ export function createCli<TGlobalOptions extends Options = EmptyObject, TValues 
       await ctx.emit(name, payload);
     },
     command<TPattern extends string>(
-      pattern: CommandPattern<TPattern>,
+      pattern?: CommandPattern<TPattern>,
       descriptionOrFeature?: string | CommandFeature<object, object> | CommandConfig<object, object>,
       maybeDescription?: string | CommandConfig,
     ) {
-      return defaultRouter.command(pattern, descriptionOrFeature as never, maybeDescription);
+      return defaultRouter.command(pattern as never, descriptionOrFeature as never, maybeDescription);
     },
     run(argv = [], runOptions = {}) {
       return runCli(argv, runOptions);

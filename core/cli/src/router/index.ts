@@ -184,14 +184,14 @@ export function createRouter<TRouterOptions extends Options = EmptyObject, TValu
       return router as never;
     },
     command<TPattern extends string>(
-      pattern: TPattern,
+      pattern?: TPattern,
       descriptionOrFeature?: string | CommandInputFeature | CommandConfig<object, object>,
       maybeDescription?: string | CommandMetadata,
     ) {
-      validateCommandPattern(pattern);
+      if (pattern !== undefined) validateCommandPattern(pattern);
       const config = normalizeCommandConfig(descriptionOrFeature, maybeDescription);
       const route: Route = {
-        pattern: compilePattern(pattern),
+        pattern: compilePattern(pattern ?? ""),
         description: config.description,
         metadata: emptyCommandMetadata(),
         aliases: [],

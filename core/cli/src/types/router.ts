@@ -121,6 +121,7 @@ export type Router<TRouterOptions extends Options = EmptyObject, TValues extends
   onError(
     handler: RouteErrorHandler<Record<string, unknown>, Record<string, unknown>, TValues>,
   ): Router<TRouterOptions, TValues>;
+  command(): CommandBuilder<"", TRouterOptions, EmptyObject, undefined, TValues>;
   command<TPattern extends string>(
     pattern: CommandPattern<TPattern>,
     description?: string,
