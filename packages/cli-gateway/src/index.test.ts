@@ -886,7 +886,7 @@ describe("@duru/cli-gateway commands", () => {
     const gatewayOptions = { store, adapters: [adapter] };
     const cli = createCli({ name: "duru" })
       .use(cliGateway(gatewayOptions, { namespace: "targets" }))
-      .route("targets", createGatewayCli(gatewayOptions, { group: "Gateway" }));
+      .subCommand("targets", createGatewayCli(gatewayOptions, { group: "Gateway" }));
 
     const add = await cli.run(["targets", "add", "test-service", "run", "--type", "cli"], { render: false });
     const run = await cli.run(["targets", "test-service", "tools"], { render: false });
@@ -1808,7 +1808,7 @@ describe("@duru/cli-gateway runtime", () => {
     };
     const cli = createCli({ name: "duru" })
       .use(cliGateway(gatewayOptions))
-      .route("gateway", createGatewayCli(gatewayOptions, { group: "Gateway" }))
+      .subCommand("gateway", createGatewayCli(gatewayOptions, { group: "Gateway" }))
       .use(help());
 
     const result = await cli.run(["gateway", "catservice", "--help"], { render: false });
@@ -2171,7 +2171,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function createGatewayTestCli(options: CliGatewayOptions) {
   return createCli({ name: "duru" })
     .use(cliGateway(options))
-    .route("gateway", createGatewayCli(options, { group: "Gateway" }));
+    .subCommand("gateway", createGatewayCli(options, { group: "Gateway" }));
 }
 
 function shellQuote(value: string): string {

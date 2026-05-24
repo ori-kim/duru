@@ -18,7 +18,7 @@ import type {
   GatewayTool,
 } from "./types";
 
-type GatewayCommandHost = Pick<CliPluginApi, "command" | "route">;
+type GatewayCommandHost = Pick<CliPluginApi, "command" | "subCommand">;
 
 export type GatewayCommandInstallOptions = {
   hidden?: boolean;
@@ -175,7 +175,7 @@ export function installGatewayCommands(
     return { removed: { target, name } };
   });
 
-  api.route("alias", aliases);
+  api.subCommand("alias", aliases);
 
   const profiles = createCli();
   const profileCommand = <TPattern extends string>(pattern: CommandPattern<TPattern>, description: string) => {
@@ -229,7 +229,7 @@ export function installGatewayCommands(
     return { target: target.name, unset: previous ?? null };
   });
 
-  api.route("profile", profiles);
+  api.subCommand("profile", profiles);
 }
 
 function styleCommand<TBuilder extends { hidden(hidden?: boolean): TBuilder; group(group: string): TBuilder }>(

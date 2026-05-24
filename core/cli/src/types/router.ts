@@ -106,7 +106,7 @@ export type Router<TRouterOptions extends Options = EmptyObject, TValues extends
   use<TChildOptions extends Options, TChildValues extends object>(
     router: Router<TChildOptions, TChildValues>,
   ): Router<MergeOptions<TRouterOptions, TChildOptions>, MergeContext<TValues, TChildValues>>;
-  route<TPath extends string, TChildOptions extends Options, TChildValues extends object>(
+  subCommand<TPath extends string, TChildOptions extends Options, TChildValues extends object>(
     path: MiddlewarePath<TPath>,
     router: Router<TChildOptions, TChildValues>,
     middleware?: readonly Middleware[],
@@ -121,6 +121,7 @@ export type Router<TRouterOptions extends Options = EmptyObject, TValues extends
   onError(
     handler: RouteErrorHandler<Record<string, unknown>, Record<string, unknown>, TValues>,
   ): Router<TRouterOptions, TValues>;
+  command(): CommandBuilder<"", TRouterOptions, EmptyObject, undefined, TValues>;
   command<TPattern extends string>(
     pattern: CommandPattern<TPattern>,
     description?: string,

@@ -15,6 +15,8 @@ export { normalizeActionResult } from "./output/index.ts";
 export { parseOptionSpec, parseOptions } from "./options/index.ts";
 export { compilePattern } from "./pattern/index.ts";
 export { context, createPlugin, isCliPlugin, option, renderer } from "./plugin/index.ts";
+export { createRouter } from "./router/index.ts";
+export type { Router } from "./types/index.ts";
 export { isValidationError, validationError } from "./result/index.ts";
 export type {
   ActionResult,

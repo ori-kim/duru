@@ -173,7 +173,7 @@ describe("public type inference", () => {
 
   test("carries app option types through explicit routes", () => {
     const registry = createCli().option("--url <url>");
-    const ext = createCli().route("registry", registry);
+    const ext = createCli().subCommand("registry", registry);
 
     registry.command("add <name>").action((ctx) => {
       const typedName: string = ctx.params.name;
@@ -182,7 +182,7 @@ describe("public type inference", () => {
     });
 
     createCli()
-      .route("ext", ext)
+      .subCommand("ext", ext)
       .command("inspect")
       .action((ctx) => {
         const typedUrl: string | undefined = ctx.options.url;
@@ -192,7 +192,7 @@ describe("public type inference", () => {
 
   test("carries child cli option types through route", () => {
     const registry = createCli().option("--url <url>");
-    const ext = createCli().route("registry", registry);
+    const ext = createCli().subCommand("registry", registry);
 
     registry.command("add <name>").action((ctx) => {
       const typedName: string = ctx.params.name;
@@ -201,7 +201,7 @@ describe("public type inference", () => {
     });
 
     createCli()
-      .route("ext", ext)
+      .subCommand("ext", ext)
       .command("inspect")
       .action((ctx) => {
         const typedUrl: string | undefined = ctx.options.url;
@@ -213,9 +213,9 @@ describe("public type inference", () => {
     const child = createCli();
 
     void (() => {
-      // @ts-expect-error route requires an explicit literal path.
-      createCli().route(child);
-      // @ts-expect-error mount was replaced by route(path, app).
+      // @ts-expect-error subCommand requires an explicit literal path.
+      createCli().subCommand(child);
+      // @ts-expect-error mount was replaced by subCommand(path, app).
       createCli().mount("child", child);
     });
   });
@@ -507,11 +507,11 @@ describe("public type inference", () => {
         return { typedName };
       });
 
-      api.route("ext", ext);
+      api.subCommand("ext", ext);
 
       void (() => {
-        // @ts-expect-error route requires an explicit literal path.
-        api.route(ext);
+        // @ts-expect-error subCommand requires an explicit literal path.
+        api.subCommand(ext);
       });
     });
   });
