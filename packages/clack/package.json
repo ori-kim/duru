@@ -1,0 +1,17 @@
+{
+  "name": "@duru/clack",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./prompt": "./src/prompt.ts",
+    "./sugar": "./src/sugar.ts"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.4.0",
+    "@duru/cli-kit": "workspace:*",
+    "@duru/renderer-clack": "workspace:*",
+    "picocolors": "^1.1.1"
+  }
+}
