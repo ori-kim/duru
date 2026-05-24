@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { createInterface } from "node:readline/promises";
+import { ClackCancelError, confirm as clackConfirm } from "@duru/clack/prompt";
 
 const REPO = "ori-kim/duru";
 
@@ -50,15 +50,16 @@ function die(message: string): never {
   throw new Error(message);
 }
 
-function defaultConfirm(message: string): Promise<boolean> {
+async function defaultConfirm(message: string): Promise<boolean> {
   if (!process.stdin.isTTY) {
     die("Refusing to update non-interactively without --yes.");
   }
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
-  return rl.question(`${message} [y/N] `).then((answer) => {
-    rl.close();
-    return answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes";
-  });
+  try {
+    return await clackConfirm({ message, initialValue: false });
+  } catch (error) {
+    if (error instanceof ClackCancelError) return false;
+    throw error;
+  }
 }
 
 export const defaultDeps: UpdateDeps = {

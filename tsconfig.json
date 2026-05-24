@@ -23,6 +23,11 @@
       "@duru/cli-gateway": ["./packages/cli-gateway/src/index.ts"],
       "@duru/completion-zsh": ["./packages/completion-zsh/src/index.ts"],
       "@duru/input-validation": ["./packages/input-validation/src/index.ts"],
+      "@duru/clack": ["./packages/clack/src/index.ts"],
+      "@duru/clack/prompt": ["./packages/clack/src/prompt.ts"],
+      "@duru/clack/sugar": ["./packages/clack/src/sugar.ts"],
+      "@duru/renderer-clack/sugar": ["./packages/renderer-clack/src/sugar.ts"],
+      "@duru/renderer-clack": ["./packages/renderer-clack/src/index.ts"],
       "@duru/renderer-json": ["./packages/renderer-json/src/index.ts"],
       "@duru/renderer-text": ["./packages/renderer-text/src/index.ts"],
       "@duru/virtual-plugins": ["./packages/virtual-plugins/src/index.ts"]

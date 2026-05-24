@@ -24,6 +24,6 @@ export type Context<
   get<TKey extends keyof TValues & string>(key: TKey): TValues[TKey] | undefined;
   set<TKey extends keyof TValues & string>(key: TKey, value: TValues[TKey]): void;
   exit<TValue>(exitCode: number, result: TValue, ok?: boolean): ExitResult<TValue>;
-  service<T>(key: string): T | undefined;
-  setService<T>(key: string, value: T): void;
+  service<T>(key: string | symbol): T | undefined;
+  setService<T>(key: string | symbol, value: T): void;
 };

@@ -14,7 +14,7 @@ export function createContext(
   argv: readonly string[],
   parsedOptions: RawOptions,
   positionals: readonly string[],
-  services = new Map<string, unknown>(),
+  services = new Map<string | symbol, unknown>(),
   eventSink?: ContextEventSink,
 ): Context {
   return createBaseContext(argv, parsedOptions, positionals, services, eventSink);
@@ -22,7 +22,7 @@ export function createContext(
 
 export function createEmptyContext(
   argv: readonly string[],
-  services = new Map<string, unknown>(),
+  services = new Map<string | symbol, unknown>(),
   eventSink?: ContextEventSink,
 ): Context {
   return createBaseContext(argv, {}, [], services, eventSink);
@@ -32,7 +32,7 @@ function createBaseContext(
   argv: readonly string[],
   parsedOptions: RawOptions,
   positionals: readonly string[],
-  services: Map<string, unknown>,
+  services: Map<string | symbol, unknown>,
   eventSink?: ContextEventSink,
 ): Context {
   const events: CliEventRecord[] = [];
@@ -67,10 +67,10 @@ function createBaseContext(
     exit(exitCode, result, ok) {
       return exit(exitCode, result, ok);
     },
-    service<T>(key: string): T | undefined {
+    service<T>(key: string | symbol): T | undefined {
       return services.get(key) as T | undefined;
     },
-    setService<T>(key: string, value: T): void {
+    setService<T>(key: string | symbol, value: T): void {
       services.set(key, value);
     },
   };
