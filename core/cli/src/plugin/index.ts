@@ -11,7 +11,7 @@ import type {
   Renderer,
 } from "../types/index.ts";
 
-const pluginTag = Symbol("duru.plugin");
+const pluginTag = Symbol.for("duru.plugin");
 
 export function createPlugin<TOptions extends Options = EmptyObject, TValues extends object = EmptyObject>(
   install: (api: CliPluginApi) => void | Promise<void>,

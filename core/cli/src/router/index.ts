@@ -35,7 +35,7 @@ import type {
 type Action = (ctx: Context) => Awaitable<ActionResult>;
 type ErrorBoundary = RouteErrorHandler;
 type RouteRenderer = RoutePresenter<ActionResult>;
-const routerTag = Symbol("duru.router");
+const routerTag = Symbol.for("duru.router");
 const handledContexts = new WeakSet<Context>();
 const routeResults = new WeakMap<Context, RouteResultState>();
 const scopedRoutePatterns = new WeakMap<Context, readonly string[]>();
