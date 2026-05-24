@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@duru/cli-kit": "workspace:*"
+    "@duru/cli-kit": "workspace:*",
+    "yaml": "^2.9.0"
   }
 }
