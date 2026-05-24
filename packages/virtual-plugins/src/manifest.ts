@@ -6,7 +6,6 @@ const MANIFEST_FILE = "plugins.yml";
 
 export type ContributesSpec = {
   commands?: string[];
-  /** true이면 argv 매칭 없이 항상 load (capture/hook 계열 플러그인용) */
   eager?: boolean;
 };
 
@@ -36,9 +35,7 @@ export type ResolvedPlugin = {
 };
 
 export type LoadPluginsOptions = {
-  /** DURU_HOME 루트. 미지정 시 process.env.DURU_HOME 사용. */
   home?: string;
-  /** manifest 파일 경로 직접 지정 (테스트/override용). */
   manifestPath?: string;
 };
 

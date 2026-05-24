@@ -30,12 +30,6 @@ function serializeResult(value: unknown): string {
   } catch { return String(value); }
 }
 
-/**
- * context-mode 플러그인 — DURU_HOME/context에서 독립적으로 의존성을 구성한다.
- *
- * contributes: { commands: [context, ctx], eager: true }
- * eager: true → 캡처 미들웨어 때문에 항상 로드
- */
 export default virtualPlugin(async (cli) => {
   const home = createDuruFileHome({ env: process.env });
   const store = createContextStore(home.scope("context"));

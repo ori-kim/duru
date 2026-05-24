@@ -14,7 +14,7 @@ import type {
 const pluginTag = Symbol("duru.plugin");
 
 export function createPlugin<TOptions extends Options = EmptyObject, TValues extends object = EmptyObject>(
-  install: (api: CliPluginApi) => void,
+  install: (api: CliPluginApi) => void | Promise<void>,
 ): CliPlugin<TOptions, TValues> {
   return { [pluginTag]: true, install } as unknown as CliPlugin<TOptions, TValues>;
 }

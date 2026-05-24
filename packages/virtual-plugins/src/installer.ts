@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
-import type { Cli } from "@duru/cli-kit";
+import type { CliPlugin } from "@duru/cli-kit";
+import { createPlugin } from "@duru/cli-kit";
 import { type LoadPluginsOptions, type ResolvedPlugin, loadPluginManifest } from "./manifest.ts";
 import { isVirtualPlugin } from "./virtual-plugin.ts";
 
@@ -10,9 +11,7 @@ export type InstalledPlugin = {
 };
 
 export type PluginLoader = {
-  /** Phase 1에서 수집한 enabled plugin 목록 (import 없음) */
   phase1Plugins: InstalledPlugin[];
-  /** Phase 1 기준 전체 declared commands set (argv 라우팅용) */
   phase1Commands: Set<string>;
 };
 
@@ -38,22 +37,13 @@ function shouldInit(plugin: ResolvedPlugin, argv: string[] | undefined): boolean
   if (!argv) return true;
   if (plugin.contributes.eager) return true;
   const verb = extractVerb(argv);
-  // verb 없이 --help/-h 플래그만 있거나 argv가 비어 있으면 전체 도움말용으로 모두 로드
-  if (!verb) {
-    return argv.length === 0 || argv.includes("--help") || argv.includes("-h");
-  }
+  if (!verb) return argv.length === 0 || argv.includes("--help") || argv.includes("-h");
   if (METADATA_VERBS.has(verb)) return true;
   return (plugin.contributes.commands ?? []).includes(verb);
 }
 
-/**
- * DURU_HOME/plugins/plugins.yml을 읽어 플러그인을 로드한다.
- *
- * Phase 1: manifest 파싱 + contributes 인덱싱 (import 없음)
- * Phase 2: argv verb가 contributes.commands에 매칭되거나 eager=true일 때만 import + install
- */
 export async function installVirtualPlugins(
-  cli: Cli,
+  cli: Parameters<CliPlugin["install"]>[0]["cli"],
   options: LoadPluginsOptions = {},
   argv?: string[],
 ): Promise<PluginLoader> {
@@ -62,23 +52,22 @@ export async function installVirtualPlugins(
   const phase1Commands = new Set<string>();
 
   for (const plugin of plugins) {
-    if (!plugin.enabled) continue;
-    for (const cmd of plugin.contributes.commands ?? []) { phase1Commands.add(cmd); }
-    const installed: InstalledPlugin = {
-      name: plugin.name,
-      entryAbsPath: plugin.entryAbsPath,
-      initialized: false,
-    };
+    for (const cmd of plugin.contributes.commands ?? []) phase1Commands.add(cmd);
+    const installed: InstalledPlugin = { name: plugin.name, entryAbsPath: plugin.entryAbsPath, initialized: false };
     phase1Plugins.push(installed);
     if (!shouldInit(plugin, argv)) continue;
     const mod = (await import(pathToFileURL(plugin.entryAbsPath).href)) as { default?: unknown };
     const vp = mod.default;
     if (!isVirtualPlugin(vp)) {
-      process.stderr.write(`duru: warning: plugin "${plugin.name}" (${plugin.entryAbsPath}) must have a default export from virtualPlugin(...)\n`);
+      process.stderr.write(`duru: warning: plugin "${plugin.name}" must export default from virtualPlugin(...)\n`);
       continue;
     }
     await vp.install(cli);
     installed.initialized = true;
   }
   return { phase1Plugins, phase1Commands };
+}
+
+export function virtualPlugins(options: LoadPluginsOptions = {}, argv?: string[]): CliPlugin {
+  return createPlugin(async (api) => { await installVirtualPlugins(api.cli, options, argv); });
 }
