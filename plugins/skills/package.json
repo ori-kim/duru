@@ -1,0 +1,15 @@
+{
+  "name": "@duru/plugin-skills",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@duru/file-store": "workspace:*",
+    "@duru/virtual-plugins": "workspace:*",
+    "@duru/cli-kit": "workspace:*",
+    "@duru/qmd": "workspace:*"
+  }
+}
