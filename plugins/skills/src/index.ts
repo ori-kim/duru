@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { join } from "node:path";
 import { createRouter } from "@duru/cli-kit";
 import { virtualPlugin } from "@duru/virtual-plugins";
 import { createSkillsStore } from "./store.ts";
@@ -7,18 +6,13 @@ import type { SkillsStore } from "./store.ts";
 import type { SkillMeta, SkillRecord } from "./types.ts";
 import { detectAgents, importFromAgent, exportToAgent } from "./agent.ts";
 import type { AgentName } from "./agent.ts";
-import {
-  isQmdAvailable,
-  embed,
-  search,
-  status,
-  QMD_INSTALL_MSG,
-} from "./qmd.ts";
+import { COLLECTION, QMD_INSTALL_MSG } from "./qmd.ts";
+import type { QmdClient } from "./qmd.ts";
 
 export { createSkillsStore };
-export type { SkillMeta, SkillRecord, SkillsStore };
+export type { SkillMeta, SkillRecord, SkillsStore, QmdClient };
 
-export function skillsPlugin(store: SkillsStore) {
+export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
   return virtualPlugin(async (cli) => {
     const skills = createRouter();
 
@@ -177,10 +171,11 @@ export function skillsPlugin(store: SkillsStore) {
       .group("Skills")
       .meta({ description: "Re-index skills into qmd collection" })
       .action(async (ctx) => {
-        if (!(await isQmdAvailable())) {
+        if (!(await qmd.isAvailable())) {
           return ctx.exit(1, { error: { message: QMD_INSTALL_MSG } });
         }
-        await embed(store.skillsDir);
+        await qmd.ensureCollection(COLLECTION, store.skillsDir);
+        await qmd.embed(COLLECTION);
         process.stdout.write("인덱싱 완료\n");
         return ctx.exit(0, { message: "인덱싱 완료" });
       });
@@ -192,23 +187,21 @@ export function skillsPlugin(store: SkillsStore) {
       .meta({ description: "Search skills using qmd semantic search" })
       .option("--tag <tag>", "Filter results by tag")
       .action(async (ctx) => {
-        if (!(await isQmdAvailable())) {
+        if (!(await qmd.isAvailable())) {
           return ctx.exit(1, { error: { message: QMD_INSTALL_MSG } });
         }
         const query = (ctx.params as { query: string }).query;
         const tag = (ctx.options as { tag?: string }).tag;
 
-        let results = await search(query, { tag });
+        let results = await qmd.search(query, COLLECTION);
 
         // 태그 필터: store에서 태그 정보 가져와 클라이언트 사이드 필터링
         if (tag) {
-          const taggedNames = new Set<string>();
-          const records = await store.list();
-          for (const record of records) {
-            if (record.meta.tags.includes(tag)) {
-              taggedNames.add(record.meta.name);
-            }
-          }
+          const taggedNames = new Set(
+            (await store.list())
+              .filter((r) => r.meta.tags.includes(tag))
+              .map((r) => r.meta.name),
+          );
           results = results.filter((r) => taggedNames.has(r.name));
         }
 
@@ -221,10 +214,10 @@ export function skillsPlugin(store: SkillsStore) {
       .group("Skills")
       .meta({ description: "Show qmd indexing status" })
       .action(async (ctx) => {
-        if (!(await isQmdAvailable())) {
+        if (!(await qmd.isAvailable())) {
           return ctx.exit(1, { error: { message: QMD_INSTALL_MSG } });
         }
-        const raw = await status();
+        const raw = await qmd.status();
         process.stdout.write(raw + "\n");
         return ctx.exit(0, null);
       });

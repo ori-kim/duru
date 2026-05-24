@@ -9,6 +9,7 @@
   "dependencies": {
     "@duru/file-store": "workspace:*",
     "@duru/virtual-plugins": "workspace:*",
-    "@duru/cli-kit": "workspace:*"
+    "@duru/cli-kit": "workspace:*",
+    "@duru/qmd": "workspace:*"
   }
 }
