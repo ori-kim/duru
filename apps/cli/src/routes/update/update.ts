@@ -98,10 +98,24 @@ export function assetNameFor(platform: NodeJS.Platform, arch: string): string {
   die(`Unsupported architecture "${arch}".`);
 }
 
+function findInstalledDuru(): string | undefined {
+  const pathDirs = (process.env.PATH ?? "").split(":");
+  for (const dir of pathDirs) {
+    if (!dir || dir.includes("node_modules")) continue;
+    const candidate = join(dir, "duru");
+    if (existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 export function selfUpdatePath(execPath: string): string {
   const base = basename(execPath);
   if (base === "bun" || base === "node") {
-    die("duru update requires a compiled duru binary. Dev installs should be updated via git.");
+    const fallback = findInstalledDuru();
+    if (fallback) return fallback;
+    die(
+      "duru update requires an installed duru binary on PATH. Install via the duru install script or set up ~/.local/bin/duru.",
+    );
   }
   if (!base.startsWith("duru")) {
     die(`Refusing to replace non-duru executable: ${execPath}`);
