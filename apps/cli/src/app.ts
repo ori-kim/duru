@@ -8,6 +8,7 @@ import { virtualPlugins } from "@duru/virtual-plugins";
 import { createAppCompletionPlugin } from "./completion/index.ts";
 import { createAppGateway } from "./gateway/index.ts";
 import { outputFilter } from "./output-filter.ts";
+import { chatCli } from "./routes/chat/index.ts";
 import { updateCli } from "./routes/update/index.ts";
 import { version } from "./version.ts";
 
@@ -36,6 +37,7 @@ async function createAppCliRuntime(argv?: string[]) {
     .use(gateway.plugin)
     .subCommand(gateway.routeName, gateway.cli)
     .subCommand("update", updateCli)
+    .subCommand("chat", chatCli)
     .subCommand("plugin", pluginManageCli)
     .use(createAppCompletionPlugin())
     .use(help())
