@@ -23,7 +23,7 @@ export type Cli<TGlobalOptions extends Options = EmptyObject, TValues extends ob
   use<TAddedOptions extends Options, TAddedValues extends object>(
     plugin: CliPlugin<TAddedOptions, TAddedValues>,
   ): Cli<MergeOptions<TGlobalOptions, TAddedOptions>, MergeContext<TValues, TAddedValues>>;
-  route<TPath extends string, TAddedOptions extends Options, TAddedValues extends object>(
+  subCommand<TPath extends string, TAddedOptions extends Options, TAddedValues extends object>(
     path: MiddlewarePath<TPath>,
     app: Cli<TAddedOptions, TAddedValues>,
   ): Cli<MergeOptions<TGlobalOptions, TAddedOptions>, MergeContext<TValues, TAddedValues>>;
@@ -42,6 +42,7 @@ export type Cli<TGlobalOptions extends Options = EmptyObject, TValues extends ob
   ): Cli<TGlobalOptions, TValues>;
   notFound(handler: CliEventHandler<"notFound", TGlobalOptions, TValues>): Cli<TGlobalOptions, TValues>;
   emit<TName extends CliEventName>(name: TName, payload?: CliEventPayload<TName>): Promise<void>;
+  command(): CommandBuilder<"", TGlobalOptions, EmptyObject, undefined, TValues>;
   command<TPattern extends string>(
     pattern: CommandPattern<TPattern>,
     description?: string,

@@ -26,7 +26,7 @@ export type CliPlugin<TOptions extends Options = EmptyObject, TValues extends ob
 
 export type CliPluginApi = {
   command: Cli["command"];
-  route: Cli["route"];
+  subCommand: Cli["subCommand"];
   option(definition: OptionDefinition): void;
   options(): readonly OptionDefinition[];
   optionFallback(provider: OptionFallbackProvider): void;

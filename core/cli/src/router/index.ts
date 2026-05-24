@@ -162,7 +162,7 @@ export function createRouter<TRouterOptions extends Options = EmptyObject, TValu
       state.middleware.push({ kind: "middleware", middleware: item as Middleware });
       return router as never;
     },
-    route(
+    subCommand(
       path: string,
       child: Router<Options, object>,
       middleware?: readonly Middleware[],
@@ -184,14 +184,14 @@ export function createRouter<TRouterOptions extends Options = EmptyObject, TValu
       return router as never;
     },
     command<TPattern extends string>(
-      pattern: TPattern,
+      pattern?: TPattern,
       descriptionOrFeature?: string | CommandInputFeature | CommandConfig<object, object>,
       maybeDescription?: string | CommandMetadata,
     ) {
-      validateCommandPattern(pattern);
+      if (pattern !== undefined) validateCommandPattern(pattern);
       const config = normalizeCommandConfig(descriptionOrFeature, maybeDescription);
       const route: Route = {
-        pattern: compilePattern(pattern),
+        pattern: compilePattern(pattern ?? ""),
         description: config.description,
         metadata: emptyCommandMetadata(),
         aliases: [],

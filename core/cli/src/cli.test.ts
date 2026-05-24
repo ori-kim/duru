@@ -399,7 +399,7 @@ describe("createCli", () => {
     const cli = createCli({ name: "duru" })
       .use(helpTextAdapter())
       .use(renderer(testRenderer()))
-      .route("gateway", gateway)
+      .subCommand("gateway", gateway)
       .use(targetHelpRoute)
       .use(help());
 
@@ -422,7 +422,7 @@ describe("createCli", () => {
       .use(helpTextAdapter())
       .use(renderer(testRenderer()))
       .use(help())
-      .route("registry", registry);
+      .subCommand("registry", registry);
 
     const result = await cli.run(["registry", "add", "--help"]);
 
@@ -439,7 +439,7 @@ describe("createCli", () => {
       .use(helpTextAdapter())
       .use(renderer(testRenderer()))
       .use(help())
-      .route("registry", registry);
+      .subCommand("registry", registry);
 
     const result = await cli.run(["registry", "add", "--help"]);
 
@@ -457,7 +457,7 @@ describe("createCli", () => {
       .use(helpTextAdapter())
       .use(renderer(testRenderer()))
       .use(help())
-      .route("run", app);
+      .subCommand("run", app);
 
     const result = await cli.run(["run", "run", "--help"]);
 
@@ -574,7 +574,7 @@ describe("createCli", () => {
         next();
       });
     });
-    const cli = createCli().route("tools", app).use(auth);
+    const cli = createCli().subCommand("tools", app).use(auth);
 
     const result = await cli.run(["tools", "sync"], { render: false });
 
@@ -642,7 +642,7 @@ describe("createCli", () => {
       .command("sync")
       .alias("s")
       .action(() => "synced");
-    const cli = createCli().route("tools", app);
+    const cli = createCli().subCommand("tools", app);
 
     const result = await cli.run(["tools", "s"], { render: false });
 
@@ -666,7 +666,7 @@ describe("createCli", () => {
     ext.command("list").action(() => ({ items: ["test-service"] }));
 
     const plugin = createPlugin((api) => {
-      api.route("ext", ext);
+      api.subCommand("ext", ext);
     });
     const cli = createCli({ name: "duru" }).use(plugin).use(help());
 
@@ -685,12 +685,12 @@ describe("createCli", () => {
   test("combines usage output from routed child apps", async () => {
     const registry = createCli();
     registry.command("add <name>", "Add registry").action(() => undefined);
-    const ext = createCli().route("registry", registry);
+    const ext = createCli().subCommand("registry", registry);
     const cli = createCli({ name: "duru" })
       .use(helpTextAdapter())
       .use(renderer(testRenderer()))
       .use(help())
-      .route("ext", ext);
+      .subCommand("ext", ext);
 
     const result = await cli.run(["--help"]);
 
@@ -701,7 +701,7 @@ describe("createCli", () => {
   test("routes standalone child apps through route", async () => {
     const app = createCli().option("--json");
     app.command("inspect", "Inspect app").action((ctx) => ({ json: ctx.options.json }));
-    const cli = createCli({ name: "duru" }).use(renderer(testRenderer())).route("tools", app);
+    const cli = createCli({ name: "duru" }).use(renderer(testRenderer())).subCommand("tools", app);
 
     const result = await cli.run(["tools", "inspect", "--json"]);
 
@@ -712,7 +712,7 @@ describe("createCli", () => {
   test("routes child apps as command namespaces", async () => {
     const ext = createCli();
     ext.command("add <name>", "Add extension").action((ctx) => ({ added: ctx.params.name }));
-    const cli = createCli({ name: "duru" }).use(renderer(testRenderer())).route("ext", ext);
+    const cli = createCli({ name: "duru" }).use(renderer(testRenderer())).subCommand("ext", ext);
 
     const result = await cli.run(["ext", "add", "example"]);
 
@@ -723,7 +723,7 @@ describe("createCli", () => {
   test("routes child apps at explicit prefixes independent of app names", async () => {
     const target = createCli();
     target.command("tools", "List tools").action((ctx) => ({ pattern: ctx.request.pattern }));
-    const cli = createCli({ name: "duru" }).use(renderer(testRenderer())).route("target", target);
+    const cli = createCli({ name: "duru" }).use(renderer(testRenderer())).subCommand("target", target);
 
     const mounted = await cli.run(["target", "tools"]);
     const named = await cli.run(["target-tools", "tools"], { render: false });
@@ -736,7 +736,7 @@ describe("createCli", () => {
   test("routes child cli apps at explicit prefixes", async () => {
     const target = createCli();
     target.command("tools").action((ctx) => ({ pattern: ctx.request.pattern }));
-    const cli = createCli({ name: "duru" }).route("target", target);
+    const cli = createCli({ name: "duru" }).subCommand("target", target);
 
     const result = await cli.run(["target", "tools"], { render: false });
 
@@ -747,8 +747,8 @@ describe("createCli", () => {
   test("routes nested child cli apps at explicit prefixes", async () => {
     const registry = createCli();
     registry.command("add <name>").action((ctx) => ({ pattern: ctx.request.pattern, name: ctx.params.name }));
-    const parent = createCli().route("registry", registry);
-    const cli = createCli({ name: "duru" }).route("ext", parent);
+    const parent = createCli().subCommand("registry", registry);
+    const cli = createCli({ name: "duru" }).subCommand("ext", parent);
 
     const result = await cli.run(["ext", "registry", "add", "example"], { render: false });
 
@@ -759,8 +759,8 @@ describe("createCli", () => {
   test("routes child apps inside child apps at explicit prefixes", async () => {
     const registry = createCli();
     registry.command("add <name>").action((ctx) => ({ pattern: ctx.request.pattern, name: ctx.params.name }));
-    const parent = createCli().route("registry", registry);
-    const cli = createCli({ name: "duru" }).route("ext", parent);
+    const parent = createCli().subCommand("registry", registry);
+    const cli = createCli({ name: "duru" }).subCommand("ext", parent);
 
     const result = await cli.run(["ext", "registry", "add", "example"], { render: false });
 
@@ -775,7 +775,7 @@ describe("createCli", () => {
       .use(helpTextAdapter())
       .use(renderer(testRenderer()))
       .use(help())
-      .route("target", target);
+      .subCommand("target", target);
 
     const result = await cli.run(["--help"]);
 
@@ -796,7 +796,7 @@ describe("createCli", () => {
         await next();
         calls.push("scoped:after");
       })
-      .route("target", target);
+      .subCommand("target", target);
 
     await cli.run(["target", "tools"], { render: false });
 
@@ -807,11 +807,11 @@ describe("createCli", () => {
     const app = createCli();
 
     // @ts-expect-error invalid literal route path
-    expect(() => createCli().route("", app)).toThrow("Route path cannot be empty");
+    expect(() => createCli().subCommand("", app)).toThrow("Route path cannot be empty");
     // @ts-expect-error invalid literal route path
-    expect(() => createCli().route("<tenant>", app)).toThrow("Route path must contain only literal tokens: <tenant>");
+    expect(() => createCli().subCommand("<tenant>", app)).toThrow("Route path must contain only literal tokens: <tenant>");
     // @ts-expect-error invalid literal route path
-    expect(() => createCli().route("target [scope]", app)).toThrow(
+    expect(() => createCli().subCommand("target [scope]", app)).toThrow(
       "Route path must contain only literal tokens: [scope]",
     );
   });
@@ -821,8 +821,8 @@ describe("createCli", () => {
     registry.command("add <name>", "Add registry").action((ctx) => {
       return { name: ctx.params.name, pattern: ctx.request.pattern, url: ctx.options.url };
     });
-    const ext = createCli().route("registry", registry);
-    const cli = createCli({ name: "duru" }).use(renderer(testRenderer())).route("ext", ext);
+    const ext = createCli().subCommand("registry", registry);
+    const cli = createCli({ name: "duru" }).use(renderer(testRenderer())).subCommand("ext", ext);
 
     const result = await cli.run(["ext", "registry", "add", "example", "--url", "https://api.example.com"]);
 
@@ -852,8 +852,8 @@ describe("createCli", () => {
       await next();
       calls.push("parent:after");
     });
-    parent.route("child", child);
-    const cli = createCli({ name: "duru" }).route("parent", parent);
+    parent.subCommand("child", child);
+    const cli = createCli({ name: "duru" }).subCommand("parent", parent);
 
     await cli.run(["parent", "child", "run"], { render: false });
 
@@ -864,8 +864,8 @@ describe("createCli", () => {
     const registry = createCli().option("--url <url>");
     registry.command("add <name>").action(() => undefined);
 
-    const ext = createCli().route("registry", registry);
-    const cli = createCli({ name: "duru" }).route("ext", ext);
+    const ext = createCli().subCommand("registry", registry);
+    const cli = createCli({ name: "duru" }).subCommand("ext", ext);
     cli.command("inspect").action((ctx) => ({ url: ctx.options.url }));
 
     const result = await cli.run(["inspect", "--url", "https://api.example.com"], { render: false });
@@ -883,7 +883,7 @@ describe("createCli", () => {
     });
 
     const cli = createCli({ name: "duru" })
-      .route("ext", ext)
+      .subCommand("ext", ext)
       .use(async (_ctx, next) => {
         calls.push("after-router:before");
         await next();
@@ -909,7 +909,7 @@ describe("createCli", () => {
         await next();
         calls.push("scoped:after");
       })
-      .route("ext", ext);
+      .subCommand("ext", ext);
 
     cli.command("other").action(() => {
       calls.push("other");
@@ -939,7 +939,7 @@ describe("createCli", () => {
         await next();
         calls.push("scoped:after");
       })
-      .route("ext", ext);
+      .subCommand("ext", ext);
 
     await cli.run(["--mode", "fast", "ext", "run"], { render: false });
 
@@ -969,8 +969,8 @@ describe("createCli", () => {
         await next();
         calls.push("scoped:after");
       })
-      .route("other", other)
-      .route("target", target);
+      .subCommand("other", other)
+      .subCommand("target", target);
 
     await cli.run(["--mode", "fast", "target", "run"], { render: false });
 
@@ -1046,7 +1046,7 @@ describe("createCli", () => {
         await next();
         calls.push("scoped:after");
       })
-      .route("target", target);
+      .subCommand("target", target);
     cli.command("run <name>").action((ctx) => {
       calls.push(`param:${ctx.params.name}`);
       return undefined;
@@ -1071,7 +1071,7 @@ describe("createCli", () => {
         await next();
         calls.push("scoped:after");
       })
-      .route("tools", app);
+      .subCommand("tools", app);
     cli.command("target").action(() => {
       calls.push("literal");
       return undefined;
@@ -1101,13 +1101,13 @@ describe("createCli", () => {
       await next();
       calls.push("scoped:after");
     });
-    ext.route("registry", registry);
+    ext.subCommand("registry", registry);
     ext.command("list").action(() => {
       calls.push("list");
       return undefined;
     });
 
-    const cli = createCli({ name: "duru" }).route("ext", ext);
+    const cli = createCli({ name: "duru" }).subCommand("ext", ext);
 
     await cli.run(["ext", "registry", "add", "example"], { render: false });
     await cli.run(["ext", "list"], { render: false });
@@ -1145,9 +1145,9 @@ describe("createCli", () => {
       await next();
       calls.push("scoped:after");
     });
-    ext.route("registry", registry);
+    ext.subCommand("registry", registry);
 
-    const cli = createCli({ name: "duru" }).route("ext", ext);
+    const cli = createCli({ name: "duru" }).subCommand("ext", ext);
 
     await cli.run(["ext", "registry", "add", "example"], { render: false });
     await cli.run(["ext", "registry", "list"], { render: false });
@@ -1186,7 +1186,7 @@ describe("createCli", () => {
       return undefined;
     });
 
-    const cli = createCli({ name: "duru" }).route("tools", app);
+    const cli = createCli({ name: "duru" }).subCommand("tools", app);
 
     await cli.run(["tools", "run"], { render: false });
     await cli.run(["tools", "skip"], { render: false });
@@ -1648,9 +1648,9 @@ describe("createCli", () => {
     child.command("boom").action(() => {
       throw new Error("failed");
     });
-    parent.route("child", child);
+    parent.subCommand("child", child);
 
-    const result = await createCli().route("parent", parent).run(["parent", "child", "boom"], { render: false });
+    const result = await createCli().subCommand("parent", parent).run(["parent", "child", "boom"], { render: false });
 
     expect(result.ok).toBe(false);
     expect(result.exitCode).toBe(5);
@@ -1673,7 +1673,7 @@ describe("createCli", () => {
         throw new Error("child middleware failed");
       });
     child.command("run").action(() => ({ reached: true }));
-    parent.route("child", child);
+    parent.subCommand("child", child);
 
     const result = await parent.run(["child", "run"], { render: false });
 
@@ -1696,7 +1696,7 @@ describe("createCli", () => {
     app.command("boom").action(() => {
       throw new Error("failed");
     });
-    const cli = createCli().route("app", app);
+    const cli = createCli().subCommand("app", app);
     cli.catch((ctx) => {
       calls.push("root");
       return ctx.exit(9, { message: (ctx.error as Error).message });
@@ -1806,9 +1806,9 @@ describe("createCli", () => {
         return { handled: "command" };
       })
       .action(() => ({ reached: true }));
-    parent.route("child", child);
+    parent.subCommand("child", child);
 
-    const result = await createCli().route("parent", parent).run(["parent", "child", "run"], { render: false });
+    const result = await createCli().subCommand("parent", parent).run(["parent", "child", "run"], { render: false });
 
     expect(result.ok).toBe(false);
     expect(result.exitCode).toBe(5);
@@ -1839,9 +1839,9 @@ describe("createCli", () => {
         throw new Error("child middleware failed");
       });
     child.command("run").action(() => ({ reached: true }));
-    parent.route("child", child);
+    parent.subCommand("child", child);
 
-    const result = await createCli().route("parent", parent).run(["parent", "child", "run"], { render: false });
+    const result = await createCli().subCommand("parent", parent).run(["parent", "child", "run"], { render: false });
 
     expect(result.ok).toBe(false);
     expect(result.exitCode).toBe(5);

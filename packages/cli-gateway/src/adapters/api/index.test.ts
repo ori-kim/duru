@@ -106,7 +106,7 @@ describe("@duru/cli-gateway api adapter", () => {
     };
     const cli = createCli({ name: "duru" })
       .use(cliGateway(gatewayOptions))
-      .route("gateway", createGatewayCli(gatewayOptions, { group: "Gateway" }));
+      .subCommand("gateway", createGatewayCli(gatewayOptions, { group: "Gateway" }));
 
     const result = await cli.run(["gateway", "refresh", "notes-api"], { render: false });
 
