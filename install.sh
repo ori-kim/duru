@@ -69,20 +69,7 @@ echo "  export PATH=\"$BIND_DIR:\$PATH\""
 echo ""
 echo "Then: duru gateway bind gh gh   # 'gh' will now route through duru"
 
-# Optional: Agents skill (via skills.sh)
-echo ""
-printf "Install Agents skill via skills.sh? (y/N) "
-read INSTALL_SKILL </dev/tty || INSTALL_SKILL="n"
-case "$INSTALL_SKILL" in
-  [yY]|[yY][eE][sS])
-    npx skills add ori-kim/duru </dev/tty
-    ;;
-  *)
-    echo "Skipped. Run 'npx skills add ori-kim/duru' to install later."
-    ;;
-esac
-
-# Optional: zsh completion + autosuggestions
+# zsh completion + autosuggestions
 echo ""
 printf "Configure zsh completion in ~/.zshrc? (y/N) "
 read SETUP_ZSH </dev/tty || SETUP_ZSH="n"
@@ -104,5 +91,31 @@ case "$SETUP_ZSH" in
   *)
     echo "Skipped. Add to ~/.zshrc to enable:"
     echo '  eval "$(duru completion zsh)"'
+    ;;
+esac
+
+# Built-in skills (via duru skills add)
+SKILLS="duru-gateway"
+echo ""
+printf "Install built-in skills (%s)? (y/N) " "$SKILLS"
+read INSTALL_SKILLS </dev/tty || INSTALL_SKILLS="n"
+case "$INSTALL_SKILLS" in
+  [yY]|[yY][eE][sS])
+    SKILLS_RAW="https://raw.githubusercontent.com/$REPO/main/skills"
+    TMP_SKILLS="$(mktemp -d)"
+    for skill in $SKILLS; do
+      echo "Installing skill: $skill"
+      mkdir -p "$TMP_SKILLS/$skill"
+      if curl -fsSL "$SKILLS_RAW/$skill/SKILL.md" -o "$TMP_SKILLS/$skill/SKILL.md"; then
+        "$INSTALL_DIR/duru" skills add "$TMP_SKILLS/$skill"
+      else
+        echo "warn: failed to fetch $skill, skipped" >&2
+      fi
+    done
+    rm -rf "$TMP_SKILLS"
+    ;;
+  *)
+    echo "Skipped. Run later:"
+    echo "  curl -fsSL https://raw.githubusercontent.com/$REPO/main/skills/skills.sh | bash"
     ;;
 esac
