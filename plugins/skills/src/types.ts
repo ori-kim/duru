@@ -1,7 +1,9 @@
 // SKILL.md frontmatter
+// 필수: name (에이전트 식별자)
+// 선택: description (에이전트 트리거 판단용), tags, allowedTools
 export type SkillMeta = {
   name: string;
-  description: string;
+  description?: string;
   tags: string[];
   allowedTools?: string[];
 };
