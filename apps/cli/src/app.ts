@@ -3,6 +3,7 @@ import { env } from "@duru/env";
 import { createDuruFileHome } from "@duru/file-store";
 import { contextModePlugin, createContextStore } from "@duru/plugin-context-mode";
 import { pluginManageCli } from "@duru/plugin-manage";
+import { skillsPlugin, createSkillsStore } from "@duru/plugin-skills";
 import { jsonRendererPlugin } from "@duru/renderer-json";
 import { textRendererPlugin } from "@duru/renderer-text";
 import { createAppCompletionPlugin } from "./completion/index.ts";
@@ -25,6 +26,7 @@ async function createAppCliRuntime() {
   const fileHome = createDuruFileHome({ env: process.env });
   const appConfig = await readAppConfig(fileHome.store());
   const contextStore = createContextStore(fileHome.scope("context"));
+  const skillsStore = createSkillsStore(fileHome.scope("skills"));
 
   const gateway = await createAppGateway({ env: process.env });
   const cli = createCli({
@@ -79,6 +81,7 @@ async function createAppCliRuntime() {
     .use(help());
 
   await contextModePlugin(contextStore).install(cli);
+  await skillsPlugin(skillsStore).install(cli);
 
   cli.notFound((ctx) => {
     return ctx.exit(1, {

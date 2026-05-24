@@ -14,7 +14,7 @@ export type SkillsStore = {
 function parseFrontmatter(content: string): Partial<SkillMeta> {
   try {
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (!match) return {};
+    if (!match || !match[1]) return {};
 
     const yaml = match[1];
     const result: Partial<SkillMeta> = {};

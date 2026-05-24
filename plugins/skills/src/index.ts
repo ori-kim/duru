@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { createRouter } from "@duru/cli-kit";
 import { virtualPlugin } from "@duru/virtual-plugins";
 import { createSkillsStore } from "./store.ts";
 import type { SkillsStore } from "./store.ts";
@@ -19,9 +20,11 @@ export type { SkillMeta, SkillRecord, SkillsStore };
 
 export function skillsPlugin(store: SkillsStore) {
   return virtualPlugin(async (cli) => {
+    const skills = createRouter();
+
     // duru skills → list (기본)
-    cli
-      .command("skills")
+    skills
+      .command()
       .group("Skills")
       .meta({ description: "List available skills" })
       .action(async (ctx) => {
@@ -32,8 +35,8 @@ export function skillsPlugin(store: SkillsStore) {
       });
 
     // duru skills list [--tag <tag>]
-    cli
-      .command("skills list")
+    skills
+      .command("list")
       .group("Skills")
       .meta({ description: "List available skills" })
       .option("--tag <tag>", "Filter by tag")
@@ -49,8 +52,8 @@ export function skillsPlugin(store: SkillsStore) {
       });
 
     // duru skills show <name>
-    cli
-      .command("skills show <name>")
+    skills
+      .command("show <name>")
       .group("Skills")
       .meta({ description: "Show SKILL.md content for a skill" })
       .action(async (ctx) => {
@@ -67,8 +70,8 @@ export function skillsPlugin(store: SkillsStore) {
       });
 
     // duru skills add <path>
-    cli
-      .command("skills add <path>")
+    skills
+      .command("add <path>")
       .group("Skills")
       .meta({ description: "Install a skill from a local directory or SKILL.md path" })
       .action(async (ctx) => {
@@ -79,8 +82,8 @@ export function skillsPlugin(store: SkillsStore) {
       });
 
     // duru skills delete <name>
-    cli
-      .command("skills delete <name>")
+    skills
+      .command("delete <name>")
       .group("Skills")
       .meta({ description: "Remove an installed skill" })
       .action(async (ctx) => {
@@ -91,8 +94,8 @@ export function skillsPlugin(store: SkillsStore) {
       });
 
     // duru skills edit <name>
-    cli
-      .command("skills edit <name>")
+    skills
+      .command("edit <name>")
       .group("Skills")
       .meta({ description: "Edit a skill's SKILL.md in $EDITOR" })
       .action(async (ctx) => {
@@ -117,8 +120,8 @@ export function skillsPlugin(store: SkillsStore) {
       });
 
     // duru skills import [name] [--from claude|gemini|codex]
-    cli
-      .command("skills import [name]")
+    skills
+      .command("import [name]")
       .group("Skills")
       .meta({ description: "Import skills from agent skill directories into DURU_HOME" })
       .option("--from <agent>", "Source agent (claude, gemini, codex). Defaults to all detected agents.")
@@ -143,8 +146,8 @@ export function skillsPlugin(store: SkillsStore) {
       });
 
     // duru skills export [name] [--to claude|gemini|codex]
-    cli
-      .command("skills export [name]")
+    skills
+      .command("export [name]")
       .group("Skills")
       .meta({ description: "Export skills from DURU_HOME to agent skill directories" })
       .option("--to <agent>", "Target agent (claude, gemini, codex). Defaults to all detected agents.")
@@ -169,8 +172,8 @@ export function skillsPlugin(store: SkillsStore) {
       });
 
     // duru skills embed
-    cli
-      .command("skills embed")
+    skills
+      .command("embed")
       .group("Skills")
       .meta({ description: "Re-index skills into qmd collection" })
       .action(async (ctx) => {
@@ -183,8 +186,8 @@ export function skillsPlugin(store: SkillsStore) {
       });
 
     // duru skills search <query> [--tag <tag>]
-    cli
-      .command("skills search <query>")
+    skills
+      .command("search <query>")
       .group("Skills")
       .meta({ description: "Search skills using qmd semantic search" })
       .option("--tag <tag>", "Filter results by tag")
@@ -213,8 +216,8 @@ export function skillsPlugin(store: SkillsStore) {
       });
 
     // duru skills status
-    cli
-      .command("skills status")
+    skills
+      .command("status")
       .group("Skills")
       .meta({ description: "Show qmd indexing status" })
       .action(async (ctx) => {
@@ -223,7 +226,9 @@ export function skillsPlugin(store: SkillsStore) {
         }
         const raw = await status();
         process.stdout.write(raw + "\n");
-        return ctx.exit(0);
+        return ctx.exit(0, null);
       });
+
+    cli.subCommand("skills", skills as never);
   });
 }
