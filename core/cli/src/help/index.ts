@@ -53,7 +53,10 @@ export function helpPath(argv: readonly string[], routes: readonly HelpRoute[]):
 }
 
 function commandHelp(name: string, route: HelpRoute, globalOptions: readonly OptionDefinition[]): string {
-  const options = [...globalOptions, ...route.options];
+  // globalOptions에 이미 포함된 별칭을 route.options에서 중복 제거
+  const globalAliases = new Set(globalOptions.flatMap((o) => o.aliases));
+  const uniqueRouteOptions = route.options.filter((o) => !o.aliases.some((a) => globalAliases.has(a)));
+  const options = [...globalOptions, ...uniqueRouteOptions];
   const lines = [`Usage: ${commandUsage(name, route)}`];
   if (route.description) lines.push("", route.description);
   const deprecated = deprecatedText(route.deprecated);
