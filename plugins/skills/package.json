@@ -7,7 +7,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@duru/cli-kit": "workspace:*",
-    "@duru/virtual-plugins": "workspace:*"
+    "@duru/file-store": "workspace:*",
+    "@duru/virtual-plugins": "workspace:*",
+    "@duru/cli-kit": "workspace:*"
   }
 }
