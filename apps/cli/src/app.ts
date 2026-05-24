@@ -4,6 +4,7 @@ import { jsonRendererPlugin } from "@duru/renderer-json";
 import { textRendererPlugin } from "@duru/renderer-text";
 import { createAppCompletionPlugin } from "./completion/index.ts";
 import { createAppGateway } from "./gateway/index.ts";
+import { updateCommand } from "./routes/update/index.ts";
 
 export function createAppCli() {
   return {
@@ -33,6 +34,7 @@ async function createAppCliRuntime() {
     .use(env())
     .use(gateway.plugin)
     .route(gateway.routeName, gateway.cli)
+    .use(updateCommand)
     .use(createAppCompletionPlugin())
     .use(help());
 
