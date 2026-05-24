@@ -4,6 +4,8 @@ import { virtualPlugin } from "@duru/virtual-plugins";
 import { createSkillsStore } from "./store.ts";
 import type { SkillsStore } from "./store.ts";
 import type { SkillMeta, SkillRecord } from "./types.ts";
+import { detectAgents, importFromAgent, exportToAgent } from "./agent.ts";
+import type { AgentName } from "./agent.ts";
 
 export { createSkillsStore };
 export type { SkillMeta, SkillRecord, SkillsStore };
@@ -105,6 +107,58 @@ export function skillsPlugin(store: SkillsStore) {
         });
 
         return ctx.exit(0, record);
+      });
+
+    // duru skills import [name] [--from claude|gemini|codex]
+    cli
+      .command("skills import [name]")
+      .group("Skills")
+      .meta({ description: "Import skills from agent skill directories into DURU_HOME" })
+      .option("--from <agent>", "Source agent (claude, gemini, codex). Defaults to all detected agents.")
+      .action(async (ctx) => {
+        const skillName = (ctx.params as { name?: string }).name;
+        const fromAgent = (ctx.options as { from?: string }).from as AgentName | undefined;
+
+        const agents: AgentName[] = fromAgent ? [fromAgent] : await detectAgents();
+
+        type ImportResult = { agent: AgentName; imported: string[]; skipped: string[] };
+        const results: ImportResult[] = [];
+
+        for (const agent of agents) {
+          const result = await importFromAgent(agent, skillName, store);
+          results.push({ agent, ...result });
+          process.stdout.write(
+            `[${agent}] imported ${result.imported.length}, skipped ${result.skipped.length}\n`,
+          );
+        }
+
+        return ctx.exit(0, results);
+      });
+
+    // duru skills export [name] [--to claude|gemini|codex]
+    cli
+      .command("skills export [name]")
+      .group("Skills")
+      .meta({ description: "Export skills from DURU_HOME to agent skill directories" })
+      .option("--to <agent>", "Target agent (claude, gemini, codex). Defaults to all detected agents.")
+      .action(async (ctx) => {
+        const skillName = (ctx.params as { name?: string }).name;
+        const toAgent = (ctx.options as { to?: string }).to as AgentName | undefined;
+
+        const agents: AgentName[] = toAgent ? [toAgent] : await detectAgents();
+
+        type ExportResult = { agent: AgentName; exported: string[]; skipped: string[] };
+        const results: ExportResult[] = [];
+
+        for (const agent of agents) {
+          const result = await exportToAgent(agent, skillName, store);
+          results.push({ agent, ...result });
+          process.stdout.write(
+            `[${agent}] exported ${result.exported.length}, skipped ${result.skipped.length}\n`,
+          );
+        }
+
+        return ctx.exit(0, results);
       });
   });
 }
