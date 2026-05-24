@@ -16,7 +16,6 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
   return virtualPlugin(async (cli) => {
     const skills = createRouter();
 
-    // duru skills → list (기본)
     skills
       .command()
       .group("Skills")
@@ -28,7 +27,6 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
         return ctx.exit(0, records);
       });
 
-    // duru skills list [--tag <tag>]
     skills
       .command("list")
       .group("Skills")
@@ -37,15 +35,12 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
       .action(async (ctx) => {
         let records = await store.list();
         const tag = (ctx.options as { tag?: string }).tag;
-        if (tag) {
-          records = records.filter((r) => r.meta.tags.includes(tag));
-        }
+        if (tag) records = records.filter((r) => r.meta.tags.includes(tag));
         const lines = records.map((r) => `${r.meta.name}  ${r.meta.description}`).join("\n");
         process.stdout.write(lines ? lines + "\n" : "(no skills installed)\n");
         return ctx.exit(0, records);
       });
 
-    // duru skills show <name>
     skills
       .command("show <name>")
       .group("Skills")
@@ -63,7 +58,6 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
         return ctx.exit(0, record);
       });
 
-    // duru skills add <path>
     skills
       .command("add <path>")
       .group("Skills")
@@ -75,7 +69,6 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
         return ctx.exit(0, record);
       });
 
-    // duru skills delete <name>
     skills
       .command("delete <name>")
       .group("Skills")
@@ -87,7 +80,6 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
         return ctx.exit(0, { name });
       });
 
-    // duru skills edit <name>
     skills
       .command("edit <name>")
       .group("Skills")
@@ -99,7 +91,6 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
           process.stderr.write(`Skill not found: ${name}\n`);
           return ctx.exit(1, null);
         }
-
         const editor = process.env.EDITOR ?? "vi";
         await new Promise<void>((resolve, reject) => {
           const child = spawn(editor, [record.skillPath], { stdio: "inherit" });
@@ -109,11 +100,9 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
           });
           child.on("error", reject);
         });
-
         return ctx.exit(0, record);
       });
 
-    // duru skills import [name] [--from claude|gemini|codex]
     skills
       .command("import [name]")
       .group("Skills")
@@ -122,24 +111,17 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
       .action(async (ctx) => {
         const skillName = (ctx.params as { name?: string }).name;
         const fromAgent = (ctx.options as { from?: string }).from as AgentName | undefined;
-
         const agents: AgentName[] = fromAgent ? [fromAgent] : await detectAgents();
-
         type ImportResult = { agent: AgentName; imported: string[]; skipped: string[] };
         const results: ImportResult[] = [];
-
         for (const agent of agents) {
           const result = await importFromAgent(agent, skillName, store);
           results.push({ agent, ...result });
-          process.stdout.write(
-            `[${agent}] imported ${result.imported.length}, skipped ${result.skipped.length}\n`,
-          );
+          process.stdout.write(`[${agent}] imported ${result.imported.length}, skipped ${result.skipped.length}\n`);
         }
-
         return ctx.exit(0, results);
       });
 
-    // duru skills export [name] [--to claude|gemini|codex]
     skills
       .command("export [name]")
       .group("Skills")
@@ -148,24 +130,17 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
       .action(async (ctx) => {
         const skillName = (ctx.params as { name?: string }).name;
         const toAgent = (ctx.options as { to?: string }).to as AgentName | undefined;
-
         const agents: AgentName[] = toAgent ? [toAgent] : await detectAgents();
-
         type ExportResult = { agent: AgentName; exported: string[]; skipped: string[] };
         const results: ExportResult[] = [];
-
         for (const agent of agents) {
           const result = await exportToAgent(agent, skillName, store);
           results.push({ agent, ...result });
-          process.stdout.write(
-            `[${agent}] exported ${result.exported.length}, skipped ${result.skipped.length}\n`,
-          );
+          process.stdout.write(`[${agent}] exported ${result.exported.length}, skipped ${result.skipped.length}\n`);
         }
-
         return ctx.exit(0, results);
       });
 
-    // duru skills embed
     skills
       .command("embed")
       .group("Skills")
@@ -180,7 +155,6 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
         return ctx.exit(0, { message: "인덱싱 완료" });
       });
 
-    // duru skills search <query> [--tag <tag>]
     skills
       .command("search <query>")
       .group("Skills")
@@ -192,10 +166,7 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
         }
         const query = (ctx.params as { query: string }).query;
         const tag = (ctx.options as { tag?: string }).tag;
-
         let results = await qmd.search(query, COLLECTION);
-
-        // 태그 필터: store에서 태그 정보 가져와 클라이언트 사이드 필터링
         if (tag) {
           const taggedNames = new Set(
             (await store.list())
@@ -204,11 +175,9 @@ export function skillsPlugin(store: SkillsStore, qmd: QmdClient) {
           );
           results = results.filter((r) => taggedNames.has(r.name));
         }
-
         return ctx.exit(0, { results }, true);
       });
 
-    // duru skills status
     skills
       .command("status")
       .group("Skills")

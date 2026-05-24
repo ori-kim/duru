@@ -13,32 +13,15 @@ export type QmdSearchResult = {
 };
 
 export type QmdClient = {
-  /** qmd 바이너리가 사용 가능한지 확인 */
   isAvailable(): Promise<boolean>;
-  /** 컬렉션 등록 (없을 때만) */
   ensureCollection(name: string, path: string): Promise<void>;
-  /** 인덱싱 */
   embed(collection: string): Promise<void>;
-  /** 하이브리드 검색 */
   search(query: string, collection: string): Promise<QmdSearchResult[]>;
-  /** 상태 raw 출력 */
   status(): Promise<string>;
-  /** 데이터가 저장되는 루트 디렉터리 */
   dataDir: string;
 };
 
-/**
- * 포터블 qmd 클라이언트를 생성한다.
- *
- * - `@tobilu/qmd` 바이너리를 node_modules에서 직접 참조 → PATH 무관
- * - `XDG_CACHE_HOME` / `XDG_CONFIG_HOME` 을 dataDir 하위로 격리
- *   → 사용자 전역 qmd 설정·인덱스와 완전히 분리
- *
- * @param dataDir  인덱스·모델·설정을 저장할 루트 (e.g. DURU_HOME/skills/.data)
- */
 export function createQmdClient(dataDir: string): QmdClient {
-  // node_modules 안의 @tobilu/qmd 바이너리 경로를 런타임에 계산
-  // 실패 시 PATH의 qmd로 폴백
   let _binPath: string | null = null;
 
   async function resolveBin(): Promise<string> {
@@ -56,12 +39,11 @@ export function createQmdClient(dataDir: string): QmdClient {
       if (!binEntry) throw new Error("bin not found");
       _binPath = resolve(dirname(pkgJsonPath), binEntry);
     } catch {
-      _binPath = "qmd"; // PATH 폴백
+      _binPath = "qmd";
     }
     return _binPath;
   }
 
-  /** XDG 환경변수로 qmd 데이터를 dataDir 하위에 격리 */
   function qmdEnv(): NodeJS.ProcessEnv {
     return {
       ...process.env,
@@ -94,7 +76,6 @@ export function createQmdClient(dataDir: string): QmdClient {
       const exists = (parsed.collections ?? []).some((c) => c.name === name);
       if (exists) return;
     } catch {
-      // status 실패해도 add 시도
     }
     await run(["collection", "add", path, "--name", name]);
   }
