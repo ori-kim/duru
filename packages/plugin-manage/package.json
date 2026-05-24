@@ -1,0 +1,13 @@
+{
+  "name": "@duru/plugin-manage",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@duru/cli-kit": "workspace:*",
+    "@clack/prompts": "^1.4.0"
+  }
+}

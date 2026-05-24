@@ -1,0 +1,6 @@
+# duru plugin install https://github.com/ori-kim/cli-proxy 로 설치 가능
+plugins:
+  - path: plugins/context-mode
+    name: context-mode
+    description: Capture and search command invocation history
+    entry: src/index.ts

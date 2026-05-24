@@ -1,0 +1,14 @@
+{
+  "name": "@duru/plugin-context-mode",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@duru/cli-kit": "workspace:*",
+    "@duru/file-store": "workspace:*",
+    "@duru/virtual-plugins": "workspace:*"
+  }
+}
