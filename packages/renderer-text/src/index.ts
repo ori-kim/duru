@@ -1,11 +1,12 @@
-import { createPlugin, getRenderHint } from "@duru/cli-kit";
+import { applyFieldFilter, createPlugin, getRenderHint, parseFilterFields } from "@duru/cli-kit";
 import type { CliPlugin, Renderer } from "@duru/cli-kit";
 
 export function textRenderer(): Renderer {
   return {
     id: "text",
-    render(input) {
-      const value = input.value;
+    render(input, ctx) {
+      const fields = parseFilterFields((ctx.options as { outputFilter?: unknown }).outputFilter);
+      const value = applyFieldFilter(input.value, fields);
       const hint = getRenderHint(value);
 
       if (hint === "error" && isRecord(value)) {
@@ -54,14 +55,56 @@ function formatTable(rows: readonly unknown[]): string {
   const records = rows.filter(isRecord);
   if (records.length === 0) return formatList(rows);
   const columns = Array.from(new Set(records.flatMap((row) => Object.keys(row))));
-  const header = columns.join("\t");
-  const body = records.map((row) => columns.map((col) => formatCell(row[col])).join("\t")).join("\n");
+  const cells = records.map((row) => columns.map((col) => formatCell(row[col])));
+  const widths = columns.map((col, i) =>
+    Math.max(visibleWidth(col), ...cells.map((row) => visibleWidth(row[i] ?? ""))),
+  );
+  const header = padRow(columns, widths);
+  const body = cells.map((row) => padRow(row, widths)).join("\n");
   return `${header}\n${body}\n`;
 }
 
 function formatList(items: readonly unknown[]): string {
   if (items.length === 0) return "";
   return `${items.map((item) => formatCell(item)).join("\n")}\n`;
+}
+
+function padRow(row: readonly string[], widths: readonly number[]): string {
+  return row
+    .map((cell, i) => (i === row.length - 1 ? cell : padEnd(cell, widths[i] ?? 0)))
+    .join("  ");
+}
+
+function padEnd(cell: string, width: number): string {
+  const pad = Math.max(0, width - visibleWidth(cell));
+  return pad === 0 ? cell : cell + " ".repeat(pad);
+}
+
+function visibleWidth(value: string): number {
+  let width = 0;
+  for (const char of value) {
+    const cp = char.codePointAt(0);
+    if (cp !== undefined && isWide(cp)) width += 2;
+    else width += 1;
+  }
+  return width;
+}
+
+function isWide(cp: number): boolean {
+  return (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    (cp >= 0x2e80 && cp <= 0x303e) ||
+    (cp >= 0x3041 && cp <= 0x33ff) ||
+    (cp >= 0x3400 && cp <= 0x4dbf) ||
+    (cp >= 0x4e00 && cp <= 0x9fff) ||
+    (cp >= 0xa000 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe30 && cp <= 0xfe4f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x1f300 && cp <= 0x1faff)
+  );
 }
 
 function formatCell(value: unknown): string {

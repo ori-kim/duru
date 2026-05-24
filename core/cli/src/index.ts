@@ -12,6 +12,7 @@ export { meta } from "./meta/index.ts";
 export { adaptResult } from "./middleware/adapt-result.ts";
 export type { ResultAdapter } from "./middleware/adapt-result.ts";
 export { normalizeActionResult } from "./output/index.ts";
+export { applyFieldFilter, parseFilterFields } from "./output/filter.ts";
 export { parseOptionSpec, parseOptions } from "./options/index.ts";
 export { compilePattern } from "./pattern/index.ts";
 export { context, createPlugin, isCliPlugin, option, renderer } from "./plugin/index.ts";

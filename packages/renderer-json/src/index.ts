@@ -1,11 +1,13 @@
-import { createPlugin, parseOptionSpec } from "@duru/cli-kit";
+import { applyFieldFilter, createPlugin, parseFilterFields, parseOptionSpec } from "@duru/cli-kit";
 import type { CliPlugin, Renderer } from "@duru/cli-kit";
 
 export function jsonRenderer(): Renderer {
   return {
     id: "json",
     render(input, ctx) {
-      const value = ctx.options.events ? { result: input.value, events: input.events } : input.value;
+      const fields = parseFilterFields((ctx.options as { outputFilter?: unknown }).outputFilter);
+      const filtered = applyFieldFilter(input.value, fields);
+      const value = ctx.options.events ? { result: filtered, events: input.events } : filtered;
       return {
         stdout: `${JSON.stringify(value ?? null, null, 2)}\n`,
         stderr: "",
@@ -13,7 +15,9 @@ export function jsonRenderer(): Renderer {
       };
     },
     stream(value, ctx) {
-      ctx.io.stdout.write(`${JSON.stringify(value ?? null)}\n`);
+      const fields = parseFilterFields((ctx.options as { outputFilter?: unknown }).outputFilter);
+      const filtered = applyFieldFilter(value, fields);
+      ctx.io.stdout.write(`${JSON.stringify(filtered ?? null)}\n`);
     },
   };
 }
