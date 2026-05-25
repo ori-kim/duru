@@ -8,10 +8,6 @@ export function registerListCommand(cli: Cli): void {
     .group("Plugin")
     .action(async (ctx) => {
       const pluginsDir = resolvePluginsDir();
-      if (!pluginsDir) {
-        return ctx.exit(1, { error: { message: "DURU_HOME is not set." } });
-      }
-
       const plugins = await listInstalledPlugins(pluginsDir);
       return ctx.exit(0, {
         plugins: plugins.map((p) => ({

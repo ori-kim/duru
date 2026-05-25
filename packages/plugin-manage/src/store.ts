@@ -1,4 +1,5 @@
 import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { findManifestFile, readManifestInfo, setPluginEnabled } from "./manifest.ts";
 import type { DiscoveredPlugin } from "./scan.ts";
@@ -11,9 +12,11 @@ export type InstalledPlugin = {
   manifestPath: string;
 };
 
-export function resolvePluginsDir(): string | undefined {
-  const home = process.env.DURU_HOME;
-  return home ? resolve(home, "plugins") : undefined;
+// Resolves the plugins directory using the same fallback chain as
+// `@duru/file-store`'s `createDuruFileHome`: DURU_HOME env, then ~/.duru.
+export function resolvePluginsDir(): string {
+  const home = process.env.DURU_HOME ?? join(homedir(), ".duru");
+  return resolve(home, "plugins");
 }
 
 export async function listInstalledPlugins(pluginsDir: string): Promise<readonly InstalledPlugin[]> {
