@@ -1,6 +1,9 @@
+import { join } from "node:path";
 import { confirm, isCancel, multiselect, spinner } from "@clack/prompts";
 import type { Cli } from "@duru/cli-kit";
+import { upsertPlugin } from "@duru/virtual-plugins";
 import { fetchGitHubPlugins, parseGitHubUrl } from "../github.ts";
+import { findManifestFile, readManifestInfo } from "../manifest.ts";
 import { type DiscoveredPlugin, discoverPluginsInDir } from "../scan.ts";
 import { copyPlugin, pluginExists, resolvePluginsDir } from "../store.ts";
 
@@ -108,11 +111,29 @@ export function registerInstallCommand(cli: Cli): void {
           }
           // Remove existing before copy
           const { rm } = await import("node:fs/promises");
-          const { join } = await import("node:path");
           await rm(join(pluginsDir, name), { recursive: true, force: true });
         }
 
         await copyPlugin(plugin, pluginsDir, name);
+
+        // Register in plugins.yml so the loader picks it up on next run.
+        const destDir = join(pluginsDir, name);
+        const destManifestPath = await findManifestFile(destDir);
+        const destInfo = destManifestPath ? await readManifestInfo(destManifestPath).catch(() => undefined) : undefined;
+        const entryFile = destInfo?.entry ?? plugin.entry;
+        if (entryFile) {
+          await upsertPlugin(
+            { manifestPath: join(pluginsDir, "plugins.yml") },
+            {
+              name,
+              path: destDir,
+              entry: entryFile,
+              description: plugin.description,
+              contributes: { eager: true },
+            },
+          );
+        }
+
         installed.push(name);
       }
 

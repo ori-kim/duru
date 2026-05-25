@@ -106,6 +106,7 @@
       "dependencies": {
         "@clack/prompts": "^1.4.0",
         "@duru/cli-kit": "workspace:*",
+        "@duru/virtual-plugins": "workspace:*",
       },
     },
     "packages/qmd": {

@@ -73,6 +73,11 @@ export async function loadPluginManifest(options: LoadPluginsOptions): Promise<R
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 }
 
+// Insert or update a plugin entry in the manifest.
+//
+// When replacing an existing entry by name, fields not present on `entry`
+// are preserved from the existing one (notably `contributes`, `order`, and
+// `enabled`) so that user-authored edits survive a re-install.
 export async function upsertPlugin(options: LoadPluginsOptions, entry: PluginEntry): Promise<void> {
   const manifestPath = resolveManifestPath(options);
   if (!manifestPath) throw new Error("DURU_HOME is not set");
@@ -83,7 +88,16 @@ export async function upsertPlugin(options: LoadPluginsOptions, entry: PluginEnt
     if (parsed?.plugins) data = parsed;
   } catch (err) { if (!isNotFoundError(err)) throw err; }
   const idx = data.plugins.findIndex((p) => p.name === entry.name);
-  if (idx >= 0) { data.plugins[idx] = entry; } else { data.plugins.push(entry); }
+  const existing = idx >= 0 ? data.plugins[idx] : undefined;
+  if (existing) {
+    data.plugins[idx] = {
+      ...existing,
+      ...entry,
+      contributes: entry.contributes ?? existing.contributes,
+    };
+  } else {
+    data.plugins.push(entry);
+  }
   const { mkdir, writeFile } = await import("node:fs/promises");
   await mkdir(dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, yamlStringify(data), "utf8");

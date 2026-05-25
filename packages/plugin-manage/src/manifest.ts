@@ -7,6 +7,7 @@ export type ManifestInfo = {
   name: string;
   description?: string;
   enabled: boolean;
+  entry?: string;
 };
 
 // Scan a directory for its first manifest file
@@ -30,6 +31,7 @@ export async function readManifestInfo(manifestPath: string): Promise<ManifestIn
     name: typeof data.name === "string" && data.name ? data.name : "unknown",
     description: typeof data.description === "string" ? data.description : undefined,
     enabled: data.enabled !== false,
+    entry: typeof data.entry === "string" ? data.entry : undefined,
   };
 }
 
