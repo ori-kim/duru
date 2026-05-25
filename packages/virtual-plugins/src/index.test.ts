@@ -151,6 +151,29 @@ plugins:
     expect(loader.phase1Plugins[0]?.initialized).toBe(false);
   });
 
+  test("initializes plugins for completion verb so contributors are registered", async () => {
+    const home = await createHome();
+    const pluginDir = join(home, "plugins", "lazy");
+    await writeManifest(home, `
+plugins:
+  - name: lazy
+    path: ${pluginDir}
+    entry: plugin.ts
+    contributes:
+      commands:
+        - lazy-cmd
+`);
+    await writePlugin(pluginDir, "plugin.ts", `
+      import { virtualPlugin } from "${vpModuleUrl()}";
+      export default virtualPlugin((cli) => {
+        cli.command("lazy-cmd").action(() => ({ lazy: true }));
+      });
+    `);
+    const cli = createCli();
+    const loader = await installVirtualPlugins(cli, { home }, ["completion", "query"]);
+    expect(loader.phase1Plugins[0]?.initialized).toBe(true);
+  });
+
   test("eager plugin is always imported regardless of argv", async () => {
     const home = await createHome();
     const pluginDir = join(home, "plugins", "capture");
