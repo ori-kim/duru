@@ -31,7 +31,7 @@ function extractVerb(argv: string[]): string | undefined {
   return undefined;
 }
 
-const METADATA_VERBS = new Set(["help", "plugin"]);
+const METADATA_VERBS = new Set(["help", "plugin", "completion"]);
 
 function shouldInit(plugin: ResolvedPlugin, argv: string[] | undefined): boolean {
   if (!argv) return true;
