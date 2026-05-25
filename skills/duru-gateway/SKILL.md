@@ -6,37 +6,47 @@ tags: [gateway, external, cli, api, mcp, grpc, graphql]
 
 # duru-gateway
 
-모든 외부 자원(CLI 도구, REST API, MCP 서버, 스크립트, gRPC, GraphQL)은 `duru gateway`를 통해
-호출한다. 직접 호출 금지.
+Route every external resource call through `duru gateway`: CLI tools, REST APIs,
+MCP servers, scripts, gRPC, and GraphQL. Do not invoke those resources directly.
 
-## 원칙
+## Language Rule
 
-- **항상 duru를 거친다**: `gh ...` ✗ → `duru gateway gh ...` ✓
-- **사전 조회 없이 바로 실행**: `duru gateway <target> <tool>`을 먼저 시도하고, block 당하면 그때 탐색
-- **탐색은 list/inspect**: 등록된 타깃과 사용 가능한 도구를 알 수 없을 때만 조회
+Write this skill and any bundled references in English.
 
-## 지원 어댑터
+## Principles
 
-| 어댑터 | 설명 |
+- **Always go through duru**: use `duru gateway gh ...` instead of `gh ...`.
+- **Try the call first**: run `duru gateway <target> <tool>` first, then inspect only if the call is blocked.
+- **Use list/inspect only for discovery**: query registered targets and tools only when the target or operation is unknown.
+- **Do not provide auth or identity data manually**: registered `duru gateway` targets are already configured with authentication and service identity. Do not invent or fill `Authorization`, API token/key, cookie, `X-Service-Identifier`, or similar auth/identity headers.
+
+## Auth And Identity Failures
+
+If a call fails with authentication denial, authorization denial, service identifier rejection, or a missing/invalid identifier error, stop immediately.
+Ask the user to re-authenticate or update the target configuration explicitly. Do not guess header values, credentials, or identity values and retry.
+
+## Supported Adapters
+
+| Adapter | Description |
 |--------|------|
-| `cli` | 시스템 CLI 도구 (gh, kubectl, docker 등) |
-| `api` | REST/OpenAPI 기반 HTTP API |
-| `mcp` | Model Context Protocol 서버 (stdio/SSE/HTTP) |
-| `script` | 임의의 스크립트 실행 |
-| `grpc` | gRPC 서비스 (proto/reflection 기반) |
-| `graphql` | GraphQL 엔드포인트 (introspection 기반) |
+| `cli` | System CLI tools such as gh, kubectl, and docker |
+| `api` | REST/OpenAPI-based HTTP APIs |
+| `mcp` | Model Context Protocol servers over stdio, SSE, or HTTP |
+| `script` | Script execution |
+| `grpc` | gRPC services using proto files or reflection |
+| `graphql` | GraphQL endpoints using introspection |
 
-## 사용 흐름
+## Workflow
 
-### 1. 등록된 타깃 탐색
+### 1. Discover Registered Targets
 
 ```bash
 duru gateway list --json
 ```
 
-각 타깃의 이름, 어댑터 종류, 사용 가능 여부를 확인한다.
+Use this to check each target's name, adapter type, and availability.
 
-### 2. 특정 타깃의 도구 보기
+### 2. Inspect A Target
 
 ```bash
 duru gateway <target>
@@ -44,53 +54,59 @@ duru gateway <target> --help
 duru gateway inspect <target>
 ```
 
-### 3. 도구 실행
+### 3. Invoke A Tool
 
 ```bash
 duru gateway <target> <tool> [args...]
-duru gateway <target> <tool> --json     # 구조화된 JSON 응답
-duru gateway <target> <tool> --dry-run  # 실제 실행 없이 미리보기
+duru gateway <target> <tool> --json     # structured JSON response
+duru gateway <target> <tool> --dry-run  # preview without performing the action
 ```
 
-### 4. 새 타깃 등록
+Pass only the business parameters required by the task. Even if generated schemas show auth or identity headers as required, do not fill them manually.
 
-새로운 외부 자원을 사용하려면 `gateway add`로 먼저 등록한다:
+### 4. Add A New Target
+
+Register a new external resource with `gateway add` before using it:
 
 ```bash
 duru gateway add <name> <args...>
-duru gateway add --help                 # 어댑터별 등록 옵션 확인
+duru gateway add --help                 # adapter-specific registration options
 ```
 
-어댑터 종류별 등록 패턴은 자동 감지되며, 명시도 가능하다. 등록 후 곧바로 호출 가능.
+Adapter types are auto-detected where possible, and can also be specified explicitly. Once registered, the target can be invoked immediately.
 
-### 5. 인증이 필요한 타깃
+### 5. Authenticated Targets
+
+Run these commands only when the user explicitly asks for or approves them.
 
 ```bash
-duru gateway auth <target>      # 현재 인증 상태
-duru gateway login <target>     # OAuth/토큰 로그인
-duru gateway logout <target>    # 로그아웃
+duru gateway auth <target>      # current authentication state
+duru gateway login <target>     # OAuth/token login
+duru gateway logout <target>    # logout
 ```
 
-### 6. 프로파일·바인딩
+### 6. Profiles And Bindings
 
-여러 환경(prod/staging)을 다루거나 명령 별칭이 필요할 때:
+Use profiles for multiple environments such as prod/staging, and bindings for command aliases:
 
 ```bash
 duru gateway profile add <target> <name> ...
 duru gateway profile use <target> <name>
-duru gateway bind <command> <target> ...   # 별칭 등록
+duru gateway bind <command> <target> ...   # register an alias
 ```
 
-## 금지 사항
+## Prohibited
 
-- 외부 CLI/API/MCP를 duru 없이 직접 호출하지 않는다
-- "duru gateway list에 X가 없네요" 라고 보고하지 말고, `gateway add`로 즉시 등록 시도
-- `gateway list` 결과를 자체적으로 캐싱·기억해서 stale 정보로 동작하지 않는다 — 매번 조회
+- Do not call external CLIs/APIs/MCP servers directly without `duru`.
+- Do not manually add auth headers, API keys, tokens, cookies, or service identifiers.
+- Do not run `duru gateway login`, `auth`, or `add` after an auth/identity denial unless the user explicitly asks for or approves it.
+- Do not stop at "X is not in duru gateway list"; try registering it with `gateway add`.
+- Do not cache `gateway list` results yourself or act on stale target information. Query again when needed.
 
-## 디버깅
+## Debugging
 
 ```bash
-duru gateway check                 # 모든 타깃 상태 점검
-duru gateway refresh <target>      # 캐시된 스키마/메타 갱신
-duru gateway inspect <target>      # 어댑터 설정 + 사용 가능한 작업 출력
+duru gateway check                 # check every target
+duru gateway refresh <target>      # refresh cached schemas/metadata
+duru gateway inspect <target>      # show adapter config and available operations
 ```
