@@ -27,8 +27,8 @@ BASE_URL="https://github.com/$REPO/releases/latest/download"
 
 echo "Downloading $ASSET..."
 mkdir -p "$INSTALL_DIR"
-curl -fsSL "$BASE_URL/$ASSET"        -o "$INSTALL_DIR/duru"
-curl -fsSL "$BASE_URL/$ASSET.sha256" -o /tmp/duru.sha256
+curl -fL --progress-bar "$BASE_URL/$ASSET" -o "$INSTALL_DIR/duru"
+curl -fsSL "$BASE_URL/$ASSET.sha256"       -o /tmp/duru.sha256
 
 # Verify checksum
 EXPECTED="$(awk '{print $1}' /tmp/duru.sha256)"
