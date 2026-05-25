@@ -21,9 +21,6 @@ export function registerInstallCommand(cli: Cli): void {
       }
 
       const pluginsDir = resolvePluginsDir();
-      if (!pluginsDir) {
-        return ctx.exit(1, { error: { message: "DURU_HOME is not set." } });
-      }
 
       // ── 1. Resolve source ──────────────────────────────────────────
       const s = spinner();
