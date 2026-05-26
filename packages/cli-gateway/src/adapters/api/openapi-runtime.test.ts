@@ -142,6 +142,40 @@ describe("@duru/cli-gateway OpenAPI runtime", () => {
     expect(calls[0]?.init.headers).toEqual({ "content-type": "application/octet-stream" });
   });
 
+  test("appends OpenAPI paths to baseUrl that carries its own path", async () => {
+    const calls: RequestCall[] = [];
+    const adapter = apiAdapter();
+    const config = adapter.schema.parse({
+      baseUrl: "https://slack.com/api",
+      spec: {
+        openapi: "3.0.0",
+        servers: [{ url: "https://slack.com/api" }],
+        paths: {
+          "/search.messages": {
+            get: { operationId: "search_messages" },
+          },
+        },
+      },
+    });
+    const target = adapter.createTarget({
+      manifest: { name: "slack-api", type: "api", config },
+      config,
+      context: {
+        store: createMemoryGatewayStore(),
+        services: {
+          async fetch(input: string | URL | Request, init?: RequestInit) {
+            calls.push({ input: String(input), init: init ?? {} });
+            return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+          },
+        },
+      },
+    });
+
+    await target.invoke({ argv: ["search_messages"] });
+
+    expect(calls[0]?.input).toBe("https://slack.com/api/search.messages");
+  });
+
   test("returns binary API responses as base64 envelopes", async () => {
     const adapter = apiAdapter();
     const config = adapter.schema.parse({ baseUrl: "https://api.example.com" });

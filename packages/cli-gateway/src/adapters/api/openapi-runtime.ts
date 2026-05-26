@@ -145,7 +145,7 @@ function buildOperationUrl(baseUrl: string, tool: OpenApiTool, params: Record<st
     if (value === undefined) throw new Error(`Missing required path parameter: ${key}`);
     return encodeURIComponent(paramString(value));
   });
-  const url = new URL(path, `${baseUrl.replace(/\/+$/, "")}/`);
+  const url = new URL(path.replace(/^\/+/, ""), `${baseUrl.replace(/\/+$/, "")}/`);
 
   for (const key of tool.queryParams) {
     const value = params[key];

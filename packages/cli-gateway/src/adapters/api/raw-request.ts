@@ -128,7 +128,7 @@ export function parseRequestArgs(argv: readonly string[]): RawRequestArgs {
 export function buildUrl(baseUrl: string, path: string, query: RawRequestArgs["query"]): string {
   if (isAbsoluteHttpUrl(path)) throw new Error("Absolute api operation paths are not allowed");
 
-  const url = new URL(path, `${baseUrl.replace(/\/+$/, "")}/`);
+  const url = new URL(path.replace(/^\/+/, ""), `${baseUrl.replace(/\/+$/, "")}/`);
   for (const [key, value] of Object.entries(query)) {
     const values = Array.isArray(value) ? value : [value];
     for (const item of values) url.searchParams.append(key, item);
