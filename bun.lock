@@ -107,6 +107,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@tobilu/qmd": "*",
+        "yaml": "^2.9.0",
       },
     },
     "packages/renderer-clack": {
@@ -170,6 +171,16 @@
         "@duru/virtual-plugins": "workspace:*",
       },
     },
+    "plugins/memory": {
+      "name": "@duru/plugin-memory",
+      "version": "0.0.0",
+      "dependencies": {
+        "@duru/cli-kit": "workspace:*",
+        "@duru/file-store": "workspace:*",
+        "@duru/qmd": "workspace:*",
+        "@duru/virtual-plugins": "workspace:*",
+      },
+    },
     "plugins/skills": {
       "name": "@duru/plugin-skills",
       "version": "0.0.0",
@@ -224,6 +235,8 @@
     "@duru/plugin-history": ["@duru/plugin-history@workspace:plugins/history"],
 
     "@duru/plugin-manage": ["@duru/plugin-manage@workspace:packages/plugin-manage"],
+
+    "@duru/plugin-memory": ["@duru/plugin-memory@workspace:plugins/memory"],
 
     "@duru/plugin-skills": ["@duru/plugin-skills@workspace:plugins/skills"],
 

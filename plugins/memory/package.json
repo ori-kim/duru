@@ -1,0 +1,15 @@
+{
+  "name": "@duru/plugin-memory",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@duru/cli-kit": "workspace:*",
+    "@duru/file-store": "workspace:*",
+    "@duru/qmd": "workspace:*",
+    "@duru/virtual-plugins": "workspace:*"
+  }
+}
