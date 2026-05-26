@@ -5,17 +5,18 @@
   "private": true,
   "workspaces": ["apps/*", "core/*", "packages/*", "plugins/*"],
   "scripts": {
-    "build": "bun build apps/cli/src/main.ts --target bun --outfile dist/duru --packages bundle",
+    "build": "bun build --compile --target=bun-darwin-arm64 apps/cli/src/main.ts --outfile dist/duru",
     "dev": "DURU_HOME=.duru-test bun apps/cli/src/main.ts",
     "demo:clack": "bun apps/clack-demo/src/main.ts",
     "dev:local": "bun run dev",
-    "dev:watch": "bun build apps/cli/src/main.ts --target bun --outfile dist/duru --packages bundle --watch",
+    "dev:watch": "bun build --compile --target=bun-darwin-arm64 apps/cli/src/main.ts --outfile dist/duru --watch",
     "duru:local": "DURU_HOME=.duru-test ./dist/duru",
     "check": "bun run typecheck && bun run lint && bun run test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "test": "bun test"
+    "test": "bun test",
+    "release": "bun scripts/release.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
