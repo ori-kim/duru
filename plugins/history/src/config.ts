@@ -1,5 +1,5 @@
 import type { FileStore } from "@duru/file-store";
-import type { HistoryIgnoreConfig } from "./types.ts";
+import type { HistoryConfig, HistoryDefaultAction } from "./types.ts";
 
 const CONFIG_FILE = "config.yml";
 
@@ -9,15 +9,24 @@ export type IgnoreMatcher = {
   isIgnored(argv: readonly string[]): boolean;
 };
 
-export async function loadIgnoreConfig(files: FileStore): Promise<HistoryIgnoreConfig> {
+export async function loadHistoryConfig(files: FileStore): Promise<HistoryConfig> {
   try {
-    return (await files.read<HistoryIgnoreConfig>(CONFIG_FILE)) ?? {};
+    return normalizeConfig((await files.read<HistoryConfig>(CONFIG_FILE)) ?? {});
   } catch {
     return {};
   }
 }
 
-export function createIgnoreMatcher(config: HistoryIgnoreConfig): IgnoreMatcher {
+export async function loadIgnoreConfig(files: FileStore): Promise<HistoryConfig> {
+  return loadHistoryConfig(files);
+}
+
+export async function saveDefaultAction(files: FileStore, action: HistoryDefaultAction): Promise<void> {
+  const config = await loadHistoryConfig(files);
+  await files.write(CONFIG_FILE, { ...config, defaultAction: action });
+}
+
+export function createIgnoreMatcher(config: HistoryConfig): IgnoreMatcher {
   const patterns = (config.ignore ?? []).map((p) => p.trim()).filter(Boolean);
   return {
     isIgnored(argv) {
@@ -33,4 +42,22 @@ export function createIgnoreMatcher(config: HistoryIgnoreConfig): IgnoreMatcher 
       return false;
     },
   };
+}
+
+function normalizeConfig(config: HistoryConfig): HistoryConfig {
+  return {
+    ...config,
+    defaultAction: isDefaultAction(config.defaultAction) ? config.defaultAction : undefined,
+    limit: normalizeLimit(config.limit),
+  };
+}
+
+function isDefaultAction(value: unknown): value is HistoryDefaultAction {
+  return value === "list" || value === "pick";
+}
+
+function normalizeLimit(value: unknown): number | undefined {
+  const limit = Number(value);
+  if (!Number.isFinite(limit) || limit <= 0) return undefined;
+  return Math.floor(limit);
 }

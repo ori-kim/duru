@@ -1,18 +1,34 @@
+import { ClackCancelError, autocomplete, select } from "@duru/clack/prompt";
 import { createCli, withRenderHint } from "@duru/cli-kit";
-import { ClackCancelError, autocomplete } from "@duru/clack/prompt";
+import type { Context } from "@duru/cli-kit";
 import { createDuruFileHome } from "@duru/file-store";
 import { virtualPlugin } from "@duru/virtual-plugins";
-import { createIgnoreMatcher, loadIgnoreConfig } from "./config.ts";
+import { createIgnoreMatcher, loadHistoryConfig, saveDefaultAction } from "./config.ts";
 import { rerun } from "./rerun.ts";
 import { createHistoryStore } from "./store.ts";
 import type { HistoryRecord } from "./types.ts";
 
 export { createHistoryStore } from "./store.ts";
-export { createIgnoreMatcher, loadIgnoreConfig } from "./config.ts";
+export { createIgnoreMatcher, loadHistoryConfig, loadIgnoreConfig, saveDefaultAction } from "./config.ts";
 export { rerun } from "./rerun.ts";
-export type { HistoryRecord, HistoryStatus, HistoryListOptions, HistoryIgnoreConfig } from "./types.ts";
+export type {
+  HistoryConfig,
+  HistoryDefaultAction,
+  HistoryIgnoreConfig,
+  HistoryListOptions,
+  HistoryRecord,
+  HistoryStatus,
+} from "./types.ts";
 
 type ExitLike = { readonly kind: "duru.exit"; ok: boolean; exitCode: number };
+type HistoryAction = "list" | "pick";
+type HistoryOptions = {
+  readonly limit?: unknown;
+  readonly since?: unknown;
+  readonly grep?: unknown;
+  readonly errors?: unknown;
+};
+type HistoryContext = Context<HistoryOptions>;
 
 function isExitResult(value: unknown): value is ExitLike {
   return typeof value === "object" && value !== null && (value as ExitLike).kind === "duru.exit";
@@ -40,11 +56,20 @@ function formatRecord(record: HistoryRecord): string {
   return `${status} ${record.id}  ${record.at}  duru ${argv}`;
 }
 
+function resolveLimit(value: unknown, fallback: number): number {
+  const limit = Number(value);
+  return Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : fallback;
+}
+
 export default virtualPlugin(async (cli) => {
   const home = createDuruFileHome({ env: process.env });
   const files = home.scope("history");
   const store = createHistoryStore(files);
-  const matcher = createIgnoreMatcher(await loadIgnoreConfig(files));
+  const config = await loadHistoryConfig(files);
+  const matcher = createIgnoreMatcher(config);
+  let defaultAction = config.defaultAction;
+  const listLimit = config.limit ?? 50;
+  const pickLimit = config.limit ?? 100;
 
   cli.option("--history", "Record this invocation to history (use --no-history to skip)");
 
@@ -87,77 +112,102 @@ export default virtualPlugin(async (cli) => {
 
   const history = createCli();
 
+  async function runList(ctx: HistoryContext) {
+    const limit = resolveLimit(ctx.options.limit, listLimit);
+    const records = await store.list({
+      limit,
+      since: typeof ctx.options.since === "string" ? ctx.options.since : undefined,
+      grep: typeof ctx.options.grep === "string" ? ctx.options.grep : undefined,
+      errorsOnly: ctx.options.errors === true,
+    });
+    const items = records.map(formatRecord);
+    return ctx.exit(0, withRenderHint({ records, items }, "list"), true);
+  }
+
+  async function runPick(ctx: HistoryContext) {
+    if (!process.stdin.isTTY) {
+      return ctx.exit(2, { error: { message: "pick requires a TTY" } });
+    }
+    const limit = resolveLimit(ctx.options.limit, pickLimit);
+    const records = await store.list({
+      limit,
+      since: typeof ctx.options.since === "string" ? ctx.options.since : undefined,
+      grep: typeof ctx.options.grep === "string" ? ctx.options.grep : undefined,
+      errorsOnly: ctx.options.errors === true,
+    });
+    if (records.length === 0) return ctx.exit(0, { message: "history is empty" }, true);
+
+    try {
+      const id = await autocomplete<string>({
+        message: "Pick a command to re-run",
+        options: records.map((r) => ({
+          value: r.id,
+          label: `duru ${r.argv.join(" ")}`,
+          hint: `${r.at} · ${r.status}`,
+        })),
+      });
+      const record = records.find((r) => r.id === id);
+      if (!record) return ctx.exit(1, { error: { message: `record not found: ${id}` } });
+      const code = rerun(record.argv, { cwd: record.cwd });
+      return ctx.exit(code, { rerun: record }, code === 0);
+    } catch (err) {
+      if (err instanceof ClackCancelError) return ctx.exit(130, { message: "cancelled" }, false);
+      throw err;
+    }
+  }
+
+  async function selectAndSaveDefaultAction(ctx: HistoryContext) {
+    try {
+      const action = await select<HistoryAction>({
+        message: "Choose a history shortcut",
+        initialValue: "list",
+        options: [
+          { value: "list", label: "List", hint: "Show recent command invocations" },
+          { value: "pick", label: "Pick", hint: "Choose a past invocation and re-run it" },
+        ],
+      });
+      await saveDefaultAction(files, action);
+      defaultAction = action;
+      return action;
+    } catch (err) {
+      if (err instanceof ClackCancelError) return ctx.exit(130, { message: "cancelled" }, false);
+      throw err;
+    }
+  }
+
   history
     .command()
-    .meta({ description: "List recent command invocations" })
-    .option("--limit <n>", "Max entries (default 50)")
+    .meta({ description: "Run configured history shortcut" })
+    .option("--limit <n>", "Max entries")
     .option("--since <date>", "ISO date (YYYY-MM-DD) lower bound")
     .option("--grep <text>", "Filter by argv substring")
     .option("--errors", "Only failed invocations")
     .action(async (ctx) => {
-      const limit = Number(ctx.options.limit) || 50;
-      const records = await store.list({
-        limit,
-        since: typeof ctx.options.since === "string" ? ctx.options.since : undefined,
-        grep: typeof ctx.options.grep === "string" ? ctx.options.grep : undefined,
-        errorsOnly: ctx.options.errors === true,
-      });
-      const items = records.map(formatRecord);
-      return ctx.exit(0, withRenderHint({ records, items }, "list"), true);
+      const historyCtx = ctx as HistoryContext;
+      if (!defaultAction && !process.stdin.isTTY) return runList(historyCtx);
+
+      const action = defaultAction ?? (await selectAndSaveDefaultAction(historyCtx));
+      if (typeof action !== "string") return action;
+      return action === "pick" ? runPick(historyCtx) : runList(historyCtx);
     });
+
+  history
+    .command("list")
+    .meta({ description: "List recent command invocations" })
+    .option("--limit <n>", "Max entries")
+    .option("--since <date>", "ISO date (YYYY-MM-DD) lower bound")
+    .option("--grep <text>", "Filter by argv substring")
+    .option("--errors", "Only failed invocations")
+    .action(async (ctx) => runList(ctx as HistoryContext));
 
   history
     .command("pick")
     .meta({ description: "Interactively pick a past invocation and re-run it" })
-    .option("--limit <n>", "Candidates to show (default 100)")
-    .action(async (ctx) => {
-      if (!process.stdin.isTTY) {
-        return ctx.exit(2, { error: { message: "pick requires a TTY; use `history rerun <id>` instead" } });
-      }
-      const limit = Number(ctx.options.limit) || 100;
-      const records = await store.list({ limit });
-      if (records.length === 0) return ctx.exit(0, { message: "history is empty" }, true);
-
-      try {
-        const id = await autocomplete<string>({
-          message: "Pick a command to re-run",
-          options: records.map((r) => ({
-            value: r.id,
-            label: `duru ${r.argv.join(" ")}`,
-            hint: `${r.at} · ${r.status}`,
-          })),
-        });
-        const record = records.find((r) => r.id === id);
-        if (!record) return ctx.exit(1, { error: { message: `record not found: ${id}` } });
-        const code = rerun(record.argv, { cwd: record.cwd });
-        return ctx.exit(code, { rerun: record }, code === 0);
-      } catch (err) {
-        if (err instanceof ClackCancelError) return ctx.exit(130, { message: "cancelled" }, false);
-        throw err;
-      }
-    });
-
-  history
-    .command("rerun <id>")
-    .meta({ description: "Re-run a recorded invocation by id" })
-    .action(async (ctx) => {
-      const id = ctx.params.id as string;
-      const record = await store.get(id);
-      if (!record) return ctx.exit(1, { error: { message: `no history entry: ${id}` } });
-      const code = rerun(record.argv, { cwd: record.cwd });
-      return ctx.exit(code, { rerun: record }, code === 0);
-    });
-
-  history
-    .command("clear")
-    .meta({ description: "Delete history files older than --before" })
-    .option("--before <date>", "ISO date (YYYY-MM-DD); files strictly before are removed")
-    .action(async (ctx) => {
-      const before = typeof ctx.options.before === "string" ? ctx.options.before : undefined;
-      if (!before) return ctx.exit(2, { error: { message: "--before <YYYY-MM-DD> is required" } });
-      const removed = await store.clearBefore(before);
-      return ctx.exit(0, { removed, before }, true);
-    });
+    .option("--limit <n>", "Candidates to show")
+    .option("--since <date>", "ISO date (YYYY-MM-DD) lower bound")
+    .option("--grep <text>", "Filter candidates by argv substring")
+    .option("--errors", "Only failed invocations")
+    .action(async (ctx) => runPick(ctx as HistoryContext));
 
   cli.subCommand("history", history);
 });

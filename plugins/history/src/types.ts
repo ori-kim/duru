@@ -17,6 +17,12 @@ export type HistoryListOptions = {
   readonly errorsOnly?: boolean;
 };
 
-export type HistoryIgnoreConfig = {
+export type HistoryDefaultAction = "list" | "pick";
+
+export type HistoryConfig = {
   readonly ignore?: readonly string[];
+  readonly defaultAction?: HistoryDefaultAction;
+  readonly limit?: number;
 };
+
+export type HistoryIgnoreConfig = HistoryConfig;
