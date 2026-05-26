@@ -3,12 +3,15 @@ import {
   constants,
   accessSync,
   chmodSync,
+  closeSync,
   existsSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -130,7 +133,11 @@ function releaseApiUrl(tag: string | undefined): string {
 
 async function fetchRelease(tag: string | undefined, deps: UpdateDeps): Promise<GithubRelease> {
   const res = await deps.fetch(releaseApiUrl(tag), {
-    headers: { Accept: "application/vnd.github+json", "User-Agent": "duru-updater" },
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "duru-updater",
+      ...githubAuthHeader(),
+    },
   });
   if (!res.ok) die(`Failed to fetch release metadata (${res.status} ${res.statusText}).`);
   const release = (await res.json()) as GithubRelease;
@@ -138,6 +145,11 @@ async function fetchRelease(tag: string | undefined, deps: UpdateDeps): Promise<
     die("Release metadata is missing tag or assets.");
   }
   return release;
+}
+
+function githubAuthHeader(): Record<string, string> {
+  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function findAsset(release: GithubRelease, name: string): ReleaseAsset {
@@ -155,7 +167,47 @@ async function downloadText(url: string, deps: UpdateDeps): Promise<string> {
 async function downloadFile(url: string, path: string, deps: UpdateDeps): Promise<void> {
   const res = await deps.fetch(url, { headers: { "User-Agent": "duru-updater" } });
   if (!res.ok) die(`Failed to download ${url} (${res.status} ${res.statusText}).`);
-  writeFileSync(path, new Uint8Array(await res.arrayBuffer()));
+
+  const total = Number(res.headers.get("content-length") ?? 0);
+  const reader = res.body?.getReader();
+  if (!reader) {
+    writeFileSync(path, new Uint8Array(await res.arrayBuffer()));
+    return;
+  }
+
+  const showProgress = total > 0 && process.stderr.isTTY === true;
+  const fd = openSync(path, "w");
+  let downloaded = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      writeSync(fd, value);
+      downloaded += value.byteLength;
+      if (showProgress) renderDownloadProgress(deps.stderr, downloaded, total);
+    }
+    if (showProgress) deps.stderr.write("\n");
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function renderDownloadProgress(stderr: { write(chunk: string): unknown }, current: number, total: number): void {
+  const ratio = Math.min(current / total, 1);
+  const width = 30;
+  const filled = Math.round(ratio * width);
+  const bar = "█".repeat(filled) + "░".repeat(width - filled);
+  const pct = `${Math.floor(ratio * 100)
+    .toString()
+    .padStart(3)}%`;
+  stderr.write(`\r${bar} ${pct} ${formatBytes(current)} / ${formatBytes(total)}`);
+}
+
+function formatBytes(n: number): string {
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`;
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${n} B`;
 }
 
 function parseSha256(text: string): string {
