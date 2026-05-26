@@ -6,6 +6,8 @@ import { createMemoryGatewayStore } from "./memory-store";
 describe("@duru/cli-gateway oauth auth provider integration", () => {
   test("parses optional OAuth token store selection", () => {
     expect(parseOptionalOAuthProviderConfig("oauth")).toBeUndefined();
+    expect(parseOptionalOAuthProviderConfig("apikey")).toBeUndefined();
+    expect(parseOptionalOAuthProviderConfig("none")).toBeUndefined();
 
     expect(
       parseOptionalOAuthProviderConfig({

@@ -8,6 +8,7 @@ export { createGatewayCli, installGatewayCommands } from "./commands";
 export { createMemoryGatewayStore } from "./memory-store";
 export { cliGateway, defaultGatewayAdapters, loadGatewaySnapshot } from "./plugin";
 export { createGatewayCompletionContributor } from "./completion";
+export { applyTargetEnv, interpolate, parseDotenv } from "./env-interpolation";
 export { formatGatewayTargetHelp, isGatewayTargetHelpDocument } from "./help";
 export type { GatewayOAuthProviderConfig, GatewayOAuthService, GatewayOAuthServiceInput } from "./auth";
 export type { ApiAdapterConfig } from "./adapters/api";
@@ -40,6 +41,7 @@ export type {
   GatewayCompletionContext,
   GatewayContext,
   GatewayDiagnostic,
+  GatewayEnvService,
   GatewayInvokeContext,
   GatewayInspectReport,
   GatewayListRow,

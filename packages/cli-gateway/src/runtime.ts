@@ -1,4 +1,5 @@
 import type { Context } from "@duru/cli-kit";
+import { applyTargetEnv } from "./env-interpolation";
 import { formatGatewayTargetHelp, isGatewayTargetHelpDocument } from "./help";
 import type {
   CliGatewayOptions,
@@ -33,7 +34,7 @@ export async function runGatewayTargetInvocation(
   if (!adapter) return ctx.exit(2, { message: unknownAdapterMessage(target.type) });
 
   const manifest = mergeTargetProfile(target, profile);
-  const config = parseTargetConfig(adapter, manifest);
+  const config = await applyTargetEnv(parseTargetConfig(adapter, manifest), { manifest, options });
   const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
   const argv = await targetArgv(
     stripEmptyInvocationOptions(bindingArgv(binding, stripGatewayOptions(ctx.argv.slice(1)))),

@@ -1,5 +1,6 @@
 import { createCli } from "@duru/cli-kit";
 import type { CliPluginApi, CommandPattern } from "@duru/cli-kit";
+import { applyTargetEnv } from "./env-interpolation";
 import { unknownAdapterMessage, unknownProfileMessage, unknownTargetMessage } from "./runtime";
 import type {
   AddInput,
@@ -273,7 +274,10 @@ async function refreshCommand(targetName: string, options: CliGatewayOptions, ad
   const adapter = adapters.find((item) => item.type === target.type);
   if (!adapter) return exit(2, { message: unknownAdapterMessage(target.type) });
 
-  const config = adapter.schema.parse(target.config);
+  const config = await applyTargetEnv(adapter.schema.parse(target.config), {
+    manifest: target,
+    options,
+  });
   let manifest = target;
   let gatewayTarget = adapter.createTarget({ manifest, config, context: options });
   if (!gatewayTarget.refresh && !gatewayTarget.catalog) {
@@ -286,7 +290,8 @@ async function refreshCommand(targetName: string, options: CliGatewayOptions, ad
     if (refreshed?.config !== undefined) {
       manifest = { ...target, config: adapter.schema.parse(refreshed.config) };
       await options.store.saveTarget(manifest);
-      gatewayTarget = adapter.createTarget({ manifest, config: manifest.config, context: options });
+      const interpolated = await applyTargetEnv(manifest.config, { manifest, options });
+      gatewayTarget = adapter.createTarget({ manifest, config: interpolated, context: options });
       updated = true;
     }
   }
@@ -347,7 +352,10 @@ async function checkTarget(
   }
 
   try {
-    const config = adapter.schema.parse(target.config);
+    const config = await applyTargetEnv(adapter.schema.parse(target.config), {
+      manifest: target,
+      options,
+    });
     const gatewayTarget = adapter.createTarget({ manifest: target, config, context: options });
     diagnostics.push(...((await gatewayTarget.check?.({ target: target.name }))?.diagnostics ?? []));
   } catch (error) {
@@ -487,7 +495,10 @@ async function authCommand(
 
   const profile = resolvedProfile.profile;
   const manifest = profile?.config ? { ...target, config: mergeConfig(target.config, profile.config) } : target;
-  const config = adapter.schema.parse(manifest.config);
+  const config = await applyTargetEnv(adapter.schema.parse(manifest.config), {
+    manifest,
+    options,
+  });
   const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
   const authHandler = gatewayTarget.auth?.[action];
   if (!authHandler) return exit(2, { message: unsupportedAdapterActionMessage(target.type, action) });

@@ -39,8 +39,7 @@ export type GatewayOAuthServiceInput = {
 
 export function parseOptionalOAuthProviderConfig(value: unknown): GatewayOAuthProviderConfig | undefined {
   if (value === undefined) return undefined;
-  // Legacy gateway configs used `auth: oauth` as a discovery marker without provider endpoints.
-  if (value === "oauth") return undefined;
+  if (typeof value === "string") return undefined;
   if (!isRecord(value)) throw new Error("Invalid auth config: auth must be an object");
 
   const provider = stringValue(value.provider) ?? stringValue(value.id);

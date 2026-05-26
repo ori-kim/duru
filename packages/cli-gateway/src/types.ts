@@ -22,6 +22,10 @@ export type GatewayContext = {
 
 export type GatewayServices = Record<string, unknown>;
 
+export type GatewayEnvService = {
+  loadTargetEnv(input: { target: string; type: string }): Promise<ReadonlyMap<string, string>>;
+};
+
 export type GatewayStore = {
   listTargets(): Promise<readonly GatewayTargetRecord[]>;
   getTarget(name: string): Promise<GatewayTargetRecord | undefined>;

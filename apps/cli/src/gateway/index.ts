@@ -5,6 +5,7 @@ import { createTargetFileOAuthTokenStore } from "../auth/file-token-store.ts";
 import { createMacOSKeychainOAuthTokenStore } from "../auth/keychain-store.ts";
 import { createAppOAuthGatewayService } from "../auth/oauth-services.ts";
 import { withGatewayCatalogCache } from "./catalog-store.ts";
+import { createAppGatewayEnvService } from "./env-service.ts";
 import { createAppGatewayStore } from "./store.ts";
 
 export type CreateAppGatewayOptions = {
@@ -32,7 +33,10 @@ export async function createAppGateway(options: CreateAppGatewayOptions = {}) {
     store: gatewayStore,
     adapters: defaultGatewayAdapters(),
     env,
-    services: { oauth: createAppOAuthGatewayService({ tokens: oauthTokenStore }) },
+    services: {
+      oauth: createAppOAuthGatewayService({ tokens: oauthTokenStore }),
+      env: createAppGatewayEnvService({ fileHome }),
+    },
   };
   const gatewayOptions = {
     ...baseGatewayOptions,
