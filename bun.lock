@@ -176,7 +176,6 @@
       "dependencies": {
         "@duru/cli-kit": "workspace:*",
         "@duru/file-store": "workspace:*",
-        "@duru/qmd": "workspace:*",
         "@duru/virtual-plugins": "workspace:*",
       },
     },

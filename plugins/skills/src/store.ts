@@ -1,12 +1,30 @@
-import { cp, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { FileStore } from "@duru/file-store";
 import type { SkillMeta, SkillRecord } from "./types.ts";
+
+export type SkillTransferOptions = {
+  name?: string;
+  all?: boolean;
+  force?: boolean;
+};
+
+export type SkillImportResult = {
+  imported: string[];
+  skipped: string[];
+};
+
+export type SkillExportResult = {
+  exported: string[];
+  skipped: string[];
+};
 
 export type SkillsStore = {
   list(): Promise<SkillRecord[]>;
   get(name: string): Promise<SkillRecord | null>;
   add(srcPath: string): Promise<SkillRecord>;
+  importFromRoot(rootPath: string, options: SkillTransferOptions): Promise<SkillImportResult>;
+  exportToRoot(rootPath: string, options: SkillTransferOptions): Promise<SkillExportResult>;
   delete(name: string): Promise<void>;
   skillsDir: string;
 };
@@ -69,14 +87,20 @@ function applyValue(result: Partial<SkillMeta>, key: string, rawValue: string) {
   } else if (key === "tags") {
     if (rawValue.startsWith("[") && rawValue.endsWith("]")) {
       const inner = rawValue.slice(1, -1);
-      result.tags = inner.split(",").map((s) => s.trim()).filter(Boolean);
+      result.tags = inner
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
     } else {
       result.tags = [rawValue];
     }
   } else if (key === "allowed-tools" || key === "allowedTools") {
     if (rawValue.startsWith("[") && rawValue.endsWith("]")) {
       const inner = rawValue.slice(1, -1);
-      result.allowedTools = inner.split(",").map((s) => s.trim()).filter(Boolean);
+      result.allowedTools = inner
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
     } else {
       result.allowedTools = [rawValue];
     }
@@ -96,7 +120,12 @@ export function createSkillsStore(files: FileStore): SkillsStore {
       const meta = parseFrontmatter(content);
       if (!meta.name) continue;
       records.push({
-        meta: { name: meta.name, description: meta.description, tags: meta.tags ?? [], allowedTools: meta.allowedTools },
+        meta: {
+          name: meta.name,
+          description: meta.description,
+          tags: meta.tags ?? [],
+          allowedTools: meta.allowedTools,
+        },
         dir: join(skillsDir, entry.name),
         skillPath: join(skillsDir, entry.name, "SKILL.md"),
       });
@@ -111,7 +140,6 @@ export function createSkillsStore(files: FileStore): SkillsStore {
   async function add(srcPath: string): Promise<SkillRecord> {
     const srcDir = basename(srcPath) === "SKILL.md" ? dirname(srcPath) : srcPath;
     const skillMdPath = join(srcDir, "SKILL.md");
-    const { readFile } = await import("node:fs/promises");
     const content = await readFile(skillMdPath, "utf8");
     const meta = parseFrontmatter(content);
     if (!meta.name) {
@@ -121,15 +149,106 @@ export function createSkillsStore(files: FileStore): SkillsStore {
     await rm(destDir, { recursive: true, force: true });
     await cp(srcDir, destDir, { recursive: true });
     return {
-      meta: { name: meta.name, description: meta.description, tags: meta.tags ?? [], allowedTools: meta.allowedTools } satisfies SkillMeta,
+      meta: {
+        name: meta.name,
+        description: meta.description,
+        tags: meta.tags ?? [],
+        allowedTools: meta.allowedTools,
+      } satisfies SkillMeta,
       dir: destDir,
       skillPath: join(destDir, "SKILL.md"),
     };
+  }
+
+  async function importFromRoot(rootPath: string, options: SkillTransferOptions): Promise<SkillImportResult> {
+    const sourceDirs = await sourceSkillDirs(rootPath, options);
+    const imported: string[] = [];
+    const skipped: string[] = [];
+
+    for (const sourceDir of sourceDirs) {
+      const record = await readSkillRecordFromDir(sourceDir);
+      const destDir = join(skillsDir, record.meta.name);
+      if (await exists(destDir)) {
+        if (!options.force) {
+          throw new Error(`Skill already exists: ${record.meta.name}. Use --force to replace it.`);
+        }
+        await rm(destDir, { recursive: true, force: true });
+      }
+      await cp(sourceDir, destDir, { recursive: true });
+      imported.push(record.meta.name);
+    }
+
+    return { imported: imported.sort(), skipped };
+  }
+
+  async function exportToRoot(rootPath: string, options: SkillTransferOptions): Promise<SkillExportResult> {
+    const records = await selectedRecords(options);
+    const exported: string[] = [];
+    const skipped: string[] = [];
+
+    await mkdir(rootPath, { recursive: true });
+    for (const record of records) {
+      const destDir = join(rootPath, record.meta.name);
+      if (await exists(destDir)) {
+        if (!options.force) {
+          throw new Error(`Skill already exists at destination: ${record.meta.name}. Use --force to replace it.`);
+        }
+        await rm(destDir, { recursive: true, force: true });
+      }
+      await cp(record.dir, destDir, { recursive: true });
+      exported.push(record.meta.name);
+    }
+
+    return { exported: exported.sort(), skipped };
+  }
+
+  async function selectedRecords(options: SkillTransferOptions): Promise<SkillRecord[]> {
+    if (options.all) return list();
+    if (!options.name) throw new Error("Pass a skill name or --all.");
+    const record = await get(options.name);
+    if (!record) throw new Error(`Skill not found: ${options.name}`);
+    return [record];
   }
 
   async function del(name: string): Promise<void> {
     await rm(join(skillsDir, name), { recursive: true, force: true });
   }
 
-  return { list, get, add, delete: del, skillsDir };
+  return { list, get, add, importFromRoot, exportToRoot, delete: del, skillsDir };
+}
+
+async function sourceSkillDirs(rootPath: string, options: SkillTransferOptions): Promise<string[]> {
+  if (options.all) {
+    const entries = await readdir(rootPath, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(rootPath, entry.name))
+      .sort();
+  }
+  if (!options.name) throw new Error("Pass a skill name or --all.");
+  return [join(rootPath, options.name)];
+}
+
+async function readSkillRecordFromDir(dir: string): Promise<SkillRecord> {
+  const skillPath = join(dir, "SKILL.md");
+  const content = await readFile(skillPath, "utf8");
+  const meta = parseFrontmatter(content);
+  if (!meta.name) {
+    throw new Error(`SKILL.md at ${skillPath} is missing required 'name' field in frontmatter`);
+  }
+  return {
+    meta: { name: meta.name, description: meta.description, tags: meta.tags ?? [], allowedTools: meta.allowedTools },
+    dir,
+    skillPath,
+  };
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (err) {
+    if (typeof err === "object" && err !== null && "code" in err && err.code === "ENOENT") return false;
+    throw err;
+  }
 }
