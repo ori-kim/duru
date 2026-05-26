@@ -70,3 +70,4 @@ export type {
   NormalizeContext,
   RefreshContext,
 } from "./types";
+export { isSecretRef, resolveSecrets } from "./secret-resolution";

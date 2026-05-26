@@ -389,3 +389,10 @@ function base64Url(value: Buffer): string {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+export { createSecretsOAuthTokenStore } from "./secrets-token-store.ts";
+export {
+  OAUTH_RESERVED_PREFIXES,
+  parseOAuthBackendConfig,
+} from "./oauth-config.ts";
+export type { OAuthBackendConfig } from "./oauth-config.ts";

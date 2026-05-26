@@ -1,10 +1,11 @@
 {
-  "name": "@duru/auth",
+  "name": "@duru/secrets-keychain",
   "version": "0.0.0",
   "type": "module",
   "private": true,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./platform": "./src/platform.ts"
   },
   "dependencies": {
     "@duru/secrets": "workspace:*"

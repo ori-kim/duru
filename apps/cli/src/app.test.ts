@@ -6,7 +6,8 @@ import { createAppCli } from "./app.ts";
 
 describe("duru cli app", () => {
   test("renders root help as text by default", async () => {
-    const result = await createAppCli().run(["--help"]);
+    const home = await tempDir("help-default");
+    const result = await withDuruHome(home, () => createAppCli().run(["--help"]));
 
     expect(result.exitCode).toBe(0);
     expect(result.rendered?.stdout ?? "").toContain("Usage: duru");
@@ -17,11 +18,12 @@ describe("duru cli app", () => {
     const result = await withDuruHome(home, () => createAppCli().run(["gateway", "list", "--json"]));
 
     expect(result.exitCode).toBe(0);
-    expect(JSON.parse(result.rendered?.stdout ?? "")).toEqual({ targets: [] });
+    expect(JSON.parse(result.rendered?.stdout ?? "")).toEqual([]);
   });
 
   test("shows gateway management under the gateway namespace in root help", async () => {
-    const result = await createAppCli().run(["--help"]);
+    const home = await tempDir("help-namespace");
+    const result = await withDuruHome(home, () => createAppCli().run(["--help"]));
     const stdout = result.rendered?.stdout ?? "";
 
     expect(stdout).toContain("gateway add <name> [...args]  Add a gateway target");
@@ -142,6 +144,37 @@ describe("duru cli app", () => {
     });
   });
 
+  test("rejects OAuth-reserved secret names before writing manifest", async () => {
+    const home = await tempDir("secret-reserved-prefix");
+    const result = await withDuruHome(home, () =>
+      createAppCli().run(["secret", "add", "oauth/x", "file://x"], { render: false }),
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.result).toMatchObject({
+      error: { message: expect.stringContaining('reserved prefix "oauth/"') },
+    });
+  });
+
+  test("does not block secret management when auto-injected secret cannot resolve", async () => {
+    const home = await tempDir("secret-auto-inject-error");
+    await writeFile(
+      join(home, "duru.secrets.json"),
+      JSON.stringify({
+        secrets: { DURU_BAD: "missing://x" },
+        autoInject: { enabled: true, prefix: "DURU_" },
+        extensions: {},
+      }),
+    );
+
+    const result = await withDuruHome(home, () => createAppCli().run(["secret", "list"], { render: false }));
+
+    expect(result.exitCode).toBe(0);
+    expect(result.result).toEqual({
+      secrets: [{ name: "DURU_BAD", ref: "missing://x" }],
+    });
+  });
+
   test("persists cli gateway targets in DURU_HOME and dispatches them", async () => {
     const home = await tempDir("gateway");
 
@@ -153,7 +186,7 @@ describe("duru cli app", () => {
 
       expect(add.exitCode).toBe(0);
       expect(add.result).toEqual({ name: "say", type: "cli" });
-      expect(list.result).toEqual({ targets: [{ name: "say", type: "cli" }] });
+      expect(list.result).toEqual([{ name: "say", type: "cli" }]);
       expect(run.exitCode).toBe(0);
       expect(run.result).toBe("hello example");
       expect(config).toContain('name = "say"');
@@ -451,7 +484,7 @@ describe("duru cli app", () => {
       const config = await readFile(join(home, "gateway", "cli", "say", "aliases", "hi.toml"), "utf8");
 
       expect(addAlias.result).toEqual({ target: "say", name: "hi", operation: "hello" });
-      expect(listAliases.result).toEqual({ aliases: [{ target: "say", name: "hi", operation: "hello", args: [] }] });
+      expect(listAliases.result).toEqual([{ target: "say", name: "hi", operation: "hello", args: [] }]);
       expect(run.result).toBe("hello example");
       expect(config).toContain('name = "hi"');
       expect(config).toContain('operation = "hello"');
@@ -495,7 +528,7 @@ describe("duru cli app", () => {
       const shim = await readFile(join(home, "bin", "hi"), "utf8");
 
       expect(bind.result).toEqual({ name: "hi", target: "say", args: ["hello"] });
-      expect(list.result).toEqual({ bindings: [{ name: "hi", target: "say", args: ["hello"] }] });
+      expect(list.result).toEqual([{ name: "hi", target: "say", args: ["hello"] }]);
       expect(run.result).toBe("hello example");
       expect(config).toContain('name = "hi"');
       expect(config).toContain('target = "say"');
@@ -521,9 +554,7 @@ describe("duru cli app", () => {
 
       expect(addProfile.result).toEqual({ target: "say", name: "dev" });
       expect(useProfile.result).toEqual({ target: "say", name: "dev" });
-      expect(listProfiles.result).toEqual({
-        profiles: [{ target: "say", name: "dev", config: { args: ["hello"] }, active: true }],
-      });
+      expect(listProfiles.result).toEqual([{ target: "say", name: "dev", config: { args: ["hello"] }, active: true }]);
       expect(run.result).toBe("hello example");
       expect(targetConfig).toContain('defaultProfile = "dev"');
       expect(config).toContain('name = "dev"');

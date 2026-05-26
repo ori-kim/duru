@@ -1,8 +1,7 @@
+import { createSecretsOAuthTokenStore, parseOAuthBackendConfig } from "@duru/auth";
 import { cliGateway, createGatewayCli, defaultGatewayAdapters, loadGatewaySnapshot } from "@duru/cli-gateway";
 import { createDuruFileHome } from "@duru/file-store";
-import { createConfiguredOAuthTokenStore } from "../auth/configured-token-store.ts";
-import { createTargetFileOAuthTokenStore } from "../auth/file-token-store.ts";
-import { createMacOSKeychainOAuthTokenStore } from "../auth/keychain-store.ts";
+import type { Manifest, SecretResolver } from "@duru/secrets";
 import { createAppOAuthGatewayService } from "../auth/oauth-services.ts";
 import { withGatewayCatalogCache } from "./catalog-store.ts";
 import { createAppGatewayEnvService } from "./env-service.ts";
@@ -11,11 +10,13 @@ import { createAppGatewayStore } from "./store.ts";
 export type CreateAppGatewayOptions = {
   env?: Readonly<Record<string, string | undefined>>;
   routeName?: string;
+  manifest: Manifest;
+  resolver: SecretResolver;
 };
 
 const gatewayGroup = "Gateway";
 
-export async function createAppGateway(options: CreateAppGatewayOptions = {}) {
+export async function createAppGateway(options: CreateAppGatewayOptions) {
   const env = options.env ?? process.env;
   const routeName = options.routeName ?? "gateway";
   const fileHome = createDuruFileHome({ env });
@@ -24,11 +25,10 @@ export async function createAppGateway(options: CreateAppGatewayOptions = {}) {
     createAppGatewayStore({ files: gatewayFiles, shims: fileHome.store("bin") }),
     gatewayFiles,
   );
-  const oauthTokenStore = createConfiguredOAuthTokenStore({
-    targets: gatewayStore,
-    keychain: createMacOSKeychainOAuthTokenStore(),
-    file: createTargetFileOAuthTokenStore({ files: gatewayFiles, targets: gatewayStore }),
-  });
+
+  const oauthConfig = parseOAuthBackendConfig(options.manifest.data);
+  const oauthTokenStore = createSecretsOAuthTokenStore(options.resolver, oauthConfig);
+
   const baseGatewayOptions = {
     store: gatewayStore,
     adapters: defaultGatewayAdapters(),
@@ -36,6 +36,7 @@ export async function createAppGateway(options: CreateAppGatewayOptions = {}) {
     services: {
       oauth: createAppOAuthGatewayService({ tokens: oauthTokenStore }),
       env: createAppGatewayEnvService({ fileHome }),
+      secrets: options.resolver,
     },
   };
   const gatewayOptions = {

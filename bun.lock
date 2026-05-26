@@ -16,6 +16,7 @@
         "duru": "./src/main.ts",
       },
       "dependencies": {
+        "@clack/prompts": "^1.4.0",
         "@duru/auth": "workspace:*",
         "@duru/clack": "workspace:*",
         "@duru/cli-gateway": "workspace:*",
@@ -26,6 +27,8 @@
         "@duru/plugin-manage": "workspace:*",
         "@duru/renderer-json": "workspace:*",
         "@duru/renderer-text": "workspace:*",
+        "@duru/secrets": "workspace:*",
+        "@duru/secrets-keychain": "workspace:*",
         "@duru/virtual-plugins": "workspace:*",
       },
     },
@@ -36,6 +39,9 @@
     "packages/auth": {
       "name": "@duru/auth",
       "version": "0.0.0",
+      "dependencies": {
+        "@duru/secrets": "workspace:*",
+      },
     },
     "packages/clack": {
       "name": "@duru/clack",
@@ -52,6 +58,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@duru/cli-kit": "workspace:*",
+        "@duru/secrets": "workspace:*",
       },
     },
     "packages/completion-zsh": {
@@ -123,6 +130,17 @@
       "version": "0.0.0",
       "dependencies": {
         "@duru/cli-kit": "workspace:*",
+      },
+    },
+    "packages/secrets": {
+      "name": "@duru/secrets",
+      "version": "0.0.0",
+    },
+    "packages/secrets-keychain": {
+      "name": "@duru/secrets-keychain",
+      "version": "0.0.0",
+      "dependencies": {
+        "@duru/secrets": "workspace:*",
       },
     },
     "packages/virtual-plugins": {
@@ -217,6 +235,10 @@
     "@duru/renderer-json": ["@duru/renderer-json@workspace:packages/renderer-json"],
 
     "@duru/renderer-text": ["@duru/renderer-text@workspace:packages/renderer-text"],
+
+    "@duru/secrets": ["@duru/secrets@workspace:packages/secrets"],
+
+    "@duru/secrets-keychain": ["@duru/secrets-keychain@workspace:packages/secrets-keychain"],
 
     "@duru/virtual-plugins": ["@duru/virtual-plugins@workspace:packages/virtual-plugins"],
 

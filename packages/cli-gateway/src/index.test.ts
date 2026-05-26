@@ -12,6 +12,7 @@ import {
   defaultGatewayAdapters,
 } from "@duru/cli-gateway";
 import { createCli, help } from "@duru/cli-kit";
+import { type SecretProvider, createResolver } from "@duru/secrets";
 import type { CliGatewayOptions } from "./types";
 
 describe("@duru/cli-gateway contract", () => {
@@ -857,7 +858,7 @@ describe("@duru/cli-gateway commands", () => {
     const list = await cli.run(["gateway", "list"], { render: false });
 
     expect(add.result).toEqual({ name: "test-service", type: "cli" });
-    expect(list.result).toEqual({ targets: [{ name: "test-service", type: "cli" }] });
+    expect(list.result).toEqual([{ name: "test-service", type: "cli" }]);
   });
 
   test("lets hosts choose the gateway command namespace explicitly", async () => {
@@ -959,14 +960,12 @@ describe("@duru/cli-gateway commands", () => {
     const remove = await cli.run(["gateway", "remove", "test-service"], { render: false });
     const listAfter = await cli.run(["gateway", "list"], { render: false });
 
-    expect(listBefore.result).toEqual({
-      targets: [
-        { name: "notes-api", type: "openapi" },
-        { name: "test-service", type: "cli" },
-      ],
-    });
+    expect(listBefore.result).toEqual([
+      { name: "notes-api", type: "openapi" },
+      { name: "test-service", type: "cli" },
+    ]);
     expect(remove.result).toEqual({ removed: "test-service" });
-    expect(listAfter.result).toEqual({ targets: [{ name: "notes-api", type: "openapi" }] });
+    expect(listAfter.result).toEqual([{ name: "notes-api", type: "openapi" }]);
   });
 
   test("registers bind commands and dispatches bindings through the gateway runtime", async () => {
@@ -981,7 +980,7 @@ describe("@duru/cli-gateway commands", () => {
     const unbind = await cli.run(["gateway", "unbind", "hi"], { render: false });
 
     expect(bind.result).toEqual({ name: "hi", target: "say", args: ["hello"] });
-    expect(list.result).toEqual({ bindings: [{ name: "hi", target: "say", args: ["hello"] }] });
+    expect(list.result).toEqual([{ name: "hi", target: "say", args: ["hello"] }]);
     expect(run.result).toBe("hello example");
     expect(unbind.result).toEqual({ removed: "hi" });
     expect(await store.listBindings()).toEqual([]);
@@ -1022,9 +1021,9 @@ describe("@duru/cli-gateway commands", () => {
     const remove = await cli.run(["gateway", "alias", "remove", "test-service", "cats"], { render: false });
 
     expect(add.result).toEqual({ target: "test-service", name: "cats", operation: "listCats" });
-    expect(list.result).toEqual({
-      aliases: [{ target: "test-service", name: "cats", operation: "listCats", args: ["--limit", "10"] }],
-    });
+    expect(list.result).toEqual([
+      { target: "test-service", name: "cats", operation: "listCats", args: ["--limit", "10"] },
+    ]);
     expect(remove.result).toEqual({ removed: { target: "test-service", name: "cats" } });
     expect(await store.listAliases("test-service")).toEqual([]);
   });
@@ -1072,17 +1071,15 @@ describe("@duru/cli-gateway commands", () => {
     const run = await cli.run(["test-service", "cats", "--tag", "example"], { render: false });
 
     expect(add.result).toEqual({ target: "test-service", name: "cats", operation: "listCats" });
-    expect(list.result).toEqual({
-      aliases: [
-        {
-          target: "test-service",
-          name: "cats",
-          operation: "listCats",
-          input: { tag: "test-service", limit: 20 },
-          args: ["--limit", "10"],
-        },
-      ],
-    });
+    expect(list.result).toEqual([
+      {
+        target: "test-service",
+        name: "cats",
+        operation: "listCats",
+        input: { tag: "test-service", limit: 20 },
+        args: ["--limit", "10"],
+      },
+    ]);
     expect(run.result).toEqual({
       command: "test-service",
       argv: ["listCats", '{"tag":"test-service","limit":20}', "--limit", "10", "--tag", "example"],
@@ -1105,13 +1102,11 @@ describe("@duru/cli-gateway commands", () => {
     const remove = await cli.run(["gateway", "profile", "remove", "test-service", "dev"], { render: false });
 
     expect(add.result).toEqual({ target: "test-service", name: "dev" });
-    expect(list.result).toEqual({
-      profiles: [{ target: "test-service", name: "dev", config: { args: ["--prefix", "example"] } }],
-    });
+    expect(list.result).toEqual([{ target: "test-service", name: "dev", config: { args: ["--prefix", "example"] } }]);
     expect(use.result).toEqual({ target: "test-service", name: "dev" });
-    expect(listActive.result).toEqual({
-      profiles: [{ target: "test-service", name: "dev", config: { args: ["--prefix", "example"] }, active: true }],
-    });
+    expect(listActive.result).toEqual([
+      { target: "test-service", name: "dev", config: { args: ["--prefix", "example"] }, active: true },
+    ]);
     expect(unset.result).toEqual({ target: "test-service", unset: "dev" });
     expect(remove.result).toEqual({ removed: { target: "test-service", name: "dev" } });
     expect(await store.listProfiles("test-service")).toEqual([]);
@@ -1720,7 +1715,7 @@ describe("@duru/cli-gateway runtime", () => {
     const managed = await cli.run(["gateway", "list"], { render: false });
 
     expect(direct.result).toEqual({ command: "list", argv: ["tools"] });
-    expect(managed.result).toEqual({ targets: [{ name: "list", type: "cli" }] });
+    expect(managed.result).toEqual([{ name: "list", type: "cli" }]);
   });
 
   test("passes gateway target help through before static help middleware", async () => {
@@ -1930,6 +1925,37 @@ describe("@duru/cli-gateway runtime", () => {
     const result = await cli.run(["test-service", "listCats", "--dry-run"], { render: false });
 
     expect(result.result).toEqual({ argv: ["listCats"], dryRun: true });
+  });
+
+  test("redacts resolved secret refs in gateway dry-run output", async () => {
+    const store = createMemoryGatewayStore({
+      targets: [
+        {
+          name: "secret-api",
+          type: "api",
+          config: {
+            baseUrl: "https://api.example.com",
+            headers: { Authorization: "keychain://api/token", "X-Plain": "visible" },
+          },
+        },
+      ],
+    });
+    const resolver = createResolver([secretProvider("keychain", { "api/token": "super-secret" })]);
+    const cli = createGatewayTestCli({
+      store,
+      adapters: defaultGatewayAdapters(),
+      services: { secrets: resolver },
+    });
+
+    const result = await cli.run(["secret-api", "/v1/items", "--dry-run"], { render: false });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.result).toMatchObject({
+      request: {
+        headers: { Authorization: "<redacted>", "X-Plain": "visible" },
+      },
+    });
+    expect(JSON.stringify(result.result)).not.toContain("super-secret");
   });
 
   test("expands target aliases before adapter execution", async () => {
@@ -2172,6 +2198,25 @@ function createGatewayTestCli(options: CliGatewayOptions) {
   return createCli({ name: "duru" })
     .use(cliGateway(options))
     .subCommand("gateway", createGatewayCli(options, { group: "Gateway" }));
+}
+
+function secretProvider(scheme: string, values: Record<string, string>): SecretProvider {
+  const store = new Map(Object.entries(values));
+  return {
+    scheme,
+    async get(path) {
+      return store.get(path);
+    },
+    async set(path, value) {
+      store.set(path, value);
+    },
+    async delete(path) {
+      store.delete(path);
+    },
+    async list() {
+      return [...store.keys()];
+    },
+  };
 }
 
 function shellQuote(value: string): string {

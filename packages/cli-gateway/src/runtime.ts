@@ -34,7 +34,12 @@ export async function runGatewayTargetInvocation(
   if (!adapter) return ctx.exit(2, { message: unknownAdapterMessage(target.type) });
 
   const manifest = mergeTargetProfile(target, profile);
-  const config = await applyTargetEnv(parseTargetConfig(adapter, manifest), { manifest, options });
+  const dryRun = dryRunOption(ctx.options);
+  const config = await applyTargetEnv(parseTargetConfig(adapter, manifest), {
+    manifest,
+    options,
+    secretResolution: dryRun ? "redact" : "resolve",
+  });
   const gatewayTarget = adapter.createTarget({ manifest, config, profile, context: options });
   const argv = await targetArgv(
     stripEmptyInvocationOptions(bindingArgv(binding, stripGatewayOptions(ctx.argv.slice(1)))),
@@ -48,7 +53,7 @@ export async function runGatewayTargetInvocation(
   try {
     const result = await gatewayTarget.invoke({
       argv,
-      dryRun: dryRunOption(ctx.options),
+      dryRun,
       ...(timeout.signal ? { signal: timeout.signal } : {}),
     });
     return gatewayExecutionResult(ctx, result);

@@ -7,6 +7,7 @@
     "duru": "./src/main.ts"
   },
   "dependencies": {
+    "@clack/prompts": "^1.4.0",
     "@duru/auth": "workspace:*",
     "@duru/cli-gateway": "workspace:*",
     "@duru/completion-zsh": "workspace:*",
@@ -17,6 +18,8 @@
     "@duru/renderer-json": "workspace:*",
     "@duru/renderer-text": "workspace:*",
     "@duru/plugin-manage": "workspace:*",
+    "@duru/secrets": "workspace:*",
+    "@duru/secrets-keychain": "workspace:*",
     "@duru/virtual-plugins": "workspace:*"
   }
 }
