@@ -1,5 +1,6 @@
-import { resolve } from "node:path";
 import type { OAuthCallbackResult } from "@duru/auth";
+// @ts-expect-error — Bun embeds the file at build time via `with { type: "file" }`.
+import embeddedIconPath from "../../../../assets/icon.png" with { type: "file" };
 
 export type WaitForLocalOAuthCallbackInput = {
   redirectUri: string;
@@ -106,7 +107,7 @@ function iconResponse(iconPath: string | undefined): Response {
 }
 
 function defaultIconPath(): string {
-  return resolve(process.cwd(), "assets", "icon.png");
+  return embeddedIconPath;
 }
 
 function htmlResponse(
