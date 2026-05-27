@@ -2,9 +2,11 @@ import { chmod } from "node:fs/promises";
 import type {
   GatewayAliasRecord,
   GatewayBindingRecord,
+  GatewayOAuthProviderConfig,
   GatewayProfileRecord,
   GatewayStore,
   GatewayTargetRecord,
+  GatewayTargetSidecars,
 } from "@duru/cli-gateway";
 import type { FileStore } from "@duru/file-store";
 
@@ -59,6 +61,13 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
     }
     await files.write(targetConfigPath(type, name, extension), targetPayload(record));
     await removeOtherTargetConfigs(type, name, extension);
+  }
+
+  async function saveTargetWithSidecars(record: GatewayTargetRecord, sidecars: GatewayTargetSidecars): Promise<void> {
+    await saveTarget(targetWithSidecarSentinels(record, sidecars));
+    if (sidecars.oauth) {
+      await files.write(legacyAuthPath(record.type, record.name), legacyOAuthProviderPayload(sidecars.oauth));
+    }
   }
 
   async function removeTarget(name: string): Promise<void> {
@@ -301,6 +310,7 @@ export function createAppGatewayStore(options: CreateAppGatewayStoreOptions): Ga
     listTargets,
     getTarget,
     saveTarget,
+    saveTargetWithSidecars,
     removeTarget,
     listProfiles,
     getProfile,
@@ -355,6 +365,14 @@ function aliasPath(type: string, target: string, name: string, extension: string
 function targetPayload(record: GatewayTargetRecord): TargetFileRecord {
   const { source: _source, ...payload } = record;
   return withoutUndefined(payload);
+}
+
+function targetWithSidecarSentinels(record: GatewayTargetRecord, sidecars: GatewayTargetSidecars): GatewayTargetRecord {
+  if (!sidecars.oauth || !isRecord(record.config)) return record;
+  return {
+    ...record,
+    config: { ...record.config, auth: "oauth" },
+  };
 }
 
 function profilePayload(target: string, record: GatewayProfileRecord): ProfileFileRecord {
@@ -441,6 +459,7 @@ function legacyOAuthProviderFromSidecar(record: Record<string, unknown>): Record
   const redirectUri = stringValue(record.redirectUri) ?? stringValue(record.redirect_uri);
   const legacyClientId = stringValue(record.clientId) ?? stringValue(record.client_id);
   const clientId = legacyClientId && (!registrationEndpoint || redirectUri) ? legacyClientId : undefined;
+  const clientName = stringValue(record.clientName) ?? stringValue(record.client_name);
 
   if (!provider || !authorizationEndpoint || !tokenEndpoint || (!clientId && !registrationEndpoint)) return undefined;
 
@@ -450,10 +469,27 @@ function legacyOAuthProviderFromSidecar(record: Record<string, unknown>): Record
     tokenEndpoint,
     clientId,
     registrationEndpoint,
+    clientName,
     store: storeValue(record.store),
     scopes: scopesValue(record.scopes) ?? scopeStringValue(record.scope),
     redirectUri,
     extraParams: isStringRecord(record.extraParams) ? record.extraParams : undefined,
+  });
+}
+
+function legacyOAuthProviderPayload(provider: GatewayOAuthProviderConfig): Record<string, unknown> {
+  return withoutUndefined({
+    authorization_server: provider.provider,
+    authorization_endpoint: provider.authorizationEndpoint,
+    token_endpoint: provider.tokenEndpoint,
+    registration_endpoint: provider.registrationEndpoint,
+    client_id: provider.clientId,
+    client_name: provider.clientName,
+    scope: provider.scopes?.join(" "),
+    redirect_uri: provider.redirectUri,
+    resource_url: provider.extraParams?.resource,
+    store: provider.store,
+    extraParams: provider.extraParams,
   });
 }
 

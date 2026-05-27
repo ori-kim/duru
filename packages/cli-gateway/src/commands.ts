@@ -7,6 +7,7 @@ import type {
   AuthContext,
   CliGatewayOptions,
   GatewayAdapter,
+  GatewayAddResult,
   GatewayBindingRecord,
   GatewayCheckReport,
   GatewayDiagnostic,
@@ -16,6 +17,7 @@ import type {
   GatewayTargetCapabilities,
   GatewayTargetCheck,
   GatewayTargetRecord,
+  GatewayTargetSidecars,
   GatewayTool,
 } from "./types";
 
@@ -49,6 +51,7 @@ export function installGatewayCommands(
     .option("--type <type>", "Gateway adapter type")
     .option("--transport <transport>", "Gateway target transport")
     .option("--description <description>", "Gateway target description")
+    .option("--auth <auth>", "Gateway target auth mode")
     .option("--allow <patterns>", "Allowed gateway operations")
     .option("--deny <patterns>", "Denied gateway operations")
     .action(async (ctx) => {
@@ -60,21 +63,29 @@ export function installGatewayCommands(
       const addOptions = {
         ...(ctx.options.transport ? { transport: ctx.options.transport } : {}),
         ...(ctx.options.description ? { description: ctx.options.description } : {}),
+        ...(ctx.options.auth ? { auth: ctx.options.auth } : {}),
       };
-      const adapter = await resolveAddAdapter(adapters, { name, type: explicitType, argv, options: addOptions });
+      const addInput = { name, type: explicitType, argv, options: addOptions, context: options };
+      const adapter = await resolveAddAdapter(adapters, addInput);
       if (adapter.kind === "error") return ctx.exit(2, { message: adapter.message });
 
-      const config = adapter.value.add
-        ? await adapter.value.add({ name, type: adapter.value.type, argv, options: addOptions })
+      const addResult = adapter.value.add
+        ? await adapter.value.add({ ...addInput, type: adapter.value.type })
         : adapter.value.schema.parse({});
-
-      await options.store.saveTarget({
+      const { targetConfig: config, sidecars } = targetConfigFromAddResult(addResult);
+      const target = {
         name,
         type: adapter.value.type,
         config,
         ...(allow.length > 0 ? { allow } : {}),
         ...(deny.length > 0 ? { deny } : {}),
-      });
+      };
+
+      if (sidecars && options.store.saveTargetWithSidecars) {
+        await options.store.saveTargetWithSidecars(target, sidecars);
+      } else {
+        await options.store.saveTarget(target);
+      }
 
       return { name, type: adapter.value.type };
     });
@@ -240,6 +251,16 @@ function styleCommand<TBuilder extends { hidden(hidden?: boolean): TBuilder; gro
   if (options.hidden) builder.hidden();
   if (options.group) builder.group(options.group);
   return builder;
+}
+
+function targetConfigFromAddResult<TConfig>(result: TConfig | GatewayAddResult<TConfig>): {
+  targetConfig: TConfig;
+  sidecars?: GatewayTargetSidecars;
+} {
+  if (isRecord(result) && result.kind === "gateway.add-result") {
+    return result as GatewayAddResult<TConfig>;
+  }
+  return { targetConfig: result as TConfig };
 }
 
 async function resolveAddAdapter(

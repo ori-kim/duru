@@ -917,6 +917,74 @@ describe("@duru/cli-gateway commands", () => {
     ]);
   });
 
+  test("discovers MCP OAuth metadata during add when requested", async () => {
+    const store = createMemoryGatewayStore();
+    const calls: string[] = [];
+    const cli = createGatewayTestCli({
+      store,
+      adapters: defaultGatewayAdapters(),
+      services: {
+        async fetch(input: string | URL | Request) {
+          const url = String(input);
+          calls.push(url);
+          if (url === "https://catservice.example.com/mcp") {
+            return new Response(JSON.stringify({ error: "missing token" }), {
+              status: 401,
+              headers: {
+                "www-authenticate":
+                  'Bearer resource_metadata="https://catservice.example.com/.well-known/oauth-protected-resource"',
+              },
+            });
+          }
+          if (url === "https://catservice.example.com/.well-known/oauth-protected-resource") {
+            return Response.json({
+              resource: "https://catservice.example.com/mcp",
+              authorization_servers: ["https://auth.example.com/"],
+              scopes_supported: ["items:read", "items:write"],
+            });
+          }
+          if (url === "https://auth.example.com/.well-known/oauth-authorization-server") {
+            return Response.json({
+              issuer: "https://auth.example.com/",
+              authorization_endpoint: "https://auth.example.com/authorize",
+              token_endpoint: "https://auth.example.com/token",
+              registration_endpoint: "https://auth.example.com/register",
+            });
+          }
+          return new Response("not found", { status: 404 });
+        },
+      },
+    });
+
+    const result = await cli.run(
+      ["gateway", "add", "catservice", "https://catservice.example.com/mcp", "--type", "mcp", "--auth", "oauth"],
+      { render: false },
+    );
+
+    expect(result.result).toEqual({ name: "catservice", type: "mcp" });
+    expect(calls).toEqual([
+      "https://catservice.example.com/mcp",
+      "https://catservice.example.com/.well-known/oauth-protected-resource",
+      "https://auth.example.com/.well-known/oauth-authorization-server",
+    ]);
+    expect(await store.getTarget("catservice")).toEqual({
+      name: "catservice",
+      type: "mcp",
+      config: {
+        url: "https://catservice.example.com/mcp",
+        auth: {
+          id: "https://auth.example.com",
+          provider: "https://auth.example.com",
+          authorizationEndpoint: "https://auth.example.com/authorize",
+          tokenEndpoint: "https://auth.example.com/token",
+          registrationEndpoint: "https://auth.example.com/register",
+          scopes: ["items:read", "items:write"],
+          extraParams: { resource: "https://catservice.example.com/mcp" },
+        },
+      },
+    });
+  });
+
   test("reports ambiguous add detection when multiple adapters match", async () => {
     const store = createMemoryGatewayStore();
     const adapter = (type: string) =>

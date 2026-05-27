@@ -1,6 +1,8 @@
 import { parseOptionalOAuthProviderConfig } from "../../auth";
 import type { GatewayOAuthProviderConfig } from "../../auth";
-import type { AddInput } from "../../types";
+import type { AddInput, GatewayAddResult } from "../../types";
+import { discoverMcpOAuthProvider } from "./oauth-discovery";
+import type { FetchLike } from "./request";
 
 export type McpAdapterConfig = McpHttpAdapterConfig | McpSseAdapterConfig | McpStdioAdapterConfig;
 
@@ -33,11 +35,16 @@ export function detectMcpInput(input: AddInput): boolean {
   return Boolean(value && isAbsoluteHttpUrl(value) && /mcp/i.test(new URL(value).pathname));
 }
 
-export function mcpConfigFromAddInput(input: AddInput): McpAdapterConfig {
+export async function mcpConfigFromAddInput(
+  input: AddInput,
+): Promise<McpAdapterConfig | GatewayAddResult<McpAdapterConfig>> {
   const transport = stringOption(input.options?.transport) ?? "http";
-  if (transport === "stdio") return stdioConfigFromAddInput(input);
-  if (transport === "sse") return sseConfigFromAddInput(input);
-  if (transport === "http") return httpConfigFromAddInput(input);
+  if (transport === "stdio") {
+    assertNoHttpAuthMode(input);
+    return stdioConfigFromAddInput(input);
+  }
+  if (transport === "sse") return withOAuthDiscovery(sseConfigFromAddInput(input), input);
+  if (transport === "http") return withOAuthDiscovery(httpConfigFromAddInput(input), input);
   throw new Error(`Invalid mcp target config: unsupported transport "${transport}"`);
 }
 
@@ -60,6 +67,37 @@ function httpConfigFromAddInput(input: AddInput): McpHttpAdapterConfig {
   const url = input.argv[0];
   if (!url) throw new Error("MCP target requires a url argument");
   return { url };
+}
+
+async function withOAuthDiscovery<TConfig extends McpHttpAdapterConfig | McpSseAdapterConfig>(
+  config: TConfig,
+  input: AddInput,
+): Promise<TConfig | GatewayAddResult<TConfig>> {
+  const auth = stringOption(input.options?.auth);
+  if (!auth || auth === "none" || auth === "false") return config;
+  if (auth !== "oauth") throw new Error(`Invalid mcp target auth: unsupported auth mode "${auth}"`);
+
+  const provider = await discoverMcpOAuthProvider({
+    url: config.url,
+    fetch: gatewayFetch(input),
+  });
+  return {
+    kind: "gateway.add-result",
+    targetConfig: { ...config, auth: provider },
+    sidecars: { oauth: provider },
+  };
+}
+
+function gatewayFetch(input: AddInput): FetchLike | undefined {
+  const candidate = input.context?.services?.fetch;
+  return typeof candidate === "function" ? (candidate as FetchLike) : undefined;
+}
+
+function assertNoHttpAuthMode(input: AddInput): void {
+  const auth = stringOption(input.options?.auth);
+  if (auth && auth !== "none" && auth !== "false") {
+    throw new Error("MCP stdio targets do not support OAuth discovery");
+  }
 }
 
 function sseConfigFromAddInput(input: AddInput): McpSseAdapterConfig {

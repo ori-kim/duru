@@ -47,6 +47,65 @@ describe("app gateway store", () => {
     });
   });
 
+  test("persists discovered oauth provider metadata as a target sidecar", async () => {
+    const home = await mkdtemp(join(tmpdir(), "duru-gateway-store-"));
+    const files = createFileStore({ root: join(home, "gateway") });
+    const store = createAppGatewayStore({ files });
+    const provider = {
+      id: "https://auth.example.com",
+      provider: "https://auth.example.com",
+      authorizationEndpoint: "https://auth.example.com/oauth/authorize",
+      tokenEndpoint: "https://auth.example.com/oauth/token",
+      registrationEndpoint: "https://auth.example.com/oauth/register",
+      clientName: "Duru",
+      scopes: ["items:read", "items:write"],
+      extraParams: { resource: "https://mcp.example.com/mcp" },
+    };
+
+    await store.saveTargetWithSidecars?.(
+      {
+        name: "notes-mcp",
+        type: "mcp",
+        config: {
+          url: "https://mcp.example.com/mcp",
+          auth: provider,
+        },
+      },
+      { oauth: provider },
+    );
+
+    expect(await files.read<Record<string, unknown>>("mcp/notes-mcp/config.toml")).toEqual({
+      name: "notes-mcp",
+      type: "mcp",
+      config: {
+        url: "https://mcp.example.com/mcp",
+        auth: "oauth",
+      },
+    });
+    expect(await files.read<Record<string, unknown>>("mcp/notes-mcp/auth.json")).toEqual({
+      authorization_server: "https://auth.example.com",
+      authorization_endpoint: "https://auth.example.com/oauth/authorize",
+      token_endpoint: "https://auth.example.com/oauth/token",
+      registration_endpoint: "https://auth.example.com/oauth/register",
+      client_name: "Duru",
+      scope: "items:read items:write",
+      resource_url: "https://mcp.example.com/mcp",
+      extraParams: { resource: "https://mcp.example.com/mcp" },
+    });
+    expect((await store.getTarget("notes-mcp"))?.config).toEqual({
+      url: "https://mcp.example.com/mcp",
+      auth: {
+        provider: "https://auth.example.com",
+        authorizationEndpoint: "https://auth.example.com/oauth/authorize",
+        tokenEndpoint: "https://auth.example.com/oauth/token",
+        registrationEndpoint: "https://auth.example.com/oauth/register",
+        clientName: "Duru",
+        scopes: ["items:read", "items:write"],
+        extraParams: { resource: "https://mcp.example.com/mcp" },
+      },
+    });
+  });
+
   test("persists catalog cache records next to gateway config", async () => {
     const home = await mkdtemp(join(tmpdir(), "duru-gateway-store-"));
     const files = createFileStore({ root: join(home, "gateway") });

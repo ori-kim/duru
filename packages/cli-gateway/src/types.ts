@@ -1,4 +1,5 @@
 import type { CliPlugin, CompletionItem as CoreCompletionItem } from "@duru/cli-kit";
+import type { GatewayOAuthProviderConfig } from "./auth";
 
 export type CliGatewayOptions = {
   store: GatewayStore;
@@ -30,6 +31,7 @@ export type GatewayStore = {
   listTargets(): Promise<readonly GatewayTargetRecord[]>;
   getTarget(name: string): Promise<GatewayTargetRecord | undefined>;
   saveTarget(record: GatewayTargetRecord): Promise<void>;
+  saveTargetWithSidecars?(record: GatewayTargetRecord, sidecars: GatewayTargetSidecars): Promise<void>;
   removeTarget(name: string): Promise<void>;
   listProfiles(target: string): Promise<readonly GatewayProfileRecord[]>;
   getProfile(target: string, name: string): Promise<GatewayProfileRecord | undefined>;
@@ -61,6 +63,10 @@ export type GatewayStoreSeed = {
   bindings?: readonly GatewayBindingRecord[];
   catalogs?: readonly GatewayCatalogRecord[];
   aliases?: readonly GatewayAliasRecord[];
+};
+
+export type GatewayTargetSidecars = {
+  oauth?: GatewayOAuthProviderConfig;
 };
 
 export type GatewayRecordSource = {
@@ -117,7 +123,7 @@ export type GatewayAdapter<TConfig = unknown> = {
   type: string;
   schema: GatewaySchema<TConfig>;
   detect?(input: AddInput): boolean | Promise<boolean>;
-  add?(input: AddInput): Promise<TConfig>;
+  add?(input: AddInput): Promise<TConfig | GatewayAddResult<TConfig>>;
   normalize?(config: TConfig, ctx: NormalizeContext): TConfig | Promise<TConfig>;
   createTarget(input: GatewayTargetCreateInput<TConfig>): GatewayTarget<TConfig>;
 };
@@ -254,6 +260,13 @@ export type AddInput = {
   type?: string;
   argv: readonly string[];
   options?: Readonly<Record<string, unknown>>;
+  context?: GatewayContext;
+};
+
+export type GatewayAddResult<TConfig = unknown> = {
+  kind: "gateway.add-result";
+  targetConfig: TConfig;
+  sidecars?: GatewayTargetSidecars;
 };
 
 export type NormalizeContext = {
