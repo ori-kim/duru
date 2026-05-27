@@ -21,7 +21,6 @@ export function createKeychainIndex(path: string): KeychainIndex {
       throw err;
     }
   }
-
   async function write(set: Set<string>): Promise<void> {
     await mkdir(dirname(path), { recursive: true });
     const tmp = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
@@ -29,7 +28,6 @@ export function createKeychainIndex(path: string): KeychainIndex {
     await writeFile(tmp, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 });
     await rename(tmp, path);
   }
-
   async function withLock<T>(fn: () => Promise<T>): Promise<T> {
     await mkdir(dirname(path), { recursive: true });
     const release = await acquireFileLock(path);
@@ -39,7 +37,6 @@ export function createKeychainIndex(path: string): KeychainIndex {
       await release();
     }
   }
-
   return {
     async list(prefix) {
       const all = [...(await read())];

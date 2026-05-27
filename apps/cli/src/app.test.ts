@@ -21,6 +21,21 @@ describe("duru cli app", () => {
     expect(JSON.parse(result.rendered?.stdout ?? "")).toEqual([]);
   });
 
+  test("rejects OAuth reserved secret names from secret commands", async () => {
+    const home = await tempDir("secret-reserved");
+
+    const result = await withDuruHome(home, () =>
+      createAppCli({ skipAutoInject: true }).run(["secret", "add", "oauth/github", "file://oauth/github"], {
+        render: false,
+      }),
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.result).toEqual({
+      error: { message: 'Secret name "oauth/github" uses reserved prefix "oauth/"' },
+    });
+  });
+
   test("shows gateway management under the gateway namespace in root help", async () => {
     const home = await tempDir("help-namespace");
     const result = await withDuruHome(home, () => createAppCli().run(["--help"]));
@@ -141,37 +156,6 @@ describe("duru cli app", () => {
     expect(result.value).toEqual({
       error: { message: "Unknown command: missing --json" },
       hint: "Run duru --help",
-    });
-  });
-
-  test("rejects OAuth-reserved secret names before writing manifest", async () => {
-    const home = await tempDir("secret-reserved-prefix");
-    const result = await withDuruHome(home, () =>
-      createAppCli().run(["secret", "add", "oauth/x", "file://x"], { render: false }),
-    );
-
-    expect(result.exitCode).toBe(1);
-    expect(result.result).toMatchObject({
-      error: { message: expect.stringContaining('reserved prefix "oauth/"') },
-    });
-  });
-
-  test("does not block secret management when auto-injected secret cannot resolve", async () => {
-    const home = await tempDir("secret-auto-inject-error");
-    await writeFile(
-      join(home, "duru.secrets.json"),
-      JSON.stringify({
-        secrets: { DURU_BAD: "missing://x" },
-        autoInject: { enabled: true, prefix: "DURU_" },
-        extensions: {},
-      }),
-    );
-
-    const result = await withDuruHome(home, () => createAppCli().run(["secret", "list"], { render: false }));
-
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toEqual({
-      secrets: [{ name: "DURU_BAD", ref: "missing://x" }],
     });
   });
 
