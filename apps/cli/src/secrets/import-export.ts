@@ -24,6 +24,11 @@ export type ImportResult = {
   overwritten: string[];
 };
 
+type BackendWriteJournalEntry = {
+  ref: string;
+  previous: string | undefined;
+};
+
 export async function secretImport(opts: ImportOptions): Promise<ImportResult> {
   const raw = await readFile(opts.envFile, "utf8");
   const entries = parseDotenv(raw);
@@ -31,30 +36,64 @@ export async function secretImport(opts: ImportOptions): Promise<ImportResult> {
   const added: string[] = [];
   const skipped: string[] = [];
   const overwritten: string[] = [];
+  const backendWriteJournal: BackendWriteJournalEntry[] = [];
 
-  await mutateManifest(
-    opts.manifestPath,
-    async (manifest) => {
-      for (const [name, value] of entries) {
-        const pathPart = opts.pathPrefix ? `${opts.pathPrefix}${name.toLowerCase()}` : name.toLowerCase();
-        const ref = `${opts.backend}://${pathPart}`;
-        parseReference(ref);
+  let rolledBack = false;
+  try {
+    await mutateManifest(
+      opts.manifestPath,
+      async (manifest) => {
+        try {
+          for (const [name, value] of entries) {
+            const pathPart = opts.pathPrefix ? `${opts.pathPrefix}${name.toLowerCase()}` : name.toLowerCase();
+            const ref = `${opts.backend}://${pathPart}`;
+            parseReference(ref);
 
-        const existed = manifest.data.secrets[name] !== undefined;
-        if (existed && !opts.force) {
-          skipped.push(name);
-          continue;
+            const existed = manifest.data.secrets[name] !== undefined;
+            if (existed && !opts.force) {
+              skipped.push(name);
+              continue;
+            }
+            opts.resolver.clearCache();
+            backendWriteJournal.push({ ref, previous: await opts.resolver.resolve(ref) });
+            await opts.resolver.store(ref, value);
+            manifest.data.secrets[name] = ref;
+            if (existed) overwritten.push(name);
+            else added.push(name);
+          }
+        } catch (err) {
+          rolledBack = true;
+          await rollbackBackendWrites(opts.resolver, backendWriteJournal, err);
+          throw err;
         }
-        manifest.data.secrets[name] = ref;
-        await opts.resolver.store(ref, value);
-        if (existed) overwritten.push(name);
-        else added.push(name);
-      }
-    },
-    opts.manifestValidation,
-  );
+      },
+      opts.manifestValidation,
+    );
+  } catch (err) {
+    if (!rolledBack) await rollbackBackendWrites(opts.resolver, backendWriteJournal, err);
+    throw err;
+  }
 
   return { added, skipped, overwritten };
+}
+
+async function rollbackBackendWrites(
+  resolver: SecretResolver,
+  journal: readonly BackendWriteJournalEntry[],
+  originalError: unknown,
+): Promise<void> {
+  const errors: string[] = [];
+  for (const entry of [...journal].reverse()) {
+    try {
+      if (entry.previous === undefined) await resolver.remove(entry.ref);
+      else await resolver.store(entry.ref, entry.previous);
+    } catch (err) {
+      errors.push(errorMessage(err));
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(`${errorMessage(originalError)}; failed to roll back backend writes: ${errors.join("; ")}`);
+  }
 }
 
 export type ExportOptions = {
@@ -92,6 +131,10 @@ export async function secretExport(opts: ExportOptions): Promise<string> {
     return `${JSON.stringify(out, null, 2)}\n`;
   }
   return `${JSON.stringify(Object.fromEntries(entries), null, 2)}\n`;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 /**

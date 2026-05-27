@@ -17,14 +17,16 @@ afterEach(() => {
   for (const d of tmpDirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-function memoryProvider(scheme: string): SecretProvider {
+function memoryProvider(scheme: string, opts: { failSetPaths?: readonly string[] } = {}): SecretProvider {
   const store = new Map<string, string>();
+  const failSetPaths = new Set(opts.failSetPaths ?? []);
   return {
     scheme,
     async get(p) {
       return store.get(p);
     },
     async set(p, v) {
+      if (failSetPaths.has(p)) throw new Error(`set failed for ${p}`);
       store.set(p, v);
     },
     async delete(p) {
@@ -115,6 +117,39 @@ describe("secretImport", () => {
 
     expect(r2.overwritten).toEqual(["X"]);
     expect(await provider.get("x")).toBe("v2");
+  });
+
+  it("rolls back backend writes when a later backend write fails", async () => {
+    const dir = tmpdirpath();
+    const envFile = join(dir, ".env");
+    writeFileSync(envFile, "A=one\nB=two\n");
+    const manifestPath = join(dir, "m.json");
+    const provider = memoryProvider("keychain", { failSetPaths: ["b"] });
+    const resolver = createResolver([provider]);
+
+    await expect(secretImport({ manifestPath, resolver, envFile, backend: "keychain" })).rejects.toThrow(
+      "set failed for b",
+    );
+
+    expect(await provider.get("a")).toBeUndefined();
+    expect(await loadManifest(manifestPath)).toMatchObject({ data: { secrets: {} } });
+  });
+
+  it("restores overwritten backend values when import fails", async () => {
+    const dir = tmpdirpath();
+    const envFile = join(dir, ".env");
+    writeFileSync(envFile, "X=new\nY=bad\n");
+    const manifestPath = join(dir, "m.json");
+    const provider = memoryProvider("keychain", { failSetPaths: ["y"] });
+    const resolver = createResolver([provider]);
+    await provider.set("x", "old");
+
+    await expect(secretImport({ manifestPath, resolver, envFile, backend: "keychain", force: true })).rejects.toThrow(
+      "set failed for y",
+    );
+
+    expect(await provider.get("x")).toBe("old");
+    expect(await loadManifest(manifestPath)).toMatchObject({ data: { secrets: {} } });
   });
 });
 
