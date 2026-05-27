@@ -150,7 +150,7 @@ describe("createMemoryStore", () => {
     current = new Date("2026-05-01T00:00:00.000Z");
     await expect(store.clean()).resolves.toMatchObject({ candidates: [], removed: [] });
 
-    await files.write("config.json", { clean: { olderThan: "90d" } });
+    await files.write("config.toml", { clean: { olderThan: "90d" } });
     await expect(store.clean({ dryRun: true })).resolves.toMatchObject({
       candidates: [item.meta.id],
       removed: [],

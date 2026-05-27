@@ -29,7 +29,12 @@ export type MemoryUsageEvent = {
   accessedAt: string;
 };
 
+export type MemorySearchMode = "lex" | "vec" | "query";
+
 export type MemoryConfig = {
+  search?: {
+    mode?: MemorySearchMode | string;
+  };
   clean?: {
     olderThan?: string;
   };
@@ -68,6 +73,7 @@ export type MemoryStore = {
   updateTags(id: string, update: MemoryTagUpdate): Promise<MemoryItem>;
   delete(id: string): Promise<boolean>;
   clean(options?: MemoryCleanOptions): Promise<MemoryCleanResult>;
+  config(): Promise<MemoryConfig>;
   usage(): Promise<MemoryUsage>;
   memoryDir: string;
   itemsDir: string;
@@ -75,7 +81,8 @@ export type MemoryStore = {
 
 const USAGE_FILE = "usage.json";
 const USAGE_DIR = "usage";
-const CONFIG_FILE = "config.json";
+const CONFIG_FILE = "config.toml";
+const LEGACY_CONFIG_FILE = "config.json";
 
 export function createMemoryStore(files: FileStore, options: MemoryStoreOptions = {}): MemoryStore {
   const now = () => options.now?.() ?? new Date();
@@ -225,7 +232,7 @@ export function createMemoryStore(files: FileStore, options: MemoryStoreOptions 
   }
 
   async function readConfig(): Promise<MemoryConfig> {
-    return (await files.read<MemoryConfig>(CONFIG_FILE)) ?? {};
+    return (await files.read<MemoryConfig>(CONFIG_FILE)) ?? (await files.read<MemoryConfig>(LEGACY_CONFIG_FILE)) ?? {};
   }
 
   return {
@@ -235,6 +242,7 @@ export function createMemoryStore(files: FileStore, options: MemoryStoreOptions 
     updateTags,
     delete: del,
     clean,
+    config: readConfig,
     usage: readUsage,
     memoryDir: files.root,
     itemsDir: files.resolve("items"),

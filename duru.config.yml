@@ -3,8 +3,12 @@ plugins:
   - path: plugins/context-mode
     name: context-mode
     description: Capture and search command invocation history
-    entry: src/index.ts
+    entry: dist/index.js
   - path: plugins/history
     name: history
     description: Daily-partitioned invocation log with rerun
-    entry: src/index.ts
+    entry: dist/index.js
+  - path: plugins/skills
+    name: skills
+    description: Manage duru agent skills
+    entry: dist/index.js

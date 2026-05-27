@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCli, getRenderHint, help, isHelpDocument } from "@duru/cli-kit";
@@ -129,6 +129,55 @@ describe("@duru/plugin-memory", () => {
 
       expect(searchIds(result.result)).toEqual([id]);
       expect(qmd.calls).toContainEqual(["query", "semantic", "memory"]);
+    });
+  });
+
+  test("search uses TOML-configured default mode and lets --mode override it", async () => {
+    const home = await tempHome();
+    const qmd = createQmdMock();
+
+    await mkdir(join(home, "memory"), { recursive: true });
+    await writeFile(join(home, "memory", "config.toml"), '[search]\nmode = "query"\n', "utf8");
+
+    await withDuruHome(home, async () => {
+      const cli = await createMemoryCli(qmd);
+      const added = await cli.run(["memory", "add", "configured semantic memory", "--no-index"], { render: false });
+      const id = addResult(added.result).item.meta.id;
+      qmd.results.query = [{ name: id, score: 0.7, excerpt: "configured semantic memory" }];
+
+      const configured = await cli.run(["memory", "search", "configured"], { render: false });
+
+      expect(searchIds(configured.result)).toEqual([id]);
+      expect(qmd.calls).toContainEqual(["query", "configured", "memory"]);
+
+      qmd.calls.length = 0;
+      qmd.results.lex = [{ name: id, score: 0.9, excerpt: "configured semantic memory" }];
+
+      const overridden = await cli.run(["memory", "search", "configured", "--mode", "lex"], { render: false });
+
+      expect(searchIds(overridden.result)).toEqual([id]);
+      expect(qmd.calls).toContainEqual(["lex", "configured", "memory"]);
+    });
+  });
+
+  test("search shows a TTY loading indicator without writing to stdout directly", async () => {
+    const home = await tempHome();
+    const qmd = createQmdMock();
+
+    await withDuruHome(home, async () => {
+      const cli = await createMemoryCli(qmd);
+      const added = await cli.run(["memory", "add", "visible search progress", "--no-index"], { render: false });
+      const id = addResult(added.result).item.meta.id;
+      qmd.results.query = [{ name: id, score: 0.7, excerpt: "visible search progress" }];
+
+      const captured = await withStderrTTY(true, () =>
+        captureOutput(() => cli.run(["memory", "search", "visible", "--mode", "query"])),
+      );
+
+      expect(captured.stdout).toBe("");
+      expect(captured.stderr).toContain("Searching memory with query mode");
+      expect(captured.result.exitCode).toBe(0);
+      expect(searchIds(captured.result.result)).toEqual([id]);
     });
   });
 
@@ -490,5 +539,19 @@ async function captureOutput<T>(run: () => Promise<T>): Promise<{ result: T; std
   } finally {
     process.stdout.write = originalStdout;
     process.stderr.write = originalStderr;
+  }
+}
+
+async function withStderrTTY<T>(value: boolean, run: () => Promise<T>): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(process.stderr, "isTTY");
+  Object.defineProperty(process.stderr, "isTTY", { configurable: true, value });
+  try {
+    return await run();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(process.stderr, "isTTY", descriptor);
+    } else {
+      Reflect.deleteProperty(process.stderr, "isTTY");
+    }
   }
 }

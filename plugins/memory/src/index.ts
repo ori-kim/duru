@@ -13,7 +13,7 @@ import {
 } from "./qmd.ts";
 import type { MemoryQmdClient, MemoryQmdSearchResult, MemorySemanticStatus } from "./qmd.ts";
 import { createMemoryStore } from "./store.ts";
-import type { MemoryItem, MemoryStore } from "./store.ts";
+import type { MemoryItem, MemorySearchMode, MemoryStore } from "./store.ts";
 
 export { createMemoryStore, createMemoryPlugin };
 export type { MemoryItem, MemoryStore, MemoryQmdClient, MemoryQmdSearchResult };
@@ -57,18 +57,23 @@ function createMemoryPlugin(options: MemoryPluginOptions = {}) {
       .command("search <query>")
       .meta({ description: "Search memory using qmd" })
       .option("--tag <tag>", "Filter by tag")
-      .option("--mode <mode>", "Search mode: lex, vec, or query (default: lex)")
+      .option("--mode <mode>", "Search mode: lex, vec, or query (default: config search.mode or lex)")
       .action(async (ctx) => {
         if (!(await qmd.isAvailable())) return ctx.exit(1, errorResult(QMD_INSTALL_MSG));
+        let indicator = noopSearchIndicator;
         try {
+          const options = ctx.options as SearchOptions;
+          const configuredMode = (await store.config()).search?.mode;
+          const mode = resolveSearchMode(options.mode ?? configuredMode ?? "lex");
+          indicator = startSearchIndicator(mode, options);
           await ensureMemoryCollection(qmd, store);
           const query = (ctx.params as { query: string }).query;
-          const options = ctx.options as { tag?: unknown; mode?: string };
-          const mode = options.mode ?? "lex";
           const raw = await search(qmd, mode, query);
+          indicator.stop();
           const results = await filterSearchResults(store, raw, optionValues(options.tag));
           return ctx.exit(0, memorySearchResult(results));
         } catch (err) {
+          indicator.fail();
           return ctx.exit(1, errorResult(errorMessage(err)));
         }
       });
@@ -193,6 +198,12 @@ type IndexOptions = {
   index?: boolean;
 };
 
+type SearchOptions = {
+  tag?: unknown;
+  mode?: string;
+  json?: boolean;
+};
+
 type IndexingResult =
   | { scheduled: true; mode: "background" }
   | { scheduled: false; mode: "skipped" | "failed"; error?: string };
@@ -237,12 +248,57 @@ function skippedIndexing(): IndexingResult {
   return { scheduled: false, mode: "skipped" };
 }
 
-async function search(qmd: MemoryQmdClient, mode: string, query: string): Promise<MemoryQmdSearchResult[]> {
+async function search(qmd: MemoryQmdClient, mode: MemorySearchMode, query: string): Promise<MemoryQmdSearchResult[]> {
   if (mode === "lex") return await qmd.lex(query, MEMORY_COLLECTION);
   if (mode === "vec") return await qmd.vsearch(query, MEMORY_COLLECTION);
   if (mode === "query") return await qmd.query(query, MEMORY_COLLECTION);
-  throw new Error(`Unknown memory search mode: ${mode}`);
 }
+
+function resolveSearchMode(value: string): MemorySearchMode {
+  if (value === "lex" || value === "vec" || value === "query") return value;
+  throw new Error(`Unknown memory search mode: ${value}`);
+}
+
+type SearchIndicator = {
+  stop(): void;
+  fail(): void;
+};
+
+function startSearchIndicator(mode: MemorySearchMode, options: SearchOptions): SearchIndicator {
+  if (options.json === true || process.stderr.isTTY !== true) return noopSearchIndicator;
+
+  const frames = ["-", "\\", "|", "/"];
+  const label = `Searching memory with ${mode} mode...`;
+  let index = 0;
+  let lastLine = "";
+  let active = true;
+
+  const render = () => {
+    lastLine = `${frames[index % frames.length]} ${label}`;
+    index += 1;
+    process.stderr.write(`\r${lastLine}`);
+  };
+  render();
+  const timer = setInterval(render, 120);
+  timer.unref?.();
+
+  const clear = () => {
+    if (!active) return;
+    active = false;
+    clearInterval(timer);
+    process.stderr.write(`\r${" ".repeat(lastLine.length)}\r`);
+  };
+
+  return {
+    stop: clear,
+    fail: clear,
+  };
+}
+
+const noopSearchIndicator: SearchIndicator = {
+  stop() {},
+  fail() {},
+};
 
 async function filterSearchResults(
   store: MemoryStore,
