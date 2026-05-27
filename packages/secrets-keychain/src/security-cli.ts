@@ -12,16 +12,17 @@ class SecurityCommandError extends Error {
 }
 
 type RunResult = { stdout: string; stderr: string; code: number };
+type RunOptions = { input?: string };
 
-function runSecurity(args: string[]): Promise<RunResult> {
+function runSecurity(args: string[], options: RunOptions = {}): Promise<RunResult> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("security", args, { stdio: ["ignore", "pipe", "pipe"] });
+    const proc = spawn("security", args, { stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
-    proc.stdout.on("data", (d) => {
+    proc.stdout?.on("data", (d) => {
       stdout += d.toString();
     });
-    proc.stderr.on("data", (d) => {
+    proc.stderr?.on("data", (d) => {
       stderr += d.toString();
     });
     proc.on("error", reject);
@@ -30,6 +31,9 @@ function runSecurity(args: string[]): Promise<RunResult> {
       if (c === 0) resolve({ stdout, stderr, code: c });
       else reject(new SecurityCommandError(c, stderr));
     });
+    if (options.input !== undefined) {
+      proc.stdin?.end(options.input);
+    }
   });
 }
 
@@ -38,8 +42,23 @@ function isNotFound(err: unknown): boolean {
 }
 
 export async function addGenericPassword(service: string, account: string, password: string): Promise<void> {
-  // -U: update if exists. -w: password value (last arg).
-  await runSecurity(["add-generic-password", "-U", "-s", service, "-a", account, "-w", password]);
+  const command = buildAddGenericPasswordCommand(service, account, password);
+  await runSecurity(command.args, { input: command.input });
+}
+
+export function buildAddGenericPasswordCommand(
+  service: string,
+  account: string,
+  password: string,
+): { args: string[]; input: string } {
+  if (/[\r\n]/.test(password)) {
+    throw new Error("Keychain values set through macOS security prompt mode cannot contain newlines");
+  }
+  return {
+    // -U: update if exists. -w as the final arg prompts, avoiding password-in-argv.
+    args: ["add-generic-password", "-U", "-s", service, "-a", account, "-w"],
+    input: `${password}\n${password}\n`,
+  };
 }
 
 export async function findGenericPassword(service: string, account: string): Promise<string | undefined> {

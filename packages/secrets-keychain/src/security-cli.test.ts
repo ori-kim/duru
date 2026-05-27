@@ -1,6 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { isMacOS } from "./platform.ts";
-import { addGenericPassword, deleteGenericPassword, findGenericPassword } from "./security-cli.ts";
+import {
+  addGenericPassword,
+  buildAddGenericPasswordCommand,
+  deleteGenericPassword,
+  findGenericPassword,
+} from "./security-cli.ts";
 
 const TEST_SERVICE = "duru.secrets.test";
 const TEST_ACCOUNTS: string[] = [];
@@ -22,6 +27,18 @@ afterEach(cleanup);
 const itMac = isMacOS() ? it : it.skip;
 
 describe("security CLI wrapper (macOS only)", () => {
+  it("does not pass the password value through process argv", () => {
+    const command = buildAddGenericPasswordCommand("service", "account", "secret-value");
+
+    expect(command.args).not.toContain("secret-value");
+    expect(command.args.at(-1)).toBe("-w");
+    expect(command.input).toBe("secret-value\nsecret-value\n");
+  });
+
+  it("rejects multiline passwords instead of letting security prompt store an empty value", () => {
+    expect(() => buildAddGenericPasswordCommand("service", "account", "line1\nline2")).toThrow(/newlines/);
+  });
+
   itMac("add + find round-trips value", async () => {
     TEST_ACCOUNTS.push("round-trip-1");
     await addGenericPassword(TEST_SERVICE, "round-trip-1", "secret-value");
