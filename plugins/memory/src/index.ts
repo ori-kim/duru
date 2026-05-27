@@ -11,7 +11,7 @@ import {
   reindexMemory,
   reindexMemoryInBackground,
 } from "./qmd.ts";
-import type { MemoryQmdClient, MemoryQmdSearchResult } from "./qmd.ts";
+import type { MemoryQmdClient, MemoryQmdSearchResult, MemorySemanticStatus } from "./qmd.ts";
 import { createMemoryStore } from "./store.ts";
 import type { MemoryItem, MemoryStore } from "./store.ts";
 
@@ -31,6 +31,7 @@ function createMemoryPlugin(options: MemoryPluginOptions = {}) {
     const store = createMemoryStore(home.scope("memory"), { now: options.now, timeZone: options.timeZone });
     const qmd = options.qmd ?? createQmdClient(home.resolve("memory/.data"));
     const memory = createRouter();
+    const model = createRouter();
 
     memory
       .command()
@@ -56,17 +57,17 @@ function createMemoryPlugin(options: MemoryPluginOptions = {}) {
       .command("search <query>")
       .meta({ description: "Search memory using qmd" })
       .option("--tag <tag>", "Filter by tag")
-      .option("--mode <mode>", "Search mode: query, lex, or vec")
+      .option("--mode <mode>", "Search mode: lex, vec, or query (default: lex)")
       .action(async (ctx) => {
         if (!(await qmd.isAvailable())) return ctx.exit(1, errorResult(QMD_INSTALL_MSG));
         try {
           await ensureMemoryCollection(qmd, store);
           const query = (ctx.params as { query: string }).query;
           const options = ctx.options as { tag?: unknown; mode?: string };
-          const mode = options.mode ?? "query";
+          const mode = options.mode ?? "lex";
           const raw = await search(qmd, mode, query);
           const results = await filterSearchResults(store, raw, optionValues(options.tag));
-          return ctx.exit(0, withRenderHint({ results, items: results.map(formatSearchResult) }, "list"));
+          return ctx.exit(0, memorySearchResult(results));
         } catch (err) {
           return ctx.exit(1, errorResult(errorMessage(err)));
         }
@@ -137,10 +138,12 @@ function createMemoryPlugin(options: MemoryPluginOptions = {}) {
     memory
       .command("reindex")
       .meta({ description: "Reindex memory into qmd" })
+      .option("--vector", "Also generate semantic vector embeddings")
       .action(async (ctx) => {
         if (!(await qmd.isAvailable())) return ctx.exit(1, errorResult(QMD_INSTALL_MSG));
-        await reindexMemory(qmd, store);
-        return ctx.exit(0, textResult("Reindexed memory"));
+        const vector = (ctx.options as { vector?: boolean }).vector === true;
+        await reindexMemory(qmd, store, { vector });
+        return ctx.exit(0, textResult(vector ? "Reindexed memory with semantic vectors" : "Reindexed memory"));
       });
 
     memory
@@ -160,6 +163,26 @@ function createMemoryPlugin(options: MemoryPluginOptions = {}) {
         );
       });
 
+    model
+      .command("status")
+      .meta({ description: "Show memory semantic model status" })
+      .action(async (ctx) => {
+        const semantic = await qmd.semanticStatus();
+        return ctx.exit(0, memoryModelStatusResult(semantic));
+      });
+
+    model
+      .command("install")
+      .meta({ description: "Install memory semantic models" })
+      .option("--refresh", "Refresh already downloaded model files")
+      .action(async (ctx) => {
+        await ensureMemoryCollection(qmd, store);
+        const semantic = await qmd.installModels({ refresh: (ctx.options as { refresh?: boolean }).refresh === true });
+        await reindexMemory(qmd, store, { vector: true });
+        return ctx.exit(0, textResult("Installed semantic memory models", { semantic }));
+      });
+
+    memory.subCommand("model", model as never);
     cli.subCommand("memory", memory as never);
   });
 }
@@ -180,6 +203,20 @@ type MemorySearchResult = {
   excerpt: string;
   tags: string[];
   path: string;
+};
+
+type MemorySearchRow = {
+  id: string;
+  score: string;
+  tags: string;
+  excerpt: string;
+};
+
+type MemoryModelStatusRow = {
+  role: string;
+  installed: string;
+  model: string;
+  file: string;
 };
 
 async function maybeScheduleReindex(
@@ -231,6 +268,57 @@ async function filterSearchResults(
 
 function formatSearchResult(result: MemorySearchResult): string {
   return `${result.id}  ${result.excerpt}`;
+}
+
+function memorySearchResult(results: MemorySearchResult[]): {
+  results: MemorySearchResult[];
+  items: string[];
+  rows: MemorySearchRow[];
+  columns: string[];
+} {
+  return withRenderHint(
+    {
+      results,
+      items: results.map(formatSearchResult),
+      rows: results.map((result) => ({
+        id: result.id,
+        score: formatScore(result.score),
+        tags: result.tags.join(", "),
+        excerpt: truncate(result.excerpt, 120),
+      })),
+      columns: ["id", "score", "tags", "excerpt"],
+    },
+    "table",
+  );
+}
+
+function memoryModelStatusResult(status: MemorySemanticStatus): {
+  semantic: MemorySemanticStatus;
+  rows: MemoryModelStatusRow[];
+  columns: string[];
+} {
+  return withRenderHint(
+    {
+      semantic: status,
+      rows: status.roles.map((role) => ({
+        role: role.role,
+        installed: role.installed ? "yes" : "no",
+        model: role.model,
+        file: role.file,
+      })),
+      columns: ["role", "installed", "model", "file"],
+    },
+    "table",
+  );
+}
+
+function formatScore(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(3) : String(value);
+}
+
+function truncate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
 function textResult<T extends object>(text: string, extra?: T): T & { text: string } {

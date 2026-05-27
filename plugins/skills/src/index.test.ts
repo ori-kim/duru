@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { createCli, help } from "@duru/cli-kit";
+import { createCli, getRenderHint, help } from "@duru/cli-kit";
 import skillsPlugin from "./index.ts";
 
 describe("skills plugin", () => {
@@ -89,6 +89,37 @@ describe("skills plugin", () => {
     expect(skillNames(karavan.result)).toEqual(["graphite", "kotlin"]);
     expect(skillNames(karavanStack.result)).toEqual(["graphite"]);
     expect(skillNames(karavanStackCsv.result)).toEqual(["graphite"]);
+  });
+
+  test("returns table-shaped rows for skill and tag lists", async () => {
+    const home = await tempDir("skills-cli-table");
+    const skillsRoot = join(home, "skills");
+    const cli = await createSkillsCli(home);
+
+    await writeSkill(skillsRoot, "writer", "shared skill", ["scope:agent", "subject:writing"]);
+
+    const list = await cli.run(["skills", "list"], { render: false });
+    const tags = await cli.run(["skills", "tag", "list"], { render: false });
+
+    expect(getRenderHint(list.result)).toBe("table");
+    expect(list.result).toMatchObject({
+      rows: [
+        {
+          name: "writer",
+          tags: "scope:agent, subject:writing",
+          description: "Test skill",
+        },
+      ],
+      columns: ["name", "tags", "description"],
+    });
+    expect(getRenderHint(tags.result)).toBe("table");
+    expect(tags.result).toMatchObject({
+      rows: expect.arrayContaining([
+        { facet: "scope", value: "agent", count: 1, tag: "scope:agent" },
+        { facet: "subject", value: "writing", count: 1, tag: "subject:writing" },
+      ]),
+      columns: ["facet", "value", "count", "tag"],
+    });
   });
 
   test("requires --all when import or export omits a skill name", async () => {

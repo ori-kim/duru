@@ -159,13 +159,30 @@ export default virtualPlugin(async (cli) => {
   cli.subCommand("skills", skills as never);
 });
 
-function skillListResult(records: SkillRecord[]): { records: SkillRecord[]; items: string[] } {
+type SkillListRow = {
+  name: string;
+  tags: string;
+  description: string;
+};
+
+function skillListResult(records: SkillRecord[]): {
+  records: SkillRecord[];
+  items: string[];
+  rows: SkillListRow[];
+  columns: string[];
+} {
   return withRenderHint(
     {
       records,
       items: records.map((r) => `${r.meta.name}  ${r.meta.description ?? ""}`),
+      rows: records.map((record) => ({
+        name: record.meta.name,
+        tags: record.meta.tags.join(", "),
+        description: truncate(record.meta.description ?? "", 96),
+      })),
+      columns: ["name", "tags", "description"],
     },
-    "list",
+    "table",
   );
 }
 
@@ -183,6 +200,8 @@ function skillTagListResult(records: SkillRecord[]): {
   tags: SkillTagCount[];
   facets: SkillTagFacet[];
   items: string[];
+  rows: SkillTagRow[];
+  columns: string[];
 } {
   const counts = new Map<string, number>();
   for (const record of records) {
@@ -210,9 +229,33 @@ function skillTagListResult(records: SkillRecord[]): {
       tags,
       facets,
       items: tags.map((tag) => `${tag.tag}  ${tag.count}`),
+      rows: tags.map(skillTagRow),
+      columns: ["facet", "value", "count", "tag"],
     },
-    "list",
+    "table",
   );
+}
+
+type SkillTagRow = {
+  facet: string;
+  value: string;
+  count: number;
+  tag: string;
+};
+
+function skillTagRow(tag: SkillTagCount): SkillTagRow {
+  const colonIndex = tag.tag.indexOf(":");
+  return {
+    facet: colonIndex === -1 ? "legacy" : tag.tag.slice(0, colonIndex),
+    value: colonIndex === -1 ? tag.tag : tag.tag.slice(colonIndex + 1),
+    count: tag.count,
+    tag: tag.tag,
+  };
+}
+
+function truncate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
 function optionValues(value: unknown): string[] {

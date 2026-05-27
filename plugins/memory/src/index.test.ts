@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createCli, help, isHelpDocument } from "@duru/cli-kit";
+import { createCli, getRenderHint, help, isHelpDocument } from "@duru/cli-kit";
 import { textRendererPlugin } from "@duru/renderer-text";
 import { createMemoryPlugin } from "./index.ts";
+import { QMD_SEMANTIC_INSTALL_MSG } from "./qmd.ts";
 import type { MemoryQmdClient } from "./qmd.ts";
 
 describe("@duru/plugin-memory", () => {
@@ -27,6 +28,8 @@ describe("@duru/plugin-memory", () => {
       expect(patterns).toContain("memory clean");
       expect(patterns).toContain("memory reindex");
       expect(patterns).toContain("memory status");
+      expect(patterns).toContain("memory model status");
+      expect(patterns).toContain("memory model install");
       expect(patterns).not.toContain("memory list");
     });
   });
@@ -70,7 +73,7 @@ describe("@duru/plugin-memory", () => {
       });
       expect(qmd.calls).toEqual([
         ["ensureCollection", "memory", join(home, "memory"), "items/**/*.md"],
-        ["reindexInBackground", "memory"],
+        ["reindexInBackground", "memory", { vector: "if-installed" }],
       ]);
 
       await cli.run(["memory", "add", "bulk import", "--no-index"], { render: false });
@@ -78,7 +81,7 @@ describe("@duru/plugin-memory", () => {
     });
   });
 
-  test("search dispatches qmd mode, filters by frontmatter tag, and does not touch usage", async () => {
+  test("search defaults to lexical mode, filters by frontmatter tag, and does not touch usage", async () => {
     const home = await tempHome();
     const qmd = createQmdMock();
 
@@ -92,7 +95,7 @@ describe("@duru/plugin-memory", () => {
       });
       const firstId = addResult(first.result).item.meta.id;
       const secondId = addResult(second.result).item.meta.id;
-      qmd.results.query = [
+      qmd.results.lex = [
         { name: firstId, score: 0.9, excerpt: "skills split" },
         { name: secondId, score: 0.5, excerpt: "personal" },
       ];
@@ -104,11 +107,108 @@ describe("@duru/plugin-memory", () => {
         results: [{ id: firstId, score: 0.9, excerpt: "skills split" }],
         items: [expect.stringContaining(firstId)],
       });
-      expect(qmd.calls).toContainEqual(["query", "split", "memory"]);
+      expect(qmd.calls).toContainEqual(["lex", "split", "memory"]);
 
       const show = await cli.run(["memory", "show", firstId], { render: false });
       expect(showResult(show.result).item.meta.id).toBe(firstId);
       expect(await cli.run(["memory", "show", firstId], { render: false })).toMatchObject({ exitCode: 0 });
+    });
+  });
+
+  test("search can opt into qmd query mode explicitly", async () => {
+    const home = await tempHome();
+    const qmd = createQmdMock();
+
+    await withDuruHome(home, async () => {
+      const cli = await createMemoryCli(qmd);
+      const added = await cli.run(["memory", "add", "semantic memory", "--no-index"], { render: false });
+      const id = addResult(added.result).item.meta.id;
+      qmd.results.query = [{ name: id, score: 0.7, excerpt: "semantic memory" }];
+
+      const result = await cli.run(["memory", "search", "semantic", "--mode", "query"], { render: false });
+
+      expect(searchIds(result.result)).toEqual([id]);
+      expect(qmd.calls).toContainEqual(["query", "semantic", "memory"]);
+    });
+  });
+
+  test("semantic search modes explain explicit model installation before use", async () => {
+    const home = await tempHome();
+    const qmd = createQmdMock();
+    qmd.semanticInstalled = false;
+
+    await withDuruHome(home, async () => {
+      const cli = await createMemoryCli(qmd);
+
+      await expect(
+        cli.run(["memory", "search", "semantic", "--mode", "vec"], { render: false }),
+      ).resolves.toMatchObject({
+        exitCode: 1,
+        result: { message: QMD_SEMANTIC_INSTALL_MSG },
+      });
+      await expect(
+        cli.run(["memory", "search", "semantic", "--mode", "query"], { render: false }),
+      ).resolves.toMatchObject({
+        exitCode: 1,
+        result: { message: QMD_SEMANTIC_INSTALL_MSG },
+      });
+    });
+  });
+
+  test("model install installs semantic models and vector reindexes memory", async () => {
+    const home = await tempHome();
+    const qmd = createQmdMock();
+
+    await withDuruHome(home, async () => {
+      const cli = await createMemoryCli(qmd);
+
+      await expect(cli.run(["memory", "model", "install"], { render: false })).resolves.toMatchObject({
+        exitCode: 0,
+        result: {
+          text: "Installed semantic memory models",
+          semantic: { installed: true },
+        },
+      });
+
+      expect(qmd.calls).toContainEqual(["installModels", { refresh: false }]);
+      expect(qmd.calls).toContainEqual(["update"]);
+      expect(qmd.calls).toContainEqual(["embed", "memory"]);
+    });
+  });
+
+  test("reindex is lex-only by default and vector mode embeds explicitly", async () => {
+    const home = await tempHome();
+    const qmd = createQmdMock();
+
+    await withDuruHome(home, async () => {
+      const cli = await createMemoryCli(qmd);
+
+      await cli.run(["memory", "reindex"], { render: false });
+      expect(qmd.calls).toContainEqual(["update"]);
+      expect(qmd.calls).not.toContainEqual(["embed", "memory"]);
+
+      qmd.calls.length = 0;
+      await cli.run(["memory", "reindex", "--vector"], { render: false });
+      expect(qmd.calls).toContainEqual(["update"]);
+      expect(qmd.calls).toContainEqual(["embed", "memory"]);
+    });
+  });
+
+  test("semantic search modes work after model installation", async () => {
+    const home = await tempHome();
+    const qmd = createQmdMock();
+    qmd.semanticInstalled = true;
+
+    await withDuruHome(home, async () => {
+      const cli = await createMemoryCli(qmd);
+      const added = await cli.run(["memory", "add", "vector memory", "--no-index"], { render: false });
+      const id = addResult(added.result).item.meta.id;
+      qmd.results.vec = [{ name: id, score: 0.8, excerpt: "vector memory" }];
+
+      const result = await cli.run(["memory", "search", "vector", "--mode", "vec"], { render: false });
+
+      expect(searchIds(result.result)).toEqual([id]);
+      expect(qmd.calls).toContainEqual(["vsearch", "vector", "memory"]);
     });
   });
 
@@ -148,7 +248,7 @@ describe("@duru/plugin-memory", () => {
       );
       const firstId = addResult(first.result).item.meta.id;
       const secondId = addResult(second.result).item.meta.id;
-      qmd.results.query = [
+      qmd.results.lex = [
         { name: firstId, score: 0.9, excerpt: "karavan kotlin" },
         { name: secondId, score: 0.8, excerpt: "karavan stack" },
       ];
@@ -171,10 +271,39 @@ describe("@duru/plugin-memory", () => {
     });
   });
 
+  test("returns table-shaped rows for search results", async () => {
+    const home = await tempHome();
+    const qmd = createQmdMock();
+
+    await withDuruHome(home, async () => {
+      const cli = await createMemoryCli(qmd);
+      const added = await cli.run(["memory", "add", "table friendly memory", "--tag", "skills", "--no-index"], {
+        render: false,
+      });
+      const id = addResult(added.result).item.meta.id;
+      qmd.results.lex = [{ name: id, score: 0.9, excerpt: "table friendly memory" }];
+
+      const result = await cli.run(["memory", "search", "table"], { render: false });
+
+      expect(getRenderHint(result.result)).toBe("table");
+      expect(result.result).toMatchObject({
+        rows: [
+          {
+            id,
+            score: "0.900",
+            tags: "skills",
+            excerpt: "table friendly memory",
+          },
+        ],
+        columns: ["id", "score", "tags", "excerpt"],
+      });
+    });
+  });
+
   test("renders qmd search errors instead of returning empty results", async () => {
     const home = await tempHome();
     const qmd = createQmdMock();
-    qmd.failQuery = new Error("qmd search failed");
+    qmd.failLex = new Error("qmd search failed");
 
     await withDuruHome(home, async () => {
       const cli = await createMemoryCli(qmd);
@@ -220,7 +349,7 @@ describe("@duru/plugin-memory", () => {
         result: { text: "Reindexed memory" },
       });
       expect(qmd.calls).toContainEqual(["update"]);
-      expect(qmd.calls).toContainEqual(["embed", "memory"]);
+      expect(qmd.calls).not.toContainEqual(["embed", "memory"]);
       await expect(cli.run(["memory", "status"], { render: false })).resolves.toMatchObject({
         exitCode: 0,
         result: {
@@ -261,7 +390,13 @@ function createQmdMock() {
     vec: [] as Array<{ name: string; score: number; excerpt: string }>,
     query: [] as Array<{ name: string; score: number; excerpt: string }>,
   };
-  const qmd: MemoryQmdClient & { calls: unknown[][]; results: typeof results; failQuery?: Error } = {
+  const qmd: MemoryQmdClient & {
+    calls: unknown[][];
+    results: typeof results;
+    failLex?: Error;
+    failQuery?: Error;
+    semanticInstalled?: boolean;
+  } = {
     calls,
     results,
     dataDir: "",
@@ -272,25 +407,46 @@ function createQmdMock() {
     async ensureCollection(name, path, glob) {
       calls.push(["ensureCollection", name, path, glob]);
     },
+    async semanticStatus() {
+      calls.push(["semanticStatus"]);
+      const installed = qmd.semanticInstalled ?? true;
+      return {
+        installed,
+        modelsDir: "/tmp/models",
+        roles: [
+          { role: "embed", model: "embed.gguf", file: "/tmp/models/embed.gguf", installed },
+          { role: "generate", model: "generate.gguf", file: "/tmp/models/generate.gguf", installed },
+          { role: "rerank", model: "rerank.gguf", file: "/tmp/models/rerank.gguf", installed },
+        ],
+      };
+    },
+    async installModels(options) {
+      calls.push(["installModels", { refresh: options?.refresh === true }]);
+      qmd.semanticInstalled = true;
+      return await qmd.semanticStatus();
+    },
     async embed(collection) {
       calls.push(["embed", collection]);
     },
     async update() {
       calls.push(["update"]);
     },
-    async reindexInBackground(collection) {
-      calls.push(["reindexInBackground", collection]);
+    async reindexInBackground(collection, options) {
+      calls.push(["reindexInBackground", collection, options]);
     },
     async lex(query, collection) {
       calls.push(["lex", query, collection]);
+      if (qmd.failLex) throw qmd.failLex;
       return results.lex;
     },
     async vsearch(query, collection) {
       calls.push(["vsearch", query, collection]);
+      if (qmd.semanticInstalled === false) throw new Error(QMD_SEMANTIC_INSTALL_MSG);
       return results.vec;
     },
     async query(query, collection) {
       calls.push(["query", query, collection]);
+      if (qmd.semanticInstalled === false) throw new Error(QMD_SEMANTIC_INSTALL_MSG);
       if (qmd.failQuery) throw qmd.failQuery;
       return results.query;
     },
