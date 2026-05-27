@@ -8,6 +8,7 @@ import {
   type ManifestData,
   emptyManifest,
   loadManifest,
+  mutateManifest,
   saveManifest,
   validateManifestData,
 } from "./manifest.ts";
@@ -104,6 +105,22 @@ describe("saveManifest", () => {
       data: { ...emptyManifest(), secrets: { "oauth/x": "keychain://x" } },
     };
     await expect(saveManifest(m, { reservedPrefixes: ["oauth/"] })).rejects.toThrow(/reserved prefix/);
+  });
+});
+
+describe("mutateManifest", () => {
+  it("creates the parent directory for a missing manifest path", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "duru-mutate-"));
+    tmpDirs.push(dir);
+    const path = join(dir, "fresh-home", "duru.secrets.json");
+
+    await mutateManifest(path, (m) => {
+      m.data.secrets.GH_TOKEN = "file://github/token";
+    });
+
+    expect(JSON.parse(readFileSync(path, "utf8")).secrets).toEqual({
+      GH_TOKEN: "file://github/token",
+    });
   });
 });
 

@@ -1,5 +1,5 @@
 import { type SecretResolver, parseDotenv as parseDotenvShared } from "@duru/secrets";
-import { redactSecrets, resolveSecrets } from "./secret-resolution";
+import { resolveSecrets } from "./secret-resolution";
 import type { GatewayEnvService } from "./types";
 
 export type ApplyTargetEnvInput = {
@@ -10,7 +10,6 @@ export type ApplyTargetEnvInput = {
       secrets?: SecretResolver;
     };
   };
-  secretResolution?: "resolve" | "redact";
 };
 
 export async function applyTargetEnv<T>(config: T, input: ApplyTargetEnvInput): Promise<T> {
@@ -21,10 +20,7 @@ export async function applyTargetEnv<T>(config: T, input: ApplyTargetEnvInput): 
     })) ?? new Map<string, string>();
   const interpolated = interpolate(config, env);
   const secrets = input.options.services?.secrets;
-  if (!secrets) return interpolated;
-  return input.secretResolution === "redact"
-    ? redactSecrets(interpolated, secrets)
-    : resolveSecrets(interpolated, secrets);
+  return secrets ? resolveSecrets(interpolated, secrets) : interpolated;
 }
 
 // Re-export for backwards compatibility — implementation lives in @duru/secrets.

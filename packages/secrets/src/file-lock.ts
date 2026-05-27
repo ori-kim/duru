@@ -1,4 +1,5 @@
-import { open, rm } from "node:fs/promises";
+import { mkdir, open, rm } from "node:fs/promises";
+import { dirname } from "node:path";
 
 const DEFAULT_OPTS = {
   retryIntervalMs: 50,
@@ -22,6 +23,8 @@ export async function acquireFileLock(path: string, opts: LockOptions = {}): Pro
   const merged = { ...DEFAULT_OPTS, ...opts };
   const lockPath = `${path}.lock`;
   const deadline = Date.now() + merged.timeoutMs;
+
+  await mkdir(dirname(lockPath), { recursive: true });
 
   while (true) {
     try {

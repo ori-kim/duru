@@ -1,4 +1,5 @@
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { InvalidReference } from "./errors.ts";
 import { acquireFileLock } from "./file-lock.ts";
 import { parseReference } from "./reference.ts";
@@ -97,6 +98,7 @@ export async function loadManifest(path: string, opts: ValidateManifestOptions =
 
 export async function saveManifest(m: Manifest, opts: ValidateManifestOptions = {}): Promise<void> {
   validateManifestData(m.data, opts);
+  await mkdir(dirname(m.path), { recursive: true });
   const tmp = `${m.path}.tmp`;
   await writeFile(tmp, `${JSON.stringify(m.data, null, 2)}\n`, { mode: 0o600 });
   await rename(tmp, m.path);
