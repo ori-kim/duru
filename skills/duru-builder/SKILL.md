@@ -1,7 +1,7 @@
 ---
 name: duru-builder
 description: Author duru CLIs and plugins with @duru/cli-kit. Triggers on creating or editing duru-based CLIs, calls to createCli/createRouter/createPlugin/virtualPlugin, the cli.use(...) chain, command/option/middleware/input definitions, anything involving @duru/cli-kit or @duru/virtual-plugins, or "duru로 CLI 만들기/플러그인 작성/명령 추가/확장". Do NOT use for invoking external tools through `duru gateway` — that's the duru-gateway skill.
-tags: [duru, cli-kit, plugin, virtual-plugin, middleware]
+tags: [scope:duru, subject:cli-kit, subject:plugin, subject:virtual-plugin, subject:middleware, intent:create, intent:update]
 ---
 
 # duru-builder

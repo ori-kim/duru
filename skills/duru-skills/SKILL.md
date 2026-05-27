@@ -6,30 +6,30 @@ tags: [scope:repo, scope:agent, subject:skills, intent:discover, intent:organize
 
 # duru-skills
 
-`skills list`를 단독 탐색 명령으로 사용하지 않는다.
+`duru skills list`를 단독 탐색 명령으로 사용하지 않는다.
 스킬 탐색은 항상 태그 기반 국소 검색으로 시작한다.
 
 ## Discovery
 
-1. `skills tag list`로 실제 존재하는 태그 카테고리를 확인한다.
+1. `duru skills tag list`로 실제 존재하는 태그 카테고리를 확인한다.
 2. 작업과 관련 있는 태그를 고른다.
-3. `skills list --tag <tag>`로 태그별 후보만 확인한다.
+3. `duru skills list --tag <tag>`로 태그별 후보만 확인한다.
 4. 후보 스킬의 `SKILL.md`를 열어 적용 여부를 결정한다.
 
-태그 목록 명령이 현재 checkout에서 아직 제공되지 않으면 `skills list`로 우회하지 않는다. `SKILL.md` frontmatter의 `tags`를 먼저 스캔한다.
+태그 목록 명령이 현재 checkout에서 아직 제공되지 않으면 `duru skills list`로 우회하지 않는다. `SKILL.md` frontmatter의 `tags`를 먼저 스캔한다.
 
 ```bash
 rg -n "^tags:" skills ~/.agents/skills ~/.claude/skills .agents/skills
 ```
 
 ```bash
-skills tag list
-skills list --tag <tag>
-skills list --tag <tag> --tag <tag>
-skills list --tag <tag>,<tag>
+duru skills tag list
+duru skills list --tag <tag>
+duru skills list --tag <tag> --tag <tag>
+duru skills list --tag <tag>,<tag>
 ```
 
-태그 후보가 여러 개면 각 태그별 `skills list --tag <tag>` 결과를 비교한다. 같은 스킬이 여러 태그에 걸쳐 나오면 우선순위를 높인다.
+태그 후보가 여러 개면 각 태그별 `duru skills list --tag <tag>` 결과를 비교한다. 같은 스킬이 여러 태그에 걸쳐 나오면 우선순위를 높인다.
 
 ## Local Search
 
@@ -37,7 +37,7 @@ skills list --tag <tag>,<tag>
 
 국소 검색 순서:
 
-1. `skills tag list`로 facet/value 집합을 확인한다.
+1. `duru skills tag list`로 facet/value 집합을 확인한다.
 2. 가장 집합성이 좋은 `subject:<value>`부터 시도한다.
 3. 필요하면 `intent:<value>` 또는 `scope:<value>`로 넓히거나 교차 비교한다.
 4. 결과가 없을 때만 한 단계 더 일반적인 value를 고른다.
@@ -47,7 +47,7 @@ skills list --tag <tag>,<tag>
 
 ## Tag Architecture
 
-태그는 고정 추천 목록이 아니라 스킬 탐색을 위한 색인이다. 새 태그를 만들기 전에 `skills tag list`로 기존 태그를 확인한다.
+태그는 고정 추천 목록이 아니라 스킬 탐색을 위한 색인이다. 새 태그를 만들기 전에 `duru skills tag list`로 기존 태그를 확인한다.
 
 태그는 `key:value` facet 구조를 사용한다. key는 정규화하고, value는 자연스럽게 확장한다.
 
@@ -72,15 +72,15 @@ skills list --tag <tag>,<tag>
 원본 스킬 보관소는 `$DURU_HOME/skills`다. 레포의 `skills/`는 패키지 개발과 repo-local guidance 위치다. `--from .`과 `--to .`는 현재 디렉터리 기준 상대경로로 해석한다.
 
 ```bash
-skills import <name> --from .
-skills import <name> --from ~/.agents/skills
-skills export <name> --to .agents/skills
-skills export <name> --to ~/.claude/skills
+duru skills import <name> --from .
+duru skills import <name> --from ~/.agents/skills
+duru skills export <name> --to .agents/skills
+duru skills export <name> --to ~/.claude/skills
 ```
 
 ```bash
-skills import --all --from ~/.agents/skills
-skills export --all --to .agents/skills
+duru skills import --all --from ~/.agents/skills
+duru skills export --all --to .agents/skills
 ```
 
 ## Planning

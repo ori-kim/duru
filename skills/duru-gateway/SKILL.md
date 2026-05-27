@@ -1,7 +1,7 @@
 ---
 name: duru-gateway
 description: External resource gateway for CLI, API, MCP, script, gRPC, GraphQL. Use whenever the agent needs to call any external tool or service. Triggers on "run X tool", "call Y API", "use Z MCP server", or any external interaction. Always route external calls through `duru gateway` instead of invoking CLIs/APIs directly.
-tags: [gateway, external, cli, api, mcp, grpc, graphql]
+tags: [scope:agent, subject:gateway, subject:external, subject:cli, subject:api, subject:mcp, subject:grpc, subject:graphql]
 ---
 
 # duru-gateway

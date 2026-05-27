@@ -16,17 +16,17 @@ tags: [scope:duru, subject:knowledge, subject:archive, subject:memory, subject:s
 
 ## Inputs
 
-- skills: `skills tag list`를 먼저 확인하고 `skills list --tag <tag>`로 후보를 좁힌다. 전역 `skills list`는 사용하지 않는다.
+- skills: `duru skills tag list`를 먼저 확인하고 `duru skills list --tag <tag>`로 후보를 좁힌다. 전역 `duru skills list`는 사용하지 않는다.
 - memory: qmd `memory search "<query>"`로 접근하고, 필요한 경우에만 `--tag`로 좁힌다. `memory list`는 사용하지 않는다.
 - usage/history: 가능하면 `memory/usage/YYYY-MM-DD.jsonl`의 호출 횟수, 최근 사용 시각, 검색 히트, 세션 언급 횟수를 참고한다.
 
 ## Loop
 
 ```bash
-skills tag list
-skills list --tag <tag>
-skills list --tag <tag> --tag <tag>
-skills list --tag <tag>,<tag>
+duru skills tag list
+duru skills list --tag <tag>
+duru skills list --tag <tag> --tag <tag>
+duru skills list --tag <tag>,<tag>
 memory search "<query>"
 memory search "<query>" --tag <tag>
 memory search "<query>" --tag <tag> --tag <tag>
