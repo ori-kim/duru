@@ -1,10 +1,19 @@
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { access, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
+const execFileAsync = promisify(execFile);
+
 export const QMD_SEMANTIC_INSTALL_MSG = "Semantic memory is not installed.\nRun: duru memory model install";
+
+const DEFAULT_MODELS: Record<QmdModelRole, string> = {
+  embed: "hf:ggml-org/embeddinggemma-300M-GGUF/embeddinggemma-300M-Q8_0.gguf",
+  generate: "hf:tobil/qmd-query-expansion-1.7B-gguf/qmd-query-expansion-1.7B-q4_k_m.gguf",
+  rerank: "hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf",
+};
 
 export type QmdSearchResult = {
   name: string;
@@ -50,6 +59,7 @@ export type QmdClient = {
 
 type QmdConfig = {
   collections?: Record<string, QmdCollectionConfig>;
+  models?: Partial<Record<QmdModelRole, string>>;
   [key: string]: unknown;
 };
 
@@ -60,49 +70,99 @@ type QmdCollectionConfig = {
   [key: string]: unknown;
 };
 
-type QmdSdkStore = {
-  internal?: { llm?: unknown };
-  update(options?: { collections?: string[] }): Promise<unknown>;
-  embed(options?: { collection?: string; force?: boolean }): Promise<unknown>;
-  searchLex(query: string, options?: { collection?: string; limit?: number }): Promise<unknown[]>;
-  searchVector(query: string, options?: { collection?: string; limit?: number }): Promise<unknown[]>;
-  search(options: { query: string; collection?: string; limit?: number; rerank?: boolean }): Promise<unknown[]>;
-  close(): Promise<void>;
+export type QmdClientOptions = {
+  env?: NodeJS.ProcessEnv;
+  qmdPackageRoot?: string;
+  runner?: string;
 };
 
-type QmdSdkModule = {
-  createStore(options: { dbPath: string; configPath: string }): Promise<QmdSdkStore>;
+type QmdCommand = {
+  file: string;
+  argsPrefix: string[];
 };
 
-type QmdLlmModule = {
-  resolveModels(config?: Partial<Record<QmdModelRole, string>>): Record<QmdModelRole, string>;
-  pullModels(models: string[], options?: { refresh?: boolean; cacheDir?: string }): Promise<unknown>;
-  LlamaCpp?: new (config?: {
-    embedModel?: string;
-    generateModel?: string;
-    rerankModel?: string;
-    modelCacheDir?: string;
-    inactivityTimeoutMs?: number;
-    disposeModelsOnInactivity?: boolean;
-  }) => unknown;
-};
-
-type QmdClientDeps = {
-  importQmd?: () => Promise<QmdSdkModule>;
-  importQmdLlm?: () => Promise<QmdLlmModule>;
-};
-
-export function createQmdClient(dataDir: string, clientDeps: QmdClientDeps = {}): QmdClient {
+export function createQmdClient(dataDir: string, options: QmdClientOptions = {}): QmdClient {
   const paths = qmdPaths(dataDir);
-  const deps: Required<QmdClientDeps> = {
-    importQmd: clientDeps.importQmd ?? importQmdSdk,
-    importQmdLlm: clientDeps.importQmdLlm ?? importQmdLlm,
-  };
+  let _command: QmdCommand | null = null;
+
+  async function resolvePackageRoot(): Promise<string | null> {
+    if (options.qmdPackageRoot) return options.qmdPackageRoot;
+    if (options.env?.DURU_QMD_PACKAGE_ROOT) return options.env.DURU_QMD_PACKAGE_ROOT;
+    if (process.env.DURU_QMD_PACKAGE_ROOT) return process.env.DURU_QMD_PACKAGE_ROOT;
+    try {
+      const req = createRequire(import.meta.url);
+      const pkgJsonPath = req.resolve("@tobilu/qmd/package.json");
+      return dirname(pkgJsonPath);
+    } catch {
+      return null;
+    }
+  }
+
+  async function resolveCommand(): Promise<QmdCommand> {
+    if (_command) return _command;
+
+    const env = baseEnv();
+    if (env.DURU_QMD_BIN) {
+      _command = { file: env.DURU_QMD_BIN, argsPrefix: [] };
+      return _command;
+    }
+
+    const packageRoot = await resolvePackageRoot();
+    if (packageRoot) {
+      const distCli = resolve(packageRoot, "dist/cli/qmd.js");
+      if (await exists(distCli)) {
+        _command = { file: options.runner ?? env.DURU_QMD_RUNNER ?? "bun", argsPrefix: [distCli] };
+        return _command;
+      }
+
+      const bin = await resolvePackageBin(packageRoot);
+      if (bin) {
+        _command = { file: bin, argsPrefix: [] };
+        return _command;
+      }
+    }
+
+    _command = { file: "qmd", argsPrefix: [] };
+    return _command;
+  }
+
+  async function resolvePackageBin(packageRoot: string): Promise<string | null> {
+    try {
+      const pkgJson = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")) as {
+        bin?: Record<string, string> | string;
+      };
+      const binEntry =
+        typeof pkgJson.bin === "string" ? pkgJson.bin : (pkgJson.bin?.qmd ?? Object.values(pkgJson.bin ?? {})[0]);
+      return binEntry ? resolve(packageRoot, binEntry) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function baseEnv(): NodeJS.ProcessEnv {
+    return options.env ?? process.env;
+  }
+
+  function qmdEnv(): NodeJS.ProcessEnv {
+    const env = baseEnv();
+    return {
+      ...env,
+      NO_COLOR: env.NO_COLOR ?? "1",
+      QMD_FORCE_CPU: env.QMD_FORCE_CPU ?? "1",
+      XDG_CACHE_HOME: dataDir,
+      XDG_CONFIG_HOME: dataDir,
+    };
+  }
+
+  async function run(args: string[]): Promise<string> {
+    const command = await resolveCommand();
+    const { stdout } = await execFileAsync(command.file, [...command.argsPrefix, ...args], { env: qmdEnv() });
+    return stdout;
+  }
 
   async function isAvailable(): Promise<boolean> {
     try {
-      await deps.importQmd();
-      await deps.importQmdLlm();
+      await run(["--version"]);
       return true;
     } catch {
       return false;
@@ -135,8 +195,13 @@ export function createQmdClient(dataDir: string, clientDeps: QmdClientDeps = {})
   }
 
   async function activeModels(): Promise<Record<QmdModelRole, string>> {
-    const llm = await deps.importQmdLlm();
-    return llm.resolveModels(await readModelConfig(paths.configPath));
+    const env = baseEnv();
+    const config = await readModelConfig(paths.configPath);
+    return {
+      embed: config.embed ?? env.QMD_EMBED_MODEL ?? DEFAULT_MODELS.embed,
+      generate: config.generate ?? env.QMD_GENERATE_MODEL ?? DEFAULT_MODELS.generate,
+      rerank: config.rerank ?? env.QMD_RERANK_MODEL ?? DEFAULT_MODELS.rerank,
+    };
   }
 
   async function semanticStatus(): Promise<QmdModelStatus> {
@@ -144,16 +209,12 @@ export function createQmdClient(dataDir: string, clientDeps: QmdClientDeps = {})
     await mkdir(paths.modelsDir, { recursive: true });
     const roles = await Promise.all(
       (Object.entries(models) as Array<[QmdModelRole, string]>).map(async ([role, model]) => {
-        const file = modelFileName(model);
-        const installedPath = join(paths.modelsDir, file);
-        const stats = await fileStats(installedPath);
-        return {
-          role,
-          model,
-          file: installedPath,
-          installed: Boolean(stats),
-          ...(stats ? { sizeBytes: stats.size } : {}),
-        };
+        const candidates = modelCandidates(model, paths.modelsDir);
+        for (const file of candidates) {
+          const stats = await fileStats(file);
+          if (stats) return { role, model, file, installed: true, sizeBytes: stats.size };
+        }
+        return { role, model, file: candidates[0] ?? join(paths.modelsDir, modelFileName(model)), installed: false };
       }),
     );
     return {
@@ -164,58 +225,50 @@ export function createQmdClient(dataDir: string, clientDeps: QmdClientDeps = {})
   }
 
   async function installModels(options: QmdInstallOptions = {}): Promise<QmdModelStatus> {
-    const llm = await deps.importQmdLlm();
-    const models = llm.resolveModels(await readModelConfig(paths.configPath));
-    await mkdir(paths.modelsDir, { recursive: true });
-    await llm.pullModels([models.embed, models.generate, models.rerank], {
-      refresh: options.refresh === true,
-      cacheDir: paths.modelsDir,
-    });
+    await run(["pull", ...(options.refresh === true ? ["--refresh"] : [])]);
     return await semanticStatus();
   }
 
   async function update(): Promise<void> {
-    await withStore(paths, deps, async (store) => {
-      await store.update();
-    });
+    await run(["update"]);
   }
 
   async function embed(collection: string): Promise<void> {
     await requireSemanticInstalled();
-    await withStore(paths, deps, async (store) => {
-      await store.embed({ collection });
-    });
+    await run(["embed", "-c", collection]);
   }
 
   async function reindexInBackground(collection: string, options: QmdReindexOptions = {}): Promise<void> {
     const shouldVector =
       options.vector === true || (options.vector === "if-installed" && (await semanticStatus()).installed);
-    void (async () => {
-      try {
-        await update();
-        if (shouldVector) await embed(collection);
-      } catch {}
-    })();
+    const command = await resolveCommand();
+    const commandPrefix = [command.file, ...command.argsPrefix].map(shellQuote).join(" ");
+    const script = shouldVector
+      ? `${commandPrefix} update && ${commandPrefix} embed -c ${shellQuote(collection)}`
+      : `${commandPrefix} update`;
+    const child = spawn("sh", ["-c", script], {
+      detached: true,
+      env: qmdEnv(),
+      stdio: "ignore",
+    });
+    child.on("error", () => {});
+    child.unref();
   }
 
   async function lex(query: string, collection: string): Promise<QmdSearchResult[]> {
-    return await withStore(paths, deps, async (store) =>
-      mapResults(await store.searchLex(query, { collection, limit: 10 })),
-    );
+    return parseResults(await run(["search", query, "-c", collection, "--json"]));
   }
 
   async function vsearch(query: string, collection: string): Promise<QmdSearchResult[]> {
     await requireSemanticInstalled();
-    return await withStore(paths, deps, async (store) =>
-      mapResults(await store.searchVector(query, { collection, limit: 10 })),
-    );
+    return parseResults(await run(["vsearch", query, "-c", collection, "--json"]));
   }
 
   async function query(queryStr: string, collection: string): Promise<QmdSearchResult[]> {
     await requireSemanticInstalled();
-    return await withStore(paths, deps, async (store) =>
-      mapResults(await store.search({ query: queryStr, collection, limit: 10, rerank: true })),
-    );
+    const args = ["query", queryStr, "-c", collection, "--json"];
+    if (baseEnv().DURU_QMD_RERANK !== "1") args.push("--no-rerank");
+    return parseResults(await run(args));
   }
 
   async function requireSemanticInstalled(): Promise<void> {
@@ -248,51 +301,32 @@ function qmdPaths(dataDir: string) {
   };
 }
 
-async function importQmdLlm(): Promise<QmdLlmModule> {
-  const req = createRequire(import.meta.url);
-  const pkgJsonPath = req.resolve("@tobilu/qmd/package.json");
-  const llmPath = resolve(dirname(pkgJsonPath), "dist", "llm.js");
-  return (await import(pathToFileURL(llmPath).href)) as QmdLlmModule;
+function parseResults(raw: string): QmdSearchResult[] {
+  const parsed = JSON.parse(extractJsonArray(raw)) as Array<{
+    name?: string;
+    title?: string;
+    file?: string;
+    path?: string;
+    displayPath?: string;
+    score?: number;
+    excerpt?: string;
+    snippet?: string;
+    text?: string;
+  }>;
+  return parsed.map((item) => ({
+    name: item.name ?? item.title ?? item.file ?? item.path ?? item.displayPath ?? "",
+    score: item.score ?? 0,
+    excerpt: item.excerpt ?? item.snippet ?? item.text ?? "",
+  }));
 }
 
-async function importQmdSdk(): Promise<QmdSdkModule> {
-  const moduleName = "@tobilu/qmd";
-  return (await import(moduleName)) as QmdSdkModule;
-}
-
-async function withStore<T>(
-  paths: ReturnType<typeof qmdPaths>,
-  deps: Required<QmdClientDeps>,
-  run: (store: QmdSdkStore) => Promise<T>,
-): Promise<T> {
-  await mkdir(paths.root, { recursive: true });
-  const qmd = await deps.importQmd();
-  const store = await qmd.createStore({ dbPath: paths.dbPath, configPath: paths.configPath });
-  await configureStoreLlm(store, paths, deps);
-  try {
-    return await run(store);
-  } finally {
-    await store.close();
-  }
-}
-
-async function configureStoreLlm(
-  store: QmdSdkStore,
-  paths: ReturnType<typeof qmdPaths>,
-  deps: Required<QmdClientDeps>,
-): Promise<void> {
-  if (!store.internal) return;
-  const llm = await deps.importQmdLlm();
-  if (!llm.LlamaCpp) return;
-  const models = llm.resolveModels(await readModelConfig(paths.configPath));
-  store.internal.llm = new llm.LlamaCpp({
-    embedModel: models.embed,
-    generateModel: models.generate,
-    rerankModel: models.rerank,
-    modelCacheDir: paths.modelsDir,
-    inactivityTimeoutMs: 5 * 60 * 1000,
-    disposeModelsOnInactivity: true,
-  });
+function extractJsonArray(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("[")) return trimmed;
+  const start = trimmed.indexOf("[");
+  const end = trimmed.lastIndexOf("]");
+  if (start >= 0 && end >= start) return trimmed.slice(start, end + 1);
+  return trimmed;
 }
 
 async function readModelConfig(configPath: string): Promise<Partial<Record<QmdModelRole, string>>> {
@@ -306,28 +340,33 @@ async function readModelConfig(configPath: string): Promise<Partial<Record<QmdMo
   }
 }
 
-function mapResults(raw: readonly unknown[]): QmdSearchResult[] {
-  return raw.map((item) => {
-    const record = item as {
-      name?: string;
-      file?: string;
-      path?: string;
-      displayPath?: string;
-      score?: number;
-      excerpt?: string;
-      snippet?: string;
-      text?: string;
-    };
-    return {
-      name: record.name ?? record.file ?? record.path ?? record.displayPath ?? "",
-      score: record.score ?? 0,
-      excerpt: record.excerpt ?? record.snippet ?? record.text ?? "",
-    };
-  });
+function modelCandidates(model: string, modelsDir: string): string[] {
+  const candidates = isAbsolute(model) ? [model] : [join(modelsDir, modelFileName(model))];
+  const hfFile = hfModelFileName(model);
+  if (hfFile) candidates.unshift(join(modelsDir, hfFile));
+  return [...new Set(candidates)];
+}
+
+function hfModelFileName(model: string): string | null {
+  if (!model.startsWith("hf:")) return null;
+  const parts = model.slice(3).split("/");
+  const owner = parts[0];
+  const file = parts.at(-1);
+  if (!owner || !file) return null;
+  return `hf_${owner}_${file}`;
 }
 
 function modelFileName(model: string): string {
-  return model.split("/").at(-1) ?? model;
+  return basename(model);
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function fileStats(path: string): Promise<{ size: number } | null> {
@@ -342,4 +381,8 @@ async function fileStats(path: string): Promise<{ size: number } | null> {
 
 function isNotFoundError(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && err.code === "ENOENT";
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }

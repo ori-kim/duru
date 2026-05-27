@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { QMD_SEMANTIC_INSTALL_MSG, createQmdClient } from "./client.ts";
@@ -56,170 +56,123 @@ describe("createQmdClient", () => {
     await expect(readFile(configPath, "utf8")).resolves.toBe(": [");
   });
 
-  test("surfaces qmd search command failures", async () => {
+  test("semantic status reports missing and installed model files without importing qmd llm", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "duru-qmd-client-test-"));
-    const configPath = join(dataDir, "qmd", "index.yml");
+    const modelsDir = join(dataDir, "qmd", "models");
     const client = createQmdClient(dataDir);
 
-    await mkdir(join(dataDir, "qmd"), { recursive: true });
-    await writeFile(configPath, ": [", "utf8");
+    await expect(client.vsearch("hello", "memory")).rejects.toThrow(QMD_SEMANTIC_INSTALL_MSG);
 
-    await expect(client.lex("renderer", "memory")).rejects.toThrow();
-  });
-
-  test("writes qmd collection config in the portable qmd root", async () => {
-    const dataDir = await mkdtemp(join(tmpdir(), "duru-qmd-client-test-"));
-    const client = createQmdClient(dataDir);
-
-    await client.ensureCollection("memory", "/tmp/memory", "items/**/*.md");
-
-    const raw = await readFile(join(dataDir, "qmd", "index.yml"), "utf8");
-    expect(raw).toContain("collections:");
-    expect(raw).toContain("memory:");
-    expect(raw).toContain("path: /tmp/memory");
-    expect(raw).toContain("pattern:");
-    expect(raw).toContain("items/**/*.md");
-  });
-
-  test("semantic status reports missing model files without pulling models", async () => {
-    const dataDir = await mkdtemp(join(tmpdir(), "duru-qmd-client-test-"));
-    const runtime = createFakeQmdRuntime();
-    const client = createQmdClient(dataDir, runtime.deps);
-
-    const status = await client.semanticStatus();
-
+    let status = await client.semanticStatus();
     expect(status.installed).toBe(false);
-    expect(status.modelsDir).toBe(join(dataDir, "qmd", "models"));
+    expect(status.modelsDir).toBe(modelsDir);
     expect(status.roles.map((role) => [role.role, role.installed])).toEqual([
       ["embed", false],
       ["generate", false],
       ["rerank", false],
     ]);
-    expect(runtime.pullCalls).toEqual([]);
-  });
 
-  test("opens the sdk store with the portable sqlite and config paths", async () => {
-    const dataDir = await mkdtemp(join(tmpdir(), "duru-qmd-client-test-"));
-    const runtime = createFakeQmdRuntime();
-    const client = createQmdClient(dataDir, runtime.deps);
+    await mkdir(modelsDir, { recursive: true });
+    await writeFile(join(modelsDir, "hf_ggml-org_embeddinggemma-300M-Q8_0.gguf"), "embed", "utf8");
+    await writeFile(join(modelsDir, "hf_tobil_qmd-query-expansion-1.7B-q4_k_m.gguf"), "generate", "utf8");
+    await writeFile(join(modelsDir, "hf_ggml-org_qwen3-reranker-0.6b-q8_0.gguf"), "rerank", "utf8");
 
-    await client.update();
-
-    expect(runtime.createStoreCalls[0]).toMatchObject({
-      dbPath: join(dataDir, "qmd", "index.sqlite"),
-      configPath: join(dataDir, "qmd", "index.yml"),
-    });
-  });
-
-  test("lex search uses the sdk store without requiring semantic models", async () => {
-    const dataDir = await mkdtemp(join(tmpdir(), "duru-qmd-client-test-"));
-    const runtime = createFakeQmdRuntime();
-    runtime.storeResults.lex = [{ file: "memory/items/a.md", score: 0.42, snippet: "lex result" }];
-    const client = createQmdClient(dataDir, runtime.deps);
-
-    const results = await client.lex("hello", "memory");
-
-    expect(results).toEqual([{ name: "memory/items/a.md", score: 0.42, excerpt: "lex result" }]);
-    expect(runtime.storeCalls).toContainEqual(["searchLex", "hello", { collection: "memory", limit: 10 }]);
-  });
-
-  test("vector and query search require semantic models before calling sdk search", async () => {
-    const dataDir = await mkdtemp(join(tmpdir(), "duru-qmd-client-test-"));
-    const runtime = createFakeQmdRuntime();
-    const client = createQmdClient(dataDir, runtime.deps);
-
-    await expect(client.vsearch("hello", "memory")).rejects.toThrow(QMD_SEMANTIC_INSTALL_MSG);
-    await expect(client.query("hello", "memory")).rejects.toThrow(QMD_SEMANTIC_INSTALL_MSG);
-
-    expect(runtime.storeCalls).not.toContainEqual(["searchVector", "hello", { collection: "memory", limit: 10 }]);
-  });
-
-  test("installModels pulls active models into the portable models directory", async () => {
-    const dataDir = await mkdtemp(join(tmpdir(), "duru-qmd-client-test-"));
-    const runtime = createFakeQmdRuntime();
-    const client = createQmdClient(dataDir, runtime.deps);
-
-    await client.installModels({ refresh: true });
-
-    expect(runtime.pullCalls).toEqual([
-      {
-        requested: [
-          "hf:example/embed/embed.gguf",
-          "hf:example/generate/generate.gguf",
-          "hf:example/rerank/rerank.gguf",
-        ],
-        options: { refresh: true, cacheDir: join(dataDir, "qmd", "models") },
-      },
+    status = await client.semanticStatus();
+    expect(status.installed).toBe(true);
+    expect(status.roles.map((role) => [role.role, role.installed])).toEqual([
+      ["embed", true],
+      ["generate", true],
+      ["rerank", true],
     ]);
+  });
+
+  test("runs the qmd dist CLI through an explicit runner outside the compiled binary", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "duru-qmd-client-test-"));
+    const qmdPackageRoot = join(dataDir, "node_modules", "@tobilu", "qmd");
+    const cliEntry = join(qmdPackageRoot, "dist", "cli", "qmd.js");
+    const runner = join(dataDir, "fake-runner");
+    const capturePath = join(dataDir, "capture.json");
+
+    await mkdir(join(qmdPackageRoot, "dist", "cli"), { recursive: true });
+    await mkdir(join(qmdPackageRoot, "bin"), { recursive: true });
+    await writeFile(join(qmdPackageRoot, "package.json"), JSON.stringify({ bin: { qmd: "bin/qmd" } }), "utf8");
+    await writeFile(cliEntry, "", "utf8");
+    await writeFile(join(qmdPackageRoot, "bin", "qmd"), "", "utf8");
+    await writeFile(
+      runner,
+      [
+        "#!/usr/bin/env bun",
+        `await Bun.write(${JSON.stringify(capturePath)}, JSON.stringify({`,
+        "  argv: process.argv.slice(2),",
+        "  qmdForceCpu: process.env.QMD_FORCE_CPU,",
+        "  xdgCacheHome: process.env.XDG_CACHE_HOME,",
+        "  xdgConfigHome: process.env.XDG_CONFIG_HOME,",
+        "}));",
+        'console.log(process.argv.includes("--version") ? "qmd 2.5.2" : "[]");',
+      ].join("\n"),
+      "utf8",
+    );
+    await chmod(runner, 0o755);
+
+    const client = createQmdClient(dataDir, { qmdPackageRoot, runner });
+
+    await expect(client.isAvailable()).resolves.toBe(true);
+
+    const capture = JSON.parse(await readFile(capturePath, "utf8")) as {
+      argv: string[];
+      qmdForceCpu: string;
+      xdgCacheHome: string;
+      xdgConfigHome: string;
+    };
+    expect(capture).toEqual({
+      argv: [cliEntry, "--version"],
+      qmdForceCpu: "1",
+      xdgCacheHome: dataDir,
+      xdgConfigHome: dataDir,
+    });
+
+    const explicitCpuClient = createQmdClient(dataDir, {
+      env: { ...process.env, QMD_FORCE_CPU: "0" },
+      qmdPackageRoot,
+      runner,
+    });
+    await expect(explicitCpuClient.isAvailable()).resolves.toBe(true);
+    const explicitCpuCapture = JSON.parse(await readFile(capturePath, "utf8")) as {
+      qmdForceCpu: string;
+    };
+    expect(explicitCpuCapture.qmdForceCpu).toBe("0");
+
+    await writeInstalledModelFiles(dataDir);
+
+    await expect(client.query("where is memory", "memory")).resolves.toEqual([]);
+    const queryCapture = JSON.parse(await readFile(capturePath, "utf8")) as {
+      argv: string[];
+    };
+    expect(queryCapture.argv).toEqual([cliEntry, "query", "where is memory", "-c", "memory", "--json", "--no-rerank"]);
+
+    const rerankClient = createQmdClient(dataDir, {
+      env: { ...process.env, DURU_QMD_RERANK: "1" },
+      qmdPackageRoot,
+      runner,
+    });
+    await expect(rerankClient.query("where is memory", "memory")).resolves.toEqual([]);
+    const rerankCapture = JSON.parse(await readFile(capturePath, "utf8")) as {
+      argv: string[];
+    };
+    expect(rerankCapture.argv).toEqual([cliEntry, "query", "where is memory", "-c", "memory", "--json"]);
+
+    await expect(client.installModels({ refresh: true })).resolves.toMatchObject({ installed: true });
+    const installCapture = JSON.parse(await readFile(capturePath, "utf8")) as {
+      argv: string[];
+    };
+    expect(installCapture.argv).toEqual([cliEntry, "pull", "--refresh"]);
   });
 });
 
-function createFakeQmdRuntime() {
-  const createStoreCalls: unknown[] = [];
-  const pullCalls: unknown[] = [];
-  const storeCalls: unknown[][] = [];
-  const storeResults = {
-    lex: [] as unknown[],
-    vector: [] as unknown[],
-    query: [] as unknown[],
-  };
-  const models = {
-    embed: "hf:example/embed/embed.gguf",
-    generate: "hf:example/generate/generate.gguf",
-    rerank: "hf:example/rerank/rerank.gguf",
-  };
-  const store = {
-    async update(options?: unknown) {
-      storeCalls.push(["update", options]);
-      return { collections: 1, indexed: 1, updated: 0, unchanged: 0, removed: 0, needsEmbedding: 0 };
-    },
-    async embed(options?: unknown) {
-      storeCalls.push(["embed", options]);
-      return { embedded: 0, skipped: 0, failed: 0 };
-    },
-    async searchLex(query: string, options?: unknown) {
-      storeCalls.push(["searchLex", query, options]);
-      return storeResults.lex;
-    },
-    async searchVector(query: string, options?: unknown) {
-      storeCalls.push(["searchVector", query, options]);
-      return storeResults.vector;
-    },
-    async search(options: unknown) {
-      storeCalls.push(["search", options]);
-      return storeResults.query;
-    },
-    async close() {},
-  };
-
-  return {
-    createStoreCalls,
-    pullCalls,
-    storeCalls,
-    storeResults,
-    deps: {
-      async importQmd() {
-        return {
-          async createStore(options: unknown) {
-            createStoreCalls.push(options);
-            return store;
-          },
-        };
-      },
-      async importQmdLlm() {
-        return {
-          resolveModels: () => models,
-          pullModels: async (requested: string[], options: unknown) => {
-            pullCalls.push({ requested, options });
-            return requested.map((model) => ({
-              model,
-              path: model.split("/").at(-1) ?? model,
-              sizeBytes: 1,
-              refreshed: false,
-            }));
-          },
-        };
-      },
-    },
-  };
+async function writeInstalledModelFiles(dataDir: string): Promise<void> {
+  const modelsDir = join(dataDir, "qmd", "models");
+  await mkdir(modelsDir, { recursive: true });
+  await writeFile(join(modelsDir, "hf_ggml-org_embeddinggemma-300M-Q8_0.gguf"), "embed", "utf8");
+  await writeFile(join(modelsDir, "hf_tobil_qmd-query-expansion-1.7B-q4_k_m.gguf"), "generate", "utf8");
+  await writeFile(join(modelsDir, "hf_ggml-org_qwen3-reranker-0.6b-q8_0.gguf"), "rerank", "utf8");
 }
