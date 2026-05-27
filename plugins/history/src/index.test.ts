@@ -13,6 +13,7 @@ const promptState = {
 
 const selectMock = mock(async () => promptState.selectResults.shift() ?? "list");
 const autocompleteMock = mock(async () => promptState.autocompleteResults.shift() ?? "");
+const confirmMock = mock(async () => true);
 
 class TestClackCancelError extends Error {
   constructor() {
@@ -24,6 +25,7 @@ class TestClackCancelError extends Error {
 mock.module("@duru/clack/prompt", () => ({
   ClackCancelError: TestClackCancelError,
   autocomplete: autocompleteMock,
+  confirm: confirmMock,
   select: selectMock,
 }));
 
@@ -35,6 +37,7 @@ describe("@duru/plugin-history", () => {
     promptState.autocompleteResults = [];
     selectMock.mockClear();
     autocompleteMock.mockClear();
+    confirmMock.mockClear();
   });
 
   test("exposes root, list, and pick history commands only", async () => {
