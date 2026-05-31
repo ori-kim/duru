@@ -74,15 +74,23 @@ function appendFormValue(form: URLSearchParams, key: string, value: unknown): vo
 
 function appendMultipartValue(form: FormData, key: string, value: unknown): void {
   if (Array.isArray(value)) {
-    for (const item of value) form.append(key, multipartValue(item));
+    for (const item of value) appendMultipartValue(form, key, item);
     return;
   }
-  form.append(key, multipartValue(value));
+  if (value instanceof Blob) {
+    form.append(key, value);
+    return;
+  }
+  appendMultipartField(form, key, bodyValue(value));
 }
 
-function multipartValue(value: unknown): string | Blob {
-  if (value instanceof Blob) return value;
-  return bodyValue(value);
+export function appendMultipartField(form: FormData, key: string, value: string): void {
+  if (value.startsWith("@")) {
+    const path = value.slice(1);
+    form.append(key, Bun.file(path), path.split("/").pop() || path);
+    return;
+  }
+  form.append(key, value);
 }
 
 function bodyValue(value: unknown): string {

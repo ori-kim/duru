@@ -1,3 +1,5 @@
+import { appendMultipartField } from "./openapi-body";
+
 type RequestBody = NonNullable<RequestInit["body"]>;
 
 export type RawRequestArgs = {
@@ -117,7 +119,7 @@ export function parseRequestArgs(argv: readonly string[]): RawRequestArgs {
 
   if (multipartFields.length > 0) {
     const form = new FormData();
-    for (const [key, value] of multipartFields) form.append(key, value);
+    for (const [key, value] of multipartFields) appendMultipartField(form, key, value);
     body = form;
     contentType = undefined;
   }
