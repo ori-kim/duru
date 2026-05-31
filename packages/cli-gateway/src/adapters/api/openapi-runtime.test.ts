@@ -142,6 +142,44 @@ describe("@duru/cli-gateway OpenAPI runtime", () => {
     expect(calls[0]?.init.headers).toEqual({ "content-type": "application/octet-stream" });
   });
 
+  test("reads a local file for multipart fields prefixed with @", async () => {
+    const tmp = `/tmp/duru-op-multipart-${process.pid}.txt`;
+    await Bun.write(tmp, "file-contents");
+    const calls: RequestCall[] = [];
+    const target = createApiTarget({
+      spec: {
+        openapi: "3.0.0",
+        servers: [{ url: "https://api.example.com" }],
+        paths: {
+          "/v1/uploads": {
+            post: {
+              operationId: "uploadItem",
+              requestBody: {
+                content: {
+                  "multipart/form-data": {
+                    schema: {
+                      type: "object",
+                      properties: { file: { type: "string", format: "binary" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      calls,
+    });
+
+    await target.invoke({ argv: ["uploadItem", "--file", `@${tmp}`] });
+
+    const body = calls[0]?.init.body;
+    expect(body).toBeInstanceOf(FormData);
+    const entry = (body as FormData).get("file");
+    expect(entry).toBeInstanceOf(Blob);
+    expect(await (entry as Blob).text()).toBe("file-contents");
+  });
+
   test("appends OpenAPI paths to baseUrl that carries its own path", async () => {
     const calls: RequestCall[] = [];
     const adapter = apiAdapter();
