@@ -188,6 +188,7 @@
         "@duru/cli-kit": "workspace:*",
         "@duru/file-store": "workspace:*",
         "@duru/virtual-plugins": "workspace:*",
+        "yaml": "^2.9.0",
       },
     },
   },

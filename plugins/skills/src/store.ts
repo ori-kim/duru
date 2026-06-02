@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { FileStore } from "@duru/file-store";
 import type { SkillMeta, SkillRecord } from "./types.ts";
@@ -7,6 +7,8 @@ export type SkillTransferOptions = {
   name?: string;
   all?: boolean;
   force?: boolean;
+  mode?: "link" | "copy";
+  prefix?: string;
 };
 
 export type SkillImportResult = {
@@ -18,6 +20,9 @@ export type SkillExportResult = {
   exported: string[];
   skipped: string[];
 };
+
+const DEFAULT_EXPORT_PREFIX = "duru-";
+const SKILL_MARKER_FILE = ".duru-skill-link.json";
 
 export type SkillsStore = {
   list(): Promise<SkillRecord[]>;
@@ -114,7 +119,6 @@ export function createSkillsStore(files: FileStore): SkillsStore {
     const entries = await files.list();
     const records: SkillRecord[] = [];
     for (const entry of entries) {
-      if (!entry.isDirectory) continue;
       const content = await files.scope(entry.name).readText("SKILL.md");
       if (!content) continue;
       const meta = parseFrontmatter(content);
@@ -174,7 +178,7 @@ export function createSkillsStore(files: FileStore): SkillsStore {
         }
         await rm(destDir, { recursive: true, force: true });
       }
-      await cp(sourceDir, destDir, { recursive: true });
+      await transferSkill(sourceDir, destDir, { ...options, prefix: "" }, record.meta.name);
       imported.push(record.meta.name);
     }
 
@@ -188,14 +192,15 @@ export function createSkillsStore(files: FileStore): SkillsStore {
 
     await mkdir(rootPath, { recursive: true });
     for (const record of records) {
-      const destDir = join(rootPath, record.meta.name);
+      const prefix = options.prefix ?? DEFAULT_EXPORT_PREFIX;
+      const destDir = join(rootPath, `${prefix}${record.meta.name}`);
       if (await exists(destDir)) {
         if (!options.force) {
           throw new Error(`Skill already exists at destination: ${record.meta.name}. Use --force to replace it.`);
         }
         await rm(destDir, { recursive: true, force: true });
       }
-      await cp(record.dir, destDir, { recursive: true });
+      await transferSkill(record.dir, destDir, options, record.meta.name);
       exported.push(record.meta.name);
     }
 
@@ -220,13 +225,19 @@ export function createSkillsStore(files: FileStore): SkillsStore {
 async function sourceSkillDirs(rootPath: string, options: SkillTransferOptions): Promise<string[]> {
   if (options.all) {
     const entries = await readdir(rootPath, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => join(rootPath, entry.name))
-      .sort();
+    const dirs: string[] = [];
+    for (const entry of entries) {
+      const dir = join(rootPath, entry.name);
+      if (await hasSkillMarkdown(dir)) dirs.push(dir);
+    }
+    return dirs.sort();
   }
   if (!options.name) throw new Error("Pass a skill name or --all.");
-  return [join(rootPath, options.name)];
+  const direct = join(rootPath, options.name);
+  if (await exists(direct)) return [direct];
+  const prefixed = join(rootPath, `${options.prefix ?? DEFAULT_EXPORT_PREFIX}${options.name}`);
+  if (await exists(prefixed)) return [prefixed];
+  return [direct];
 }
 
 async function readSkillRecordFromDir(dir: string): Promise<SkillRecord> {
@@ -251,4 +262,29 @@ async function exists(path: string): Promise<boolean> {
     if (typeof err === "object" && err !== null && "code" in err && err.code === "ENOENT") return false;
     throw err;
   }
+}
+
+async function hasSkillMarkdown(dir: string): Promise<boolean> {
+  try {
+    await readFile(join(dir, "SKILL.md"), "utf8");
+    return true;
+  } catch (err) {
+    if (typeof err === "object" && err !== null && "code" in err && err.code === "ENOENT") return false;
+    throw err;
+  }
+}
+
+async function transferSkill(
+  sourceDir: string,
+  destDir: string,
+  options: Pick<SkillTransferOptions, "mode">,
+  name: string,
+): Promise<void> {
+  if (options.mode === "copy") {
+    await cp(sourceDir, destDir, { recursive: true, dereference: true });
+    await writeFile(join(destDir, SKILL_MARKER_FILE), JSON.stringify({ name, source: sourceDir }), "utf8");
+    return;
+  }
+  await mkdir(dirname(destDir), { recursive: true });
+  await symlink(sourceDir, destDir, "dir");
 }

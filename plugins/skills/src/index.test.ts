@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { createCli, getRenderHint, help } from "@duru/cli-kit";
@@ -23,7 +23,9 @@ describe("skills plugin", () => {
     expect(imported.result).toMatchObject({ imported: ["writer"], skipped: [] });
     expect(exported.exitCode).toBe(0);
     expect(exported.result).toMatchObject({ exported: ["writer"], skipped: [] });
-    await expect(readFile(join(exportRoot, "writer", "SKILL.md"), "utf8")).resolves.toContain("shared skill");
+    expect((await lstat(join(exportRoot, "duru-writer"))).isSymbolicLink()).toBe(true);
+    expect(await readlink(join(exportRoot, "duru-writer"))).toBe(join(home, "skills", "writer"));
+    await expect(readFile(join(exportRoot, "duru-writer", "SKILL.md"), "utf8")).resolves.toContain("shared skill");
   });
 
   test("returns command output through results instead of writing directly to stdout", async () => {
@@ -148,6 +150,67 @@ describe("skills plugin", () => {
     expect(helpText).not.toContain("skills embed");
     expect(helpText).not.toContain("skills status");
   });
+
+  test("uses and clears explicit skill profiles", async () => {
+    const home = await tempDir("skills-cli-profile-use");
+    const skillsRoot = join(home, "skills");
+    const profileRoot = join(home, "skill-profiles");
+    const targetRoot = join(home, "agent-skills");
+    const cli = await createSkillsCli(home);
+
+    await writeSkill(skillsRoot, "writer", "shared skill", ["subject:writing"]);
+    await writeSkill(skillsRoot, "reviewer", "review skill", ["subject:writing"]);
+    await writeProfile(profileRoot, "writing", ["writer", "reviewer"]);
+
+    const used = await cli.run(["skills", "profile", "use", "writing", "--to", targetRoot], { render: false });
+
+    expect(used.exitCode).toBe(0);
+    expect(used.result).toMatchObject({ profile: "writing", exported: ["reviewer", "writer"], skipped: [] });
+    expect((await lstat(join(targetRoot, "duru-writer"))).isSymbolicLink()).toBe(true);
+    expect(await readlink(join(targetRoot, "duru-writer"))).toBe(join(skillsRoot, "writer"));
+
+    const status = await cli.run(["skills", "profile", "status", "--to", targetRoot], { render: false });
+    expect(status.exitCode).toBe(0);
+    expect(status.result).toMatchObject({
+      rows: expect.arrayContaining([
+        { name: "duru-writer", skill: "writer", safe: true, valid: true, profiles: "writing" },
+        { name: "duru-reviewer", skill: "reviewer", safe: true, valid: true, profiles: "writing" },
+      ]),
+    });
+
+    const cleared = await cli.run(["skills", "profile", "clear", "writing", "--to", targetRoot], { render: false });
+
+    expect(cleared.exitCode).toBe(0);
+    expect(cleared.result).toMatchObject({ profile: "writing", removed: ["reviewer", "writer"], skipped: [] });
+    await expect(lstat(join(targetRoot, "duru-writer"))).rejects.toThrow();
+    await expect(lstat(join(targetRoot, "duru-reviewer"))).rejects.toThrow();
+  });
+
+  test("clears all safe duru-managed entries and skips unsafe prefixed directories", async () => {
+    const home = await tempDir("skills-cli-profile-clear-all");
+    const skillsRoot = join(home, "skills");
+    const targetRoot = join(home, "agent-skills");
+    const cli = await createSkillsCli(home);
+
+    await writeSkill(skillsRoot, "writer", "shared skill", ["subject:writing"]);
+    await writeSkill(skillsRoot, "coding", "coding skill", ["subject:coding"]);
+    await mkdir(join(targetRoot, "duru-unsafe"), { recursive: true });
+    await writeFile(join(targetRoot, "duru-unsafe", "SKILL.md"), "manual skill");
+
+    await cli.run(["skills", "export", "writer", "--to", targetRoot], { render: false });
+    await cli.run(["skills", "export", "coding", "--to", targetRoot], { render: false });
+
+    const cleared = await cli.run(["skills", "profile", "clear", "--all", "--to", targetRoot], { render: false });
+
+    expect(cleared.exitCode).toBe(0);
+    expect(cleared.result).toMatchObject({
+      removed: ["coding", "writer"],
+      skipped: [{ name: "duru-unsafe", reason: "unsafe" }],
+    });
+    await expect(lstat(join(targetRoot, "duru-writer"))).rejects.toThrow();
+    await expect(lstat(join(targetRoot, "duru-coding"))).rejects.toThrow();
+    expect((await lstat(join(targetRoot, "duru-unsafe"))).isDirectory()).toBe(true);
+  });
 });
 
 async function createSkillsCli(home: string): Promise<ReturnType<typeof createCli>> {
@@ -204,6 +267,14 @@ async function writeSkill(root: string, name: string, body: string, tags = ["tes
   await writeFile(
     join(dir, "SKILL.md"),
     ["---", `name: ${name}`, "description: Test skill", `tags: [${tags.join(", ")}]`, "---", "", body, ""].join("\n"),
+  );
+}
+
+async function writeProfile(root: string, name: string, skills: string[]): Promise<void> {
+  await mkdir(root, { recursive: true });
+  await writeFile(
+    join(root, `${name}.yml`),
+    [`name: ${name}`, "skills:", ...skills.map((skill) => `  - ${skill}`), ""].join("\n"),
   );
 }
 

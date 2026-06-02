@@ -1,8 +1,11 @@
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { createRouter, withRenderHint } from "@duru/cli-kit";
 import { createDuruFileHome } from "@duru/file-store";
 import { virtualPlugin } from "@duru/virtual-plugins";
+import { createSkillProfileStore } from "./profiles.ts";
+import type { SkillProfile, SkillProfileStatusRow } from "./profiles.ts";
 import { createSkillsStore } from "./store.ts";
 import type { SkillsStore } from "./store.ts";
 import type { SkillMeta, SkillRecord } from "./types.ts";
@@ -13,9 +16,11 @@ export type { SkillMeta, SkillRecord, SkillsStore };
 export default virtualPlugin(async (cli) => {
   const home = createDuruFileHome({ env: process.env });
   const store = createSkillsStore(home.scope("skills"));
+  const profileStore = createSkillProfileStore(home.resolve("skill-profiles"), store);
 
   const skills = createRouter();
   const tags = createRouter();
+  const profiles = createRouter();
 
   skills
     .command()
@@ -113,14 +118,16 @@ export default virtualPlugin(async (cli) => {
     .option("--from <path>", "Source skill root path")
     .option("--all", "Import every skill from the source root")
     .option("--force", "Replace existing skills")
+    .option("--copy", "Copy directories instead of creating symlinks")
     .action(async (ctx) => {
       const skillName = (ctx.params as { name?: string }).name;
-      const opts = ctx.options as { from?: string; all?: boolean; force?: boolean };
+      const opts = ctx.options as { from?: string; all?: boolean; force?: boolean; copy?: boolean };
       if (!opts.from) return ctx.exit(2, { error: { message: "--from <path> is required" } });
       const result = await store.importFromRoot(resolve(opts.from), {
         name: skillName,
         all: opts.all === true,
         force: opts.force === true,
+        mode: opts.copy === true ? "copy" : "link",
       });
       return ctx.exit(
         0,
@@ -138,14 +145,15 @@ export default virtualPlugin(async (cli) => {
     .option("--to <path>", "Destination skill root path")
     .option("--all", "Export every installed skill")
     .option("--force", "Replace existing destination skills")
+    .option("--copy", "Copy directories instead of creating symlinks")
     .action(async (ctx) => {
       const skillName = (ctx.params as { name?: string }).name;
-      const opts = ctx.options as { to?: string; all?: boolean; force?: boolean };
-      if (!opts.to) return ctx.exit(2, { error: { message: "--to <path> is required" } });
-      const result = await store.exportToRoot(resolve(opts.to), {
+      const opts = ctx.options as { to?: string; all?: boolean; force?: boolean; copy?: boolean };
+      const result = await store.exportToRoot(resolveSkillRoot(opts.to), {
         name: skillName,
         all: opts.all === true,
         force: opts.force === true,
+        mode: opts.copy === true ? "copy" : "link",
       });
       return ctx.exit(
         0,
@@ -156,6 +164,68 @@ export default virtualPlugin(async (cli) => {
       );
     });
 
+  profiles
+    .command("list")
+    .group("Skills")
+    .meta({ description: "List skill profiles" })
+    .action(async (ctx) => {
+      const records = await profileStore.list();
+      return ctx.exit(0, skillProfileListResult(records));
+    });
+
+  profiles
+    .command("show <name>")
+    .group("Skills")
+    .meta({ description: "Show a skill profile" })
+    .action(async (ctx) => {
+      const name = (ctx.params as { name: string }).name;
+      const profile = await profileStore.get(name);
+      if (!profile) return ctx.exit(1, errorResult(`Profile not found: ${name}`));
+      return ctx.exit(0, withRenderHint({ text: renderProfile(profile), profile }, "text"));
+    });
+
+  profiles
+    .command("use <name>")
+    .group("Skills")
+    .meta({ description: "Expose every skill in a profile to an agent skill root" })
+    .option("--to <path>", "Destination skill root path")
+    .option("--force", "Replace existing destination skills")
+    .option("--copy", "Copy directories instead of creating symlinks")
+    .action(async (ctx) => {
+      const name = (ctx.params as { name: string }).name;
+      const opts = ctx.options as { to?: string; force?: boolean; copy?: boolean };
+      const result = await profileStore.use(name, resolveSkillRoot(opts.to), {
+        force: opts.force === true,
+        mode: opts.copy === true ? "copy" : "link",
+      });
+      return ctx.exit(0, withRenderHint({ ...result, text: `Activated profile: ${result.profile}` }, "text"));
+    });
+
+  profiles
+    .command("clear [name]")
+    .group("Skills")
+    .meta({ description: "Remove duru-managed profile skills from an agent skill root" })
+    .option("--to <path>", "Destination skill root path")
+    .option("--all", "Clear every safe duru-managed skill entry")
+    .action(async (ctx) => {
+      const name = (ctx.params as { name?: string }).name;
+      const opts = ctx.options as { to?: string; all?: boolean };
+      const result = await profileStore.clear(resolveSkillRoot(opts.to), { name, all: opts.all === true });
+      return ctx.exit(0, withRenderHint({ ...result, text: `Removed ${result.removed.length} skills` }, "text"));
+    });
+
+  profiles
+    .command("status")
+    .group("Skills")
+    .meta({ description: "Show duru-managed skills in an agent skill root" })
+    .option("--to <path>", "Destination skill root path")
+    .action(async (ctx) => {
+      const opts = ctx.options as { to?: string };
+      const rows = await profileStore.status(resolveSkillRoot(opts.to));
+      return ctx.exit(0, skillProfileStatusResult(rows));
+    });
+
+  skills.subCommand("profile", profiles as never);
   cli.subCommand("skills", skills as never);
 });
 
@@ -269,6 +339,44 @@ function splitOptionValue(value: unknown): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function resolveSkillRoot(path?: string): string {
+  if (!path) return join(homedir(), ".agents", "skills");
+  if (path === "~") return homedir();
+  if (path.startsWith("~/")) return join(homedir(), path.slice(2));
+  return resolve(path);
+}
+
+type SkillProfileRow = {
+  name: string;
+  skills: string;
+};
+
+function skillProfileListResult(profiles: SkillProfile[]): {
+  profiles: SkillProfile[];
+  rows: SkillProfileRow[];
+  columns: string[];
+} {
+  return withRenderHint(
+    {
+      profiles,
+      rows: profiles.map((profile) => ({ name: profile.name, skills: profile.skills.join(", ") })),
+      columns: ["name", "skills"],
+    },
+    "table",
+  );
+}
+
+function skillProfileStatusResult(rows: SkillProfileStatusRow[]): {
+  rows: SkillProfileStatusRow[];
+  columns: string[];
+} {
+  return withRenderHint({ rows, columns: ["name", "skill", "safe", "valid", "profiles"] }, "table");
+}
+
+function renderProfile(profile: SkillProfile): string {
+  return [`name: ${profile.name}`, "skills:", ...profile.skills.map((skill) => `  - ${skill}`)].join("\n");
 }
 
 function errorResult(message: string): { message: string; exitCode: number } {

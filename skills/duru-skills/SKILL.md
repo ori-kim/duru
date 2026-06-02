@@ -71,17 +71,50 @@ duru skills list --tag <tag>,<tag>
 
 원본 스킬 보관소는 `$DURU_HOME/skills`다. 레포의 `skills/`는 패키지 개발과 repo-local guidance 위치다. `--from .`과 `--to .`는 현재 디렉터리 기준 상대경로로 해석한다.
 
+`import`와 `export`는 기본적으로 심볼릭 링크를 만든다. 복사본이 필요할 때만 `--copy`를 사용한다.
+
+외부 skill root로 노출되는 이름은 알아보기 쉽게 `duru-<name>` prefix를 붙인다. 예를 들어 `$DURU_HOME/skills/coding`을 export하면 target에는 `duru-coding`으로 생성된다. `import`는 `<name>`과 `duru-<name>` source directory를 모두 인식한다.
+
 ```bash
 duru skills import <name> --from .
 duru skills import <name> --from ~/.agents/skills
+duru skills import <name> --from ~/.agents/skills --copy
+duru skills export <name>
 duru skills export <name> --to .agents/skills
 duru skills export <name> --to ~/.claude/skills
+duru skills export <name> --copy
 ```
 
 ```bash
 duru skills import --all --from ~/.agents/skills
 duru skills export --all --to .agents/skills
 ```
+
+`export --to`를 생략하면 기본 target은 `~/.agents/skills`다.
+
+## Profiles
+
+작업 종류별 스킬 묶음은 명시적 profile로 관리한다. profile은 `$DURU_HOME/skill-profiles/*.yml`에 둔다.
+
+```yaml
+name: writing
+skills:
+  - humanize-korean
+  - docs
+  - docs-notion
+```
+
+```bash
+duru skills profile list
+duru skills profile show writing
+duru skills profile use writing
+duru skills profile use dev --to .agents/skills
+duru skills profile clear writing
+duru skills profile clear --all
+duru skills profile status
+```
+
+`profile use`는 profile에 적힌 스킬을 target root에 `duru-<name>` symlink로 노출한다. `profile clear <name>`은 해당 profile 스킬만 제거하고, `profile clear --all`은 안전하게 식별되는 duru-managed entry 전체를 제거한다. 직접 만든 `duru-*` 디렉터리는 marker가 없으면 삭제하지 않고 skipped로 보고한다.
 
 ## Planning
 
