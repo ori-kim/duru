@@ -3,73 +3,68 @@ import { dirname, join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { SkillsStore } from "./store.ts";
 
-export type SkillProfile = {
+export type SkillGroup = {
   name: string;
+  description?: string;
   skills: string[];
 };
 
-export type SkillProfileUseResult = {
-  profile: string;
+export type SkillGroupUseResult = {
+  group: string;
   exported: string[];
   skipped: string[];
 };
 
-export type SkillProfileClearResult = {
-  profile?: string;
+export type SkillGroupClearResult = {
+  group?: string;
   removed: string[];
   skipped: Array<{ name: string; reason: string }>;
 };
 
-export type SkillProfileStatusRow = {
+export type SkillGroupStatusRow = {
   name: string;
   skill: string;
   safe: boolean;
   valid: boolean;
-  profiles: string;
+  groups: string;
 };
 
-export type SkillProfileStore = {
-  list(): Promise<SkillProfile[]>;
-  get(name: string): Promise<SkillProfile | null>;
+export type SkillGroupStore = {
+  list(): Promise<SkillGroup[]>;
+  get(name: string): Promise<SkillGroup | null>;
   use(
     name: string,
     targetRoot: string,
     options?: { force?: boolean; mode?: "link" | "copy" },
-  ): Promise<SkillProfileUseResult>;
-  clear(targetRoot: string, options: { name?: string; all?: boolean }): Promise<SkillProfileClearResult>;
-  status(targetRoot: string): Promise<SkillProfileStatusRow[]>;
+  ): Promise<SkillGroupUseResult>;
+  clear(targetRoot: string, options: { name?: string; all?: boolean }): Promise<SkillGroupClearResult>;
+  status(targetRoot: string): Promise<SkillGroupStatusRow[]>;
 };
 
 const DURU_PREFIX = "duru-";
 const MARKER_FILE = ".duru-skill-link.json";
 
-export function createSkillProfileStore(profileRoot: string, skillsStore: SkillsStore): SkillProfileStore {
-  async function list(): Promise<SkillProfile[]> {
-    const entries = await listProfileEntries(profileRoot);
-    const profiles: SkillProfile[] = [];
-    for (const entry of entries) {
-      const profile = await readProfile(join(profileRoot, entry));
-      if (profile) profiles.push(profile);
-    }
-    return profiles.sort((left, right) => left.name.localeCompare(right.name));
+export function createSkillGroupStore(groupsPath: string, skillsStore: SkillsStore): SkillGroupStore {
+  async function list(): Promise<SkillGroup[]> {
+    return readGroups(groupsPath);
   }
 
-  async function get(name: string): Promise<SkillProfile | null> {
-    return (await list()).find((profile) => profile.name === name) ?? null;
+  async function get(name: string): Promise<SkillGroup | null> {
+    return (await list()).find((group) => group.name === name) ?? null;
   }
 
   async function use(
     name: string,
     targetRoot: string,
     options: { force?: boolean; mode?: "link" | "copy" } = {},
-  ): Promise<SkillProfileUseResult> {
-    const profile = await requireProfile(name);
+  ): Promise<SkillGroupUseResult> {
+    const group = await requireGroup(name);
     const exported: string[] = [];
     const skipped: string[] = [];
 
-    for (const skill of profile.skills) {
+    for (const skill of group.skills) {
       const record = await skillsStore.get(skill);
-      if (!record) throw new Error(`Profile ${profile.name} references missing skill: ${skill}`);
+      if (!record) throw new Error(`Group ${group.name} references missing skill: ${skill}`);
       const result = await skillsStore.exportToRoot(targetRoot, {
         name: skill,
         force: options.force,
@@ -80,19 +75,16 @@ export function createSkillProfileStore(profileRoot: string, skillsStore: Skills
       skipped.push(...result.skipped);
     }
 
-    return { profile: profile.name, exported: exported.sort(), skipped: skipped.sort() };
+    return { group: group.name, exported: exported.sort(), skipped: skipped.sort() };
   }
 
-  async function clear(
-    targetRoot: string,
-    options: { name?: string; all?: boolean },
-  ): Promise<SkillProfileClearResult> {
-    if (options.name && options.all) throw new Error("Pass a profile name or --all, not both.");
-    if (!options.name && !options.all) throw new Error("Pass a profile name or --all.");
+  async function clear(targetRoot: string, options: { name?: string; all?: boolean }): Promise<SkillGroupClearResult> {
+    if (options.name && options.all) throw new Error("Pass a group name or --all, not both.");
+    if (!options.name && !options.all) throw new Error("Pass a group name or --all.");
 
     const entries = options.all
       ? await listTargetEntries(targetRoot)
-      : (await requireProfile(options.name)).skills.map((skill) => `${DURU_PREFIX}${skill}`);
+      : (await requireGroup(options.name)).skills.map((skill) => `${DURU_PREFIX}${skill}`);
     const removed: string[] = [];
     const skipped: Array<{ name: string; reason: string }> = [];
 
@@ -107,12 +99,12 @@ export function createSkillProfileStore(profileRoot: string, skillsStore: Skills
       removed.push(inspection.skill);
     }
 
-    return { profile: options.name, removed: removed.sort(), skipped };
+    return { group: options.name, removed: removed.sort(), skipped };
   }
 
-  async function status(targetRoot: string): Promise<SkillProfileStatusRow[]> {
-    const profileMap = await profilesBySkill();
-    const rows: SkillProfileStatusRow[] = [];
+  async function status(targetRoot: string): Promise<SkillGroupStatusRow[]> {
+    const groupMap = await groupsBySkill();
+    const rows: SkillGroupStatusRow[] = [];
     for (const entry of await listTargetEntries(targetRoot)) {
       if (!entry.startsWith(DURU_PREFIX)) continue;
       const inspection = await inspectTargetEntry(targetRoot, entry, skillsStore.skillsDir);
@@ -122,25 +114,25 @@ export function createSkillProfileStore(profileRoot: string, skillsStore: Skills
         skill: inspection.skill,
         safe: inspection.safe,
         valid: inspection.valid,
-        profiles: (profileMap.get(inspection.skill) ?? []).join(", "),
+        groups: (groupMap.get(inspection.skill) ?? []).join(", "),
       });
     }
     return rows.sort((left, right) => left.name.localeCompare(right.name));
   }
 
-  async function requireProfile(name?: string): Promise<SkillProfile> {
-    if (!name) throw new Error("Pass a profile name.");
-    const profile = await get(name);
-    if (!profile) throw new Error(`Profile not found: ${name}`);
-    return profile;
+  async function requireGroup(name?: string): Promise<SkillGroup> {
+    if (!name) throw new Error("Pass a group name.");
+    const group = await get(name);
+    if (!group) throw new Error(`Group not found: ${name}`);
+    return group;
   }
 
-  async function profilesBySkill(): Promise<Map<string, string[]>> {
+  async function groupsBySkill(): Promise<Map<string, string[]>> {
     const map = new Map<string, string[]>();
-    for (const profile of await list()) {
-      for (const skill of profile.skills) {
+    for (const group of await list()) {
+      for (const skill of group.skills) {
         const names = map.get(skill) ?? [];
-        names.push(profile.name);
+        names.push(group.name);
         map.set(skill, names.sort());
       }
     }
@@ -150,25 +142,32 @@ export function createSkillProfileStore(profileRoot: string, skillsStore: Skills
   return { list, get, use, clear, status };
 }
 
-async function listProfileEntries(root: string): Promise<string[]> {
+async function readGroups(path: string): Promise<SkillGroup[]> {
   try {
-    const entries = await readdir(root, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isFile() && (entry.name.endsWith(".yml") || entry.name.endsWith(".yaml")))
-      .map((entry) => entry.name)
-      .sort();
+    const parsed = parseYaml(await readFile(path, "utf8")) as unknown;
+    if (!isRecord(parsed)) return [];
+    return Object.entries(parsed)
+      .flatMap(([name, value]) => {
+        const group = parseGroup(name, value);
+        return group ? [group] : [];
+      })
+      .sort((left, right) => left.name.localeCompare(right.name));
   } catch (error) {
     if (isNotFoundError(error)) return [];
     throw error;
   }
 }
 
-async function readProfile(path: string): Promise<SkillProfile | null> {
-  const raw = await readFile(path, "utf8");
-  const parsed = parseYaml(raw) as { name?: unknown; skills?: unknown } | null;
-  if (!parsed || typeof parsed.name !== "string" || !Array.isArray(parsed.skills)) return null;
-  const skills = parsed.skills.filter((skill): skill is string => typeof skill === "string");
-  return { name: parsed.name, skills };
+function parseGroup(name: string, value: unknown): SkillGroup | null {
+  if (Array.isArray(value)) {
+    return { name, skills: value.filter((skill): skill is string => typeof skill === "string") };
+  }
+  if (!isRecord(value) || !Array.isArray(value.skills)) return null;
+  return {
+    name,
+    description: typeof value.description === "string" ? value.description : undefined,
+    skills: value.skills.filter((skill): skill is string => typeof skill === "string"),
+  };
 }
 
 async function listTargetEntries(root: string): Promise<string[]> {
@@ -241,6 +240,10 @@ function isWithin(parent: string, child: string): boolean {
   const normalizedParent = resolve(parent);
   const normalizedChild = resolve(child);
   return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}/`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isNotFoundError(error: unknown): boolean {

@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { FileStore } from "@duru/file-store";
 import type { SkillMeta, SkillRecord } from "./types.ts";
@@ -119,20 +119,8 @@ export function createSkillsStore(files: FileStore): SkillsStore {
     const entries = await files.list();
     const records: SkillRecord[] = [];
     for (const entry of entries) {
-      const content = await files.scope(entry.name).readText("SKILL.md");
-      if (!content) continue;
-      const meta = parseFrontmatter(content);
-      if (!meta.name) continue;
-      records.push({
-        meta: {
-          name: meta.name,
-          description: meta.description,
-          tags: meta.tags ?? [],
-          allowedTools: meta.allowedTools,
-        },
-        dir: join(skillsDir, entry.name),
-        skillPath: join(skillsDir, entry.name, "SKILL.md"),
-      });
+      const record = await readSkillRecordIfPresent(join(skillsDir, entry.name));
+      if (record) records.push(record);
     }
     return records;
   }
@@ -254,9 +242,18 @@ async function readSkillRecordFromDir(dir: string): Promise<SkillRecord> {
   };
 }
 
+async function readSkillRecordIfPresent(dir: string): Promise<SkillRecord | null> {
+  try {
+    return await readSkillRecordFromDir(dir);
+  } catch (err) {
+    if (isMissingSkillPathError(err)) return null;
+    throw err;
+  }
+}
+
 async function exists(path: string): Promise<boolean> {
   try {
-    await stat(path);
+    await lstat(path);
     return true;
   } catch (err) {
     if (typeof err === "object" && err !== null && "code" in err && err.code === "ENOENT") return false;
@@ -269,9 +266,13 @@ async function hasSkillMarkdown(dir: string): Promise<boolean> {
     await readFile(join(dir, "SKILL.md"), "utf8");
     return true;
   } catch (err) {
-    if (typeof err === "object" && err !== null && "code" in err && err.code === "ENOENT") return false;
+    if (isMissingSkillPathError(err)) return false;
     throw err;
   }
+}
+
+function isMissingSkillPathError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && (err.code === "ENOENT" || err.code === "ENOTDIR");
 }
 
 async function transferSkill(

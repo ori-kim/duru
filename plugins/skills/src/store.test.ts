@@ -104,6 +104,38 @@ describe("createSkillsStore", () => {
     expect(imported).toEqual({ imported: ["writer"], skipped: [] });
     await expect(readFile(join(home, "duru", "skills", "writer", "SKILL.md"), "utf8")).resolves.toContain("first");
   });
+
+  test("lists and imports all only entries with skill markdown", async () => {
+    const home = await tempDir("skills-only");
+    const sourceRoot = join(home, "source");
+    const store = createSkillsStore(createFileStore({ root: join(home, "duru", "skills") }));
+
+    await writeSkill(sourceRoot, "writer", "first");
+    await writeFile(join(sourceRoot, "README.md"), "not a skill");
+
+    const imported = await store.importFromRoot(sourceRoot, { all: true, mode: "copy" });
+
+    expect(imported).toEqual({ imported: ["writer"], skipped: [] });
+    await writeFile(join(home, "duru", "skills", "README.md"), "not a skill");
+    expect((await store.list()).map((record) => record.meta.name)).toEqual(["writer"]);
+  });
+
+  test("force export replaces broken destination symlinks", async () => {
+    const home = await tempDir("skills-broken-export-link");
+    const sourceRoot = join(home, "source");
+    const exportRoot = join(home, "exported");
+    const store = createSkillsStore(createFileStore({ root: join(home, "duru", "skills") }));
+
+    await writeSkill(sourceRoot, "writer", "first");
+    await store.importFromRoot(sourceRoot, { name: "writer", mode: "copy" });
+    await mkdir(exportRoot, { recursive: true });
+    await symlink(join(home, "missing"), join(exportRoot, "duru-writer"), "dir");
+
+    const exported = await store.exportToRoot(exportRoot, { name: "writer", force: true });
+
+    expect(exported).toEqual({ exported: ["writer"], skipped: [] });
+    expect(await readlink(join(exportRoot, "duru-writer"))).toBe(join(home, "duru", "skills", "writer"));
+  });
 });
 
 async function tempDir(label: string): Promise<string> {

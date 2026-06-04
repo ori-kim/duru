@@ -151,43 +151,52 @@ describe("skills plugin", () => {
     expect(helpText).not.toContain("skills status");
   });
 
-  test("uses and clears explicit skill profiles", async () => {
-    const home = await tempDir("skills-cli-profile-use");
+  test("uses and clears explicit skill groups", async () => {
+    const home = await tempDir("skills-cli-group-use");
     const skillsRoot = join(home, "skills");
-    const profileRoot = join(home, "skill-profiles");
     const targetRoot = join(home, "agent-skills");
     const cli = await createSkillsCli(home);
 
     await writeSkill(skillsRoot, "writer", "shared skill", ["subject:writing"]);
     await writeSkill(skillsRoot, "reviewer", "review skill", ["subject:writing"]);
-    await writeProfile(profileRoot, "writing", ["writer", "reviewer"]);
+    await writeGroups(skillsRoot, {
+      writing: { description: "Writing review helpers", skills: ["writer", "reviewer"] },
+    });
 
-    const used = await cli.run(["skills", "profile", "use", "writing", "--to", targetRoot], { render: false });
+    const groups = await cli.run(["skills", "group", "list"], { render: false });
+    expect(groups.exitCode).toBe(0);
+    expect(getRenderHint(groups.result)).toBe("table");
+    expect(groups.result).toMatchObject({
+      rows: [{ name: "writing", description: "Writing review helpers", skills: "writer, reviewer" }],
+      columns: ["name", "description", "skills"],
+    });
+
+    const used = await cli.run(["skills", "group", "use", "writing", "--to", targetRoot], { render: false });
 
     expect(used.exitCode).toBe(0);
-    expect(used.result).toMatchObject({ profile: "writing", exported: ["reviewer", "writer"], skipped: [] });
+    expect(used.result).toMatchObject({ group: "writing", exported: ["reviewer", "writer"], skipped: [] });
     expect((await lstat(join(targetRoot, "duru-writer"))).isSymbolicLink()).toBe(true);
     expect(await readlink(join(targetRoot, "duru-writer"))).toBe(join(skillsRoot, "writer"));
 
-    const status = await cli.run(["skills", "profile", "status", "--to", targetRoot], { render: false });
+    const status = await cli.run(["skills", "group", "status", "--to", targetRoot], { render: false });
     expect(status.exitCode).toBe(0);
     expect(status.result).toMatchObject({
       rows: expect.arrayContaining([
-        { name: "duru-writer", skill: "writer", safe: true, valid: true, profiles: "writing" },
-        { name: "duru-reviewer", skill: "reviewer", safe: true, valid: true, profiles: "writing" },
+        { name: "duru-writer", skill: "writer", safe: true, valid: true, groups: "writing" },
+        { name: "duru-reviewer", skill: "reviewer", safe: true, valid: true, groups: "writing" },
       ]),
     });
 
-    const cleared = await cli.run(["skills", "profile", "clear", "writing", "--to", targetRoot], { render: false });
+    const cleared = await cli.run(["skills", "group", "clear", "writing", "--to", targetRoot], { render: false });
 
     expect(cleared.exitCode).toBe(0);
-    expect(cleared.result).toMatchObject({ profile: "writing", removed: ["reviewer", "writer"], skipped: [] });
+    expect(cleared.result).toMatchObject({ group: "writing", removed: ["reviewer", "writer"], skipped: [] });
     await expect(lstat(join(targetRoot, "duru-writer"))).rejects.toThrow();
     await expect(lstat(join(targetRoot, "duru-reviewer"))).rejects.toThrow();
   });
 
   test("clears all safe duru-managed entries and skips unsafe prefixed directories", async () => {
-    const home = await tempDir("skills-cli-profile-clear-all");
+    const home = await tempDir("skills-cli-group-clear-all");
     const skillsRoot = join(home, "skills");
     const targetRoot = join(home, "agent-skills");
     const cli = await createSkillsCli(home);
@@ -200,7 +209,7 @@ describe("skills plugin", () => {
     await cli.run(["skills", "export", "writer", "--to", targetRoot], { render: false });
     await cli.run(["skills", "export", "coding", "--to", targetRoot], { render: false });
 
-    const cleared = await cli.run(["skills", "profile", "clear", "--all", "--to", targetRoot], { render: false });
+    const cleared = await cli.run(["skills", "group", "clear", "--all", "--to", targetRoot], { render: false });
 
     expect(cleared.exitCode).toBe(0);
     expect(cleared.result).toMatchObject({
@@ -270,12 +279,20 @@ async function writeSkill(root: string, name: string, body: string, tags = ["tes
   );
 }
 
-async function writeProfile(root: string, name: string, skills: string[]): Promise<void> {
+type TestSkillGroup = string[] | { description?: string; skills: string[] };
+
+async function writeGroups(root: string, groups: Record<string, TestSkillGroup>): Promise<void> {
   await mkdir(root, { recursive: true });
-  await writeFile(
-    join(root, `${name}.yml`),
-    [`name: ${name}`, "skills:", ...skills.map((skill) => `  - ${skill}`), ""].join("\n"),
-  );
+  const lines = Object.entries(groups).flatMap(([name, group]) => {
+    if (Array.isArray(group)) return [`${name}:`, ...group.map((skill) => `  - ${skill}`)];
+    return [
+      `${name}:`,
+      ...(group.description ? [`  description: ${group.description}`] : []),
+      "  skills:",
+      ...group.skills.map((skill) => `    - ${skill}`),
+    ];
+  });
+  await writeFile(join(root, "groups.yml"), [...lines, ""].join("\n"));
 }
 
 function skillNames(value: unknown): string[] {
