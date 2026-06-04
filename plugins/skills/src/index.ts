@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { createRouter, withRenderHint } from "@duru/cli-kit";
+import { createPlugin, createRouter, withRenderHint } from "@duru/cli-kit";
+import type { Cli } from "@duru/cli-kit";
 import { createDuruFileHome } from "@duru/file-store";
 import { virtualPlugin } from "@duru/virtual-plugins";
 import { createSkillGroupStore } from "./groups.ts";
@@ -10,10 +11,20 @@ import { createSkillsStore } from "./store.ts";
 import type { SkillsStore } from "./store.ts";
 import type { SkillMeta, SkillRecord } from "./types.ts";
 
-export { createSkillsStore };
+export { createSkillsStore, createSkillsPlugin, installSkillsCommands, skills, skillsCommandsPlugin };
 export type { SkillMeta, SkillRecord, SkillsStore };
 
-export default virtualPlugin(async (cli) => {
+function createSkillsPlugin() {
+  return virtualPlugin(installSkillsCommands);
+}
+
+function skills() {
+  return createPlugin((api) => installSkillsCommands(api.cli));
+}
+
+const skillsCommandsPlugin = skills;
+
+async function installSkillsCommands(cli: Cli): Promise<void> {
   const home = createDuruFileHome({ env: process.env });
   const store = createSkillsStore(home.scope("skills"));
   const groupStore = createSkillGroupStore(home.resolve("skills/groups.yml"), store);
@@ -216,7 +227,9 @@ export default virtualPlugin(async (cli) => {
 
   skills.subCommand("group", groups as never);
   cli.subCommand("skills", skills as never);
-});
+}
+
+export default createSkillsPlugin();
 
 type SkillListRow = {
   name: string;

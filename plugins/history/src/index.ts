@@ -1,6 +1,6 @@
 import { ClackCancelError, autocomplete, select } from "@duru/clack/prompt";
-import { createCli, withRenderHint } from "@duru/cli-kit";
-import type { Context } from "@duru/cli-kit";
+import { createCli, createPlugin, withRenderHint } from "@duru/cli-kit";
+import type { Cli, Context } from "@duru/cli-kit";
 import { createDuruFileHome } from "@duru/file-store";
 import { virtualPlugin } from "@duru/virtual-plugins";
 import { createIgnoreMatcher, loadHistoryConfig, saveDefaultAction } from "./config.ts";
@@ -11,6 +11,7 @@ import type { HistoryRecord } from "./types.ts";
 export { createHistoryStore } from "./store.ts";
 export { createIgnoreMatcher, loadHistoryConfig, loadIgnoreConfig, saveDefaultAction } from "./config.ts";
 export { rerun } from "./rerun.ts";
+export { createHistoryPlugin, installHistoryCommands, history, historyCommandsPlugin };
 export type {
   HistoryConfig,
   HistoryDefaultAction,
@@ -61,7 +62,17 @@ function resolveLimit(value: unknown, fallback: number): number {
   return Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : fallback;
 }
 
-export default virtualPlugin(async (cli) => {
+function createHistoryPlugin() {
+  return virtualPlugin(installHistoryCommands);
+}
+
+function history() {
+  return createPlugin((api) => installHistoryCommands(api.cli));
+}
+
+const historyCommandsPlugin = history;
+
+async function installHistoryCommands(cli: Cli): Promise<void> {
   const home = createDuruFileHome({ env: process.env });
   const files = home.scope("history");
   const store = createHistoryStore(files);
@@ -210,4 +221,6 @@ export default virtualPlugin(async (cli) => {
     .action(async (ctx) => runPick(ctx as HistoryContext));
 
   cli.subCommand("history", history);
-});
+}
+
+export default createHistoryPlugin();

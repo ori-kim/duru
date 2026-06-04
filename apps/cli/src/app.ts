@@ -2,7 +2,10 @@ import { OAUTH_RESERVED_PREFIXES } from "@duru/auth";
 import { adaptResult, createCli, formatHelp, help, isHelpDocument, isValidationError } from "@duru/cli-kit";
 import { env } from "@duru/env";
 import { createDuruFileHome } from "@duru/file-store";
+import { history } from "@duru/plugin-history";
 import { pluginManageCli } from "@duru/plugin-manage";
+import { memory } from "@duru/plugin-memory";
+import { skills } from "@duru/plugin-skills";
 import { jsonRendererPlugin } from "@duru/renderer-json";
 import { textRendererPlugin } from "@duru/renderer-text";
 import { createSecretClient, loadManifest } from "@duru/secrets";
@@ -61,6 +64,9 @@ async function createAppCliRuntime(argv?: string[], opts: AppCliOptions = {}) {
     .subCommand("update", updateCli)
     .subCommand("plugin", pluginManageCli)
     .subCommand("secret", createSecretCli({ resolver, manifestValidation: manifestValidationOpts }))
+    .use(memory())
+    .use(skills())
+    .use(history())
     .use(createAppCompletionPlugin())
     .use(help())
     .use(virtualPlugins({ home: fileHome.root }, argv));

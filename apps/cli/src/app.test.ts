@@ -21,6 +21,23 @@ describe("duru cli app", () => {
     expect(JSON.parse(result.rendered?.stdout ?? "")).toEqual([]);
   });
 
+  test("loads memory, skills, and history as first-class app commands", async () => {
+    const home = await tempDir("first-class-memory-skills-history");
+
+    await withDuruHome(home, async () => {
+      const history = await createAppCli().run(["history", "list"], { render: false });
+      const memory = await createAppCli().run(["memory", "--help"]);
+      const skills = await createAppCli().run(["skills", "list"], { render: false });
+
+      expect(history.exitCode).toBe(0);
+      expect(history.result).toMatchObject({ records: [] });
+      expect(memory.exitCode).toBe(0);
+      expect(memory.rendered?.stdout ?? "").toContain("memory add [text]");
+      expect(skills.exitCode).toBe(0);
+      expect(skills.result).toMatchObject({ rows: [] });
+    });
+  });
+
   test("rejects OAuth reserved secret names from secret commands", async () => {
     const home = await tempDir("secret-reserved");
 

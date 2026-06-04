@@ -17,7 +17,10 @@
     "@duru/cli-kit": "workspace:*",
     "@duru/renderer-json": "workspace:*",
     "@duru/renderer-text": "workspace:*",
+    "@duru/plugin-history": "workspace:*",
     "@duru/plugin-manage": "workspace:*",
+    "@duru/plugin-memory": "workspace:*",
+    "@duru/plugin-skills": "workspace:*",
     "@duru/secrets": "workspace:*",
     "@duru/secrets-keychain": "workspace:*",
     "@duru/virtual-plugins": "workspace:*"
