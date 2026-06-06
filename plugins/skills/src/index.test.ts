@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { lstat, mkdir, mkdtemp, readFile, readlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { createCli, getRenderHint, help } from "@duru/cli-kit";
@@ -220,6 +220,65 @@ describe("skills plugin", () => {
     await expect(lstat(join(targetRoot, "duru-coding"))).rejects.toThrow();
     expect((await lstat(join(targetRoot, "duru-unsafe"))).isDirectory()).toBe(true);
   });
+
+  test("prunes exported skills from an explicit agent skill root", async () => {
+    const home = await tempDir("skills-cli-prune-explicit");
+    const skillsRoot = join(home, "skills");
+    const targetRoot = join(home, "agent-skills");
+    const outsideRoot = join(home, "outside");
+    const cli = await createSkillsCli(home);
+
+    await writeSkill(skillsRoot, "writer", "shared skill");
+    await writeSkill(skillsRoot, "coding", "coding skill");
+    await writeSkill(outsideRoot, "external", "external skill");
+    await mkdir(join(targetRoot, "duru-manual"), { recursive: true });
+    await writeFile(join(targetRoot, "duru-manual", "SKILL.md"), "manual skill");
+    await mkdir(targetRoot, { recursive: true });
+    await symlink(join(outsideRoot, "external"), join(targetRoot, "duru-external"), "dir");
+    await cli.run(["skills", "export", "writer", "--to", targetRoot], { render: false });
+    await cli.run(["skills", "export", "coding", "--to", targetRoot], { render: false });
+
+    const pruned = await cli.run(["skills", "prune", "--to", targetRoot], { render: false });
+
+    expect(pruned.exitCode).toBe(0);
+    expect(pruned.result).toMatchObject({
+      removed: ["coding", "writer"],
+      skipped: [
+        { name: "duru-external", reason: "unsafe" },
+        { name: "duru-manual", reason: "unsafe" },
+      ],
+      dryRun: false,
+    });
+    await expect(lstat(join(targetRoot, "duru-writer"))).rejects.toThrow();
+    await expect(lstat(join(targetRoot, "duru-coding"))).rejects.toThrow();
+    expect((await lstat(join(targetRoot, "duru-manual"))).isDirectory()).toBe(true);
+    expect((await lstat(join(targetRoot, "duru-external"))).isSymbolicLink()).toBe(true);
+  });
+
+  test("prunes default agent skill root and supports dry-run", async () => {
+    const home = await tempDir("skills-cli-prune-default");
+    const skillsRoot = join(home, "skills");
+    const defaultRoot = join(home, ".agents", "skills");
+    const cli = await createSkillsCli(home);
+
+    await writeSkill(skillsRoot, "writer", "shared skill");
+
+    await withFakeHome(home, async () => {
+      await cli.run(["skills", "export", "writer"], { render: false });
+
+      const dryRun = await cli.run(["skills", "prune", "--dry-run"], { render: false });
+
+      expect(dryRun.exitCode).toBe(0);
+      expect(dryRun.result).toMatchObject({ removed: ["writer"], skipped: [], dryRun: true });
+      expect((await lstat(join(defaultRoot, "duru-writer"))).isSymbolicLink()).toBe(true);
+
+      const pruned = await cli.run(["skills", "prune"], { render: false });
+
+      expect(pruned.exitCode).toBe(0);
+      expect(pruned.result).toMatchObject({ removed: ["writer"], skipped: [], dryRun: false });
+      await expect(lstat(join(defaultRoot, "duru-writer"))).rejects.toThrow();
+    });
+  });
 });
 
 async function createSkillsCli(home: string): Promise<ReturnType<typeof createCli>> {
@@ -237,6 +296,27 @@ async function createSkillsCli(home: string): Promise<ReturnType<typeof createCl
       process.env.DURU_HOME = undefined;
     } else {
       process.env.DURU_HOME = previousHome;
+    }
+  }
+}
+
+async function withFakeHome<T>(home: string, run: () => Promise<T>): Promise<T> {
+  const previousHome = process.env.HOME;
+  const previousUserProfile = process.env.USERPROFILE;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  try {
+    return await run();
+  } finally {
+    if (previousHome === undefined) {
+      process.env.HOME = undefined;
+    } else {
+      process.env.HOME = previousHome;
+    }
+    if (previousUserProfile === undefined) {
+      process.env.USERPROFILE = undefined;
+    } else {
+      process.env.USERPROFILE = previousUserProfile;
     }
   }
 }

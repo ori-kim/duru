@@ -21,6 +21,12 @@ export type SkillGroupClearResult = {
   skipped: Array<{ name: string; reason: string }>;
 };
 
+export type SkillPruneResult = {
+  removed: string[];
+  skipped: Array<{ name: string; reason: string }>;
+  dryRun: boolean;
+};
+
 export type SkillGroupStatusRow = {
   name: string;
   skill: string;
@@ -38,6 +44,7 @@ export type SkillGroupStore = {
     options?: { force?: boolean; mode?: "link" | "copy" },
   ): Promise<SkillGroupUseResult>;
   clear(targetRoot: string, options: { name?: string; all?: boolean }): Promise<SkillGroupClearResult>;
+  prune(targetRoot: string, options?: { dryRun?: boolean }): Promise<SkillPruneResult>;
   status(targetRoot: string): Promise<SkillGroupStatusRow[]>;
 };
 
@@ -85,6 +92,20 @@ export function createSkillGroupStore(groupsPath: string, skillsStore: SkillsSto
     const entries = options.all
       ? await listTargetEntries(targetRoot)
       : (await requireGroup(options.name)).skills.map((skill) => `${DURU_PREFIX}${skill}`);
+    const result = await pruneEntries(targetRoot, entries, { dryRun: false });
+
+    return { group: options.name, removed: result.removed, skipped: result.skipped };
+  }
+
+  async function prune(targetRoot: string, options: { dryRun?: boolean } = {}): Promise<SkillPruneResult> {
+    return pruneEntries(targetRoot, await listTargetEntries(targetRoot), { dryRun: options.dryRun === true });
+  }
+
+  async function pruneEntries(
+    targetRoot: string,
+    entries: string[],
+    options: { dryRun: boolean },
+  ): Promise<SkillPruneResult> {
     const removed: string[] = [];
     const skipped: Array<{ name: string; reason: string }> = [];
 
@@ -95,11 +116,11 @@ export function createSkillGroupStore(groupsPath: string, skillsStore: SkillsSto
         skipped.push({ name: entry, reason: "unsafe" });
         continue;
       }
-      await rm(join(targetRoot, entry), { recursive: true, force: true });
+      if (!options.dryRun) await rm(join(targetRoot, entry), { recursive: true, force: true });
       removed.push(inspection.skill);
     }
 
-    return { group: options.name, removed: removed.sort(), skipped };
+    return { removed: removed.sort(), skipped, dryRun: options.dryRun };
   }
 
   async function status(targetRoot: string): Promise<SkillGroupStatusRow[]> {
@@ -139,7 +160,7 @@ export function createSkillGroupStore(groupsPath: string, skillsStore: SkillsSto
     return map;
   }
 
-  return { list, get, use, clear, status };
+  return { list, get, use, clear, prune, status };
 }
 
 async function readGroups(path: string): Promise<SkillGroup[]> {

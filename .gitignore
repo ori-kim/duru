@@ -10,7 +10,6 @@ bin/
 .env.*
 *.local
 .duru/*
-!.duru/
 !.duru/extension-index.yaml
 .claude/
 apps/cli/src/core-type-bundle.generated.ts

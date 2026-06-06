@@ -175,6 +175,19 @@ async function installSkillsCommands(cli: Cli): Promise<void> {
       );
     });
 
+  skills
+    .command("prune")
+    .group("Skills")
+    .meta({ description: "Remove duru-managed exported skills from an agent skill root" })
+    .option("--to <path>", "Destination skill root path")
+    .option("--dry-run", "Show entries that would be removed without deleting them")
+    .action(async (ctx) => {
+      const opts = ctx.options as { to?: string; dryRun?: boolean };
+      const result = await groupStore.prune(resolveSkillRoot(opts.to), { dryRun: opts.dryRun === true });
+      const verb = result.dryRun ? "Would remove" : "Removed";
+      return ctx.exit(0, withRenderHint({ ...result, text: `${verb} ${result.removed.length} skills` }, "text"));
+    });
+
   groups
     .command("list")
     .group("Skills")
@@ -344,10 +357,15 @@ function splitOptionValue(value: unknown): string[] {
 }
 
 function resolveSkillRoot(path?: string): string {
-  if (!path) return join(homedir(), ".agents", "skills");
-  if (path === "~") return homedir();
-  if (path.startsWith("~/")) return join(homedir(), path.slice(2));
+  const home = currentHomeDir();
+  if (!path) return join(home, ".agents", "skills");
+  if (path === "~") return home;
+  if (path.startsWith("~/")) return join(home, path.slice(2));
   return resolve(path);
+}
+
+function currentHomeDir(): string {
+  return process.env.HOME ?? process.env.USERPROFILE ?? homedir();
 }
 
 type SkillGroupRow = {
