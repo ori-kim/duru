@@ -148,7 +148,8 @@ describe("skills plugin", () => {
     expect(help.exitCode).toBe(0);
     expect(helpText).not.toContain("skills search");
     expect(helpText).not.toContain("skills embed");
-    expect(helpText).not.toContain("skills status");
+    expect(helpText).toContain("skills status");
+    expect(helpText).not.toContain("skills group status");
   });
 
   test("uses and clears explicit skill groups", async () => {
@@ -178,14 +179,21 @@ describe("skills plugin", () => {
     expect((await lstat(join(targetRoot, "duru-writer"))).isSymbolicLink()).toBe(true);
     expect(await readlink(join(targetRoot, "duru-writer"))).toBe(join(skillsRoot, "writer"));
 
-    const status = await cli.run(["skills", "group", "status", "--to", targetRoot], { render: false });
+    const status = await cli.run(["skills", "status", "--to", targetRoot], { render: false });
     expect(status.exitCode).toBe(0);
+    expect(getRenderHint(status.result)).toBe("table");
     expect(status.result).toMatchObject({
+      searchedPaths: [targetRoot],
+      text: `searched paths: ${targetRoot}`,
       rows: expect.arrayContaining([
         { name: "duru-writer", skill: "writer", safe: true, valid: true, groups: "writing" },
         { name: "duru-reviewer", skill: "reviewer", safe: true, valid: true, groups: "writing" },
       ]),
+      columns: ["name", "skill", "safe", "valid", "groups"],
     });
+
+    const legacyStatus = await cli.run(["skills", "group", "status", "--to", targetRoot], { render: false });
+    expect(legacyStatus.exitCode).not.toBe(0);
 
     const cleared = await cli.run(["skills", "group", "clear", "writing", "--to", targetRoot], { render: false });
 

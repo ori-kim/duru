@@ -16,7 +16,11 @@ export function textRenderer(): Renderer {
       }
 
       if (hint === "table" && isRecord(value) && Array.isArray(value.rows)) {
-        return { stdout: formatTable(value.rows as readonly unknown[]), stderr: "", exitCode: 0 };
+        return {
+          stdout: `${line(textPrefix(value))}${formatTable(value.rows as readonly unknown[])}`,
+          stderr: "",
+          exitCode: 0,
+        };
       }
 
       if (hint === "list" && isRecord(value) && Array.isArray(value.items)) {
@@ -50,6 +54,10 @@ function formatText(value: unknown): string {
   return line(JSON.stringify(value));
 }
 
+function textPrefix(value: Record<string, unknown>): string | undefined {
+  return typeof value.text === "string" ? value.text : undefined;
+}
+
 function formatTable(rows: readonly unknown[]): string {
   if (rows.length === 0) return "";
   const records = rows.filter(isRecord);
@@ -70,9 +78,7 @@ function formatList(items: readonly unknown[]): string {
 }
 
 function padRow(row: readonly string[], widths: readonly number[]): string {
-  return row
-    .map((cell, i) => (i === row.length - 1 ? cell : padEnd(cell, widths[i] ?? 0)))
-    .join("  ");
+  return row.map((cell, i) => (i === row.length - 1 ? cell : padEnd(cell, widths[i] ?? 0))).join("  ");
 }
 
 function padEnd(cell: string, width: number): string {

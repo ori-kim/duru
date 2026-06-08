@@ -1,6 +1,6 @@
 import * as p from "@clack/prompts";
 import { createPlugin, getRenderHint } from "@duru/cli-kit";
-import type { CliPlugin, Renderer, RendererContext, RenderInput, RenderedOutput } from "@duru/cli-kit";
+import type { CliPlugin, RenderInput, RenderedOutput, Renderer, RendererContext } from "@duru/cli-kit";
 import pc from "picocolors";
 
 export * from "./sugar.ts";
@@ -120,7 +120,11 @@ function renderFinal(input: RenderInput, ctx: RendererContext, spinners: Map<str
 
   if (hint === "table" && isRecord(value) && Array.isArray(value.rows)) {
     const columns = Array.isArray(value.columns) ? (value.columns as readonly string[]) : undefined;
-    p.note(renderTable(value.rows as readonly Record<string, unknown>[], columns));
+    p.note(
+      [textPrefix(value), renderTable(value.rows as readonly Record<string, unknown>[], columns)]
+        .filter(Boolean)
+        .join("\n\n"),
+    );
     return { stdout: "", stderr: "", exitCode: 0 };
   }
 
@@ -167,6 +171,10 @@ function renderTable(rows: readonly Record<string, unknown>[], columns?: readonl
     .map((row) => cols.map((col, i) => formatCell(row[col]).padEnd(widths[i] ?? 0)).join("  "))
     .join("\n");
   return `${header}\n${sep}\n${body}`;
+}
+
+function textPrefix(value: Record<string, unknown>): string | undefined {
+  return typeof value.text === "string" ? value.text : undefined;
 }
 
 function formatCell(value: unknown): string {

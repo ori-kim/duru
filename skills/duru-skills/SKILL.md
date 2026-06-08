@@ -24,10 +24,11 @@ duru skills group list
 duru skills group use <name>
 duru skills group clear <name>
 duru skills group clear --all
-duru skills group status
+duru skills status
 ```
 
 `group list` shows names, descriptions, and skill names. `group use` exports the listed skills to the target skill root.
+`skills status` shows duru-managed skills in the target skill root and prints the searched path.
 
 ## Import And Export
 

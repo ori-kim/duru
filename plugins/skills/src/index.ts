@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { createPlugin, createRouter, withRenderHint } from "@duru/cli-kit";
-import type { Cli } from "@duru/cli-kit";
+import type { Cli, Context } from "@duru/cli-kit";
 import { createDuruFileHome } from "@duru/file-store";
 import { virtualPlugin } from "@duru/virtual-plugins";
 import { createSkillGroupStore } from "./groups.ts";
@@ -32,6 +32,11 @@ async function installSkillsCommands(cli: Cli): Promise<void> {
   const skills = createRouter();
   const tags = createRouter();
   const groups = createRouter();
+  const skillsStatusAction = async (ctx: Context<{ to?: string }>) => {
+    const targetRoot = resolveSkillRoot(ctx.options.to);
+    const rows = await groupStore.status(targetRoot);
+    return ctx.exit(0, skillGroupStatusResult(rows, [targetRoot]));
+  };
 
   skills
     .command()
@@ -176,6 +181,13 @@ async function installSkillsCommands(cli: Cli): Promise<void> {
     });
 
   skills
+    .command("status")
+    .group("Skills")
+    .meta({ description: "Show duru-managed skills in an agent skill root" })
+    .option("--to <path>", "Destination skill root path")
+    .action(skillsStatusAction);
+
+  skills
     .command("prune")
     .group("Skills")
     .meta({ description: "Remove duru-managed exported skills from an agent skill root" })
@@ -225,17 +237,6 @@ async function installSkillsCommands(cli: Cli): Promise<void> {
       const opts = ctx.options as { to?: string; all?: boolean };
       const result = await groupStore.clear(resolveSkillRoot(opts.to), { name, all: opts.all === true });
       return ctx.exit(0, withRenderHint({ ...result, text: `Removed ${result.removed.length} skills` }, "text"));
-    });
-
-  groups
-    .command("status")
-    .group("Skills")
-    .meta({ description: "Show duru-managed skills in an agent skill root" })
-    .option("--to <path>", "Destination skill root path")
-    .action(async (ctx) => {
-      const opts = ctx.options as { to?: string };
-      const rows = await groupStore.status(resolveSkillRoot(opts.to));
-      return ctx.exit(0, skillGroupStatusResult(rows));
     });
 
   skills.subCommand("group", groups as never);
@@ -393,11 +394,24 @@ function skillGroupListResult(groups: SkillGroup[]): {
   );
 }
 
-function skillGroupStatusResult(rows: SkillGroupStatusRow[]): {
+function skillGroupStatusResult(
+  rows: SkillGroupStatusRow[],
+  searchedPaths: string[],
+): {
+  searchedPaths: string[];
+  text: string;
   rows: SkillGroupStatusRow[];
   columns: string[];
 } {
-  return withRenderHint({ rows, columns: ["name", "skill", "safe", "valid", "groups"] }, "table");
+  return withRenderHint(
+    {
+      searchedPaths,
+      text: `searched paths: ${searchedPaths.join(", ")}`,
+      rows,
+      columns: ["name", "skill", "safe", "valid", "groups"],
+    },
+    "table",
+  );
 }
 
 function errorResult(message: string): { message: string; exitCode: number } {
